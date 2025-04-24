@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turtle Arc Drawing App</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        .controls {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <label for="length">Segment Length (pixels):</label>
+        <input type="number" id="length" value="50" step="1" min="0">
+        <label for="angle">Angle (degrees):</label>
+        <input type="number" id="angle" value="30" step="1">
+        <button onclick="addSegment()">Add Segment</button>
+        <button onclick="clearCanvas()">Clear</button>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <script>
+        // Get canvas and context
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Turtle state
+        let turtle = {
+            x: canvas.width / 2, // Start at canvas center
+            y: canvas.height / 2,
+            heading: 0 // In radians, 0 points right (east)
+        };
+
+        // Path segments
+        let segments = [];
+
+        // Convert degrees to radians
+        function toRadians(degrees) {
+            return degrees * Math.PI / 180;
+        }
+
+        // Draw a single arc segment
+        function drawArcSegment(length, angle) {
+            // If length is 0, it's a sharp turn (just update heading)
+            if (length === 0) {
+                turtle.heading += toRadians(angle);
+                return;
+            }
+
+            // If angle is 0, it's a straight line
+            if (angle === 0) {
+                const dx = length * Math.cos(turtle.heading);
+                const dy = length * Math.sin(turtle.heading);
+                ctx.beginPath();
+                ctx.moveTo(turtle.x, turtle.y);
+                turtle.x += dx;
+                turtle.y += dy;
+                ctx.lineTo(turtle.x, turtle.y);
+                ctx.stroke();
+                return;
+            }
+
+            // General case: arc approximated by short line segments
+            const angleRad = toRadians(angle);
+            const radius = Math.abs(length / angleRad); // Arc length = radius * angle
+            const steps = Math.max(10, Math.floor(Math.abs(length) / 5)); // Adjust step count based on length
+            const stepLength = length / steps;
+            const stepAngle = angleRad / steps;
+
+            ctx.beginPath();
+            ctx.moveTo(turtle.x, turtle.y);
+
+            for (let i = 0; i < steps; i++) {
+                // Move forward by stepLength
+                const dx = stepLength * Math.cos(turtle.heading);
+                const dy = stepLength * Math.sin(turtle.heading);
+                turtle.x += dx;
+                turtle.y += dy;
+                // Turn by stepAngle
+                turtle.heading += stepAngle;
+                // Draw line to new position
+                ctx.lineTo(turtle.x, turtle.y);
+            }
+
+            ctx.stroke();
+        }
+
+        // Redraw all segments
+        function redraw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Reset turtle to initial state
+            turtle.x = canvas.width / 2;
+            turtle.y = canvas.height / 2;
+            turtle.heading = 0;
+
+            // Draw all segments
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            segments.forEach(segment => {
+                drawArcSegment(segment.length, segment.angle);
+            });
+        }
+
+        // Add a new segment
+        function addSegment() {
+            const length = parseFloat(document.getElementById('length').value) || 0;
+            const angle = parseFloat(document.getElementById('angle').value) || 0;
+            segments.push({ length, angle });
+            redraw();
+        }
+
+        // Clear the canvas and reset segments
+        function clearCanvas() {
+            segments = [];
+            redraw();
+        }
+
+        // Initial draw
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        redraw();
+    </script>
+</body>
+</html>
