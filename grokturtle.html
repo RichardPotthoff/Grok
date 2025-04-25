@@ -316,12 +316,11 @@
             turtle.y = canvas.height / 2;
             turtle.heading = 0;
 
-            // Draw all segments up to the editing index
+            // Draw all segments
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 2;
             let tempTurtle = { x: turtle.x, y: turtle.y, heading: turtle.heading };
             for (let i = 0; i < segments.length; i++) {
-                if (editingIndex === i && isDragging) continue; // Skip the segment being edited
                 const { endX, endY, heading } = drawArcSegment(segments[i].length, segments[i].angle, false, tempTurtle.x, tempTurtle.y, tempTurtle.heading);
                 tempTurtle.x = endX;
                 tempTurtle.y = endY;
@@ -334,6 +333,13 @@
                 editingStartX = pos.x;
                 editingStartY = pos.y;
                 editingStartHeading = pos.heading;
+
+                // Calculate the end position of the selected segment for the green dot
+                const { endX, endY } = drawArcSegment(segments[editingIndex].length, segments[editingIndex].angle, true, editingStartX, editingStartY, editingStartHeading);
+                if (!isDragging) {
+                    previewEndX = endX;
+                    previewEndY = endY;
+                }
             } else if (editingIndex === -1) {
                 const pos = calculatePositionUpTo(segments.length);
                 editingStartX = pos.x;
@@ -349,26 +355,6 @@
                 previewEndY = editingStartY;
             }
 
-            // Draw preview segment if dragging
-            if (isDragging && previewSegment) {
-                ctx.strokeStyle = 'gray';
-                ctx.lineWidth = 1;
-                const { endX, endY } = drawArcSegment(previewSegment.length, previewSegment.angle, true, editingStartX, editingStartY, editingStartHeading);
-                previewEndX = endX;
-                previewEndY = endY;
-                ctx.strokeStyle = 'black';
-                ctx.lineWidth = 2;
-
-                // Update current segment display
-                document.getElementById('currentLength').textContent = previewSegment.length.toFixed(2);
-                document.getElementById('currentAngle').textContent = previewSegment.angle.toFixed(2);
-            } else {
-                previewEndX = tempTurtle.x;
-                previewEndY = tempTurtle.y;
-                document.getElementById('currentLength').textContent = '0';
-                document.getElementById('currentAngle').textContent = '0';
-            }
-
             // Draw cursor at the current start position
             ctx.beginPath();
             ctx.arc(editingStartX, editingStartY, 5, 0, 2 * Math.PI);
@@ -377,14 +363,24 @@
             ctx.strokeStyle = 'black';
             ctx.stroke();
 
-            // Draw endpoint cursor if dragging
-            if (isDragging) {
-                ctx.beginPath();
-                ctx.arc(previewEndX, previewEndY, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'green';
-                ctx.fill();
-                ctx.strokeStyle = 'black';
-                ctx.stroke();
+            // Draw endpoint cursor
+            ctx.beginPath();
+            ctx.arc(previewEndX, previewEndY, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'green';
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.stroke();
+
+            // Update current segment display
+            if (previewSegment) {
+                document.getElementById('currentLength').textContent = previewSegment.length.toFixed(2);
+                document.getElementById('currentAngle').textContent = previewSegment.angle.toFixed(2);
+            } else if (editingIndex >= 0 && editingIndex < segments.length) {
+                document.getElementById('currentLength').textContent = segments[editingIndex].length.toFixed(2);
+                document.getElementById('currentAngle').textContent = segments[editingIndex].angle.toFixed(2);
+            } else {
+                document.getElementById('currentLength').textContent = '0';
+                document.getElementById('currentAngle').textContent = '0';
             }
 
             // Update the table
@@ -575,9 +571,22 @@
             const pos = getRelativePosition(event);
             dragStartX = pos.x;
             dragStartY = pos.y;
-            previewSegment = { length: 0, angle: 0 };
-            previewEndX = editingStartX;
-            previewEndY = editingStartY;
+
+            // Initialize previewEndX and previewEndY to the current end position of the selected segment
+            if (editingIndex >= 0 && editingIndex < segments.length) {
+                const pos = calculatePositionUpTo(editingIndex);
+                editingStartX = pos.x;
+                editingStartY = pos.y;
+                editingStartHeading = pos.heading;
+                const { endX, endY } = drawArcSegment(segments[editingIndex].length, segments[editingIndex].angle, true, editingStartX, editingStartY, editingStartHeading);
+                previewEndX = endX;
+                previewEndY = endY;
+                previewSegment = { length: segments[editingIndex].length, angle: segments[editingIndex].angle };
+            } else {
+                previewSegment = { length: 0, angle: 0 };
+                previewEndX = editingStartX;
+                previewEndY = editingStartY;
+            }
             redraw();
         }
 
@@ -617,6 +626,12 @@
             }
 
             previewSegment = { length: arcLength, angle: arcAngleDeg };
+
+            // Update the selected segment in real-time
+            if (editingIndex >= 0 && editingIndex < segments.length) {
+                segments[editingIndex] = { length: arcLength, angle: arcAngleDeg };
+            }
+
             redraw();
         }
 
@@ -626,8 +641,7 @@
             isDragging = false;
             if (previewSegment) {
                 if (editingIndex >= 0) {
-                    // Update the existing segment
-                    segments[editingIndex] = previewSegment;
+                    // Already updated in real-time
                 } else if (editingIndex === -2) {
                     // Insert at the start
                     segments.unshift(previewSegment);
