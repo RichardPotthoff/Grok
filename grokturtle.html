@@ -98,7 +98,7 @@
             margin: 10px 0;
         }
         /* Portrait layout */
-        @media (max-width: 768px) {
+        @media (max不为-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
                 grid-template-rows: auto 1fr auto;
@@ -203,6 +203,8 @@
         let editingStartX = 0;
         let editingStartY = 0;
         let editingStartHeading = 0;
+        let initialOffsetX = 0;
+        let initialOffsetY = 0;
 
         // Convert degrees to radians
         function toRadians(degrees) {
@@ -582,10 +584,15 @@
                 previewEndX = endX;
                 previewEndY = endY;
                 previewSegment = { length: segments[editingIndex].length, angle: segments[editingIndex].angle };
+                // Calculate the initial offset between the red dot (start) and green dot (end)
+                initialOffsetX = previewEndX - editingStartX;
+                initialOffsetY = previewEndY - editingStartY;
             } else {
                 previewSegment = { length: 0, angle: 0 };
                 previewEndX = editingStartX;
                 previewEndY = editingStartY;
+                initialOffsetX = 0;
+                initialOffsetY = 0;
             }
             redraw();
         }
@@ -597,15 +604,17 @@
             const dx = pos.x - dragStartX;
             const dy = pos.y - dragStartY;
 
-            // The endpoint position relative to the start point should match the touch position relative to the touch start
-            previewEndX = editingStartX + dx;
-            previewEndY = editingStartY + dy;
+            // Calculate the new position of the green dot, accounting for the initial offset
+            previewEndX = editingStartX + initialOffsetX + dx;
+            previewEndY = editingStartY + initialOffsetY + dy;
 
-            // Calculate the secant length (distance from start to end)
-            const secantLength = Math.sqrt(dx * dx + dy * dy);
+            // Calculate the secant length (distance from start to new end position)
+            const secantDx = previewEndX - editingStartX;
+            const secantDy = previewEndY - editingStartY;
+            const secantLength = Math.sqrt(secantDx * secantDx + secantDy * secantDy);
 
             // Calculate the angle between the turtle's heading and the secant
-            const secantAngle = Math.atan2(dy, dx);
+            const secantAngle = Math.atan2(secantDy, secantDx);
             const angleRad = secantAngle - editingStartHeading;
             const angleDeg = toDegrees(angleRad);
 
@@ -653,6 +662,8 @@
                 }
                 previewSegment = null;
             }
+            initialOffsetX = 0;
+            initialOffsetY = 0;
             redraw();
         }
 
