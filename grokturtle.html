@@ -98,7 +98,7 @@
             margin: 10px 0;
         }
         /* Portrait layout */
-        @media (max不为-width: 768px) {
+        @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
                 grid-template-rows: auto 1fr auto;
@@ -357,6 +357,15 @@
                 previewEndY = editingStartY;
             }
 
+            // Draw the preview arc if dragging
+            if (isDragging && previewSegment) {
+                ctx.strokeStyle = 'gray';
+                ctx.lineWidth = 1;
+                drawArcSegment(previewSegment.length, previewSegment.angle, true, editingStartX, editingStartY, editingStartHeading);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+            }
+
             // Draw cursor at the current start position
             ctx.beginPath();
             ctx.arc(editingStartX, editingStartY, 5, 0, 2 * Math.PI);
@@ -574,6 +583,13 @@
             dragStartX = pos.x;
             dragStartY = pos.y;
 
+            // Handle adding a new segment at the end
+            if (editingIndex === -1) {
+                // Add a new segment with [0, 0]
+                segments.push({ length: 0, angle: 0 });
+                editingIndex = segments.length - 1;
+            }
+
             // Initialize previewEndX and previewEndY to the current end position of the selected segment
             if (editingIndex >= 0 && editingIndex < segments.length) {
                 const pos = calculatePositionUpTo(editingIndex);
@@ -587,7 +603,7 @@
                 // Calculate the initial offset between the red dot (start) and green dot (end)
                 initialOffsetX = previewEndX - editingStartX;
                 initialOffsetY = previewEndY - editingStartY;
-            } else {
+            } else if (editingIndex === -2) {
                 previewSegment = { length: 0, angle: 0 };
                 previewEndX = editingStartX;
                 previewEndY = editingStartY;
@@ -655,10 +671,6 @@
                     // Insert at the start
                     segments.unshift(previewSegment);
                     editingIndex = 0;
-                } else {
-                    // Add a new segment at the end
-                    segments.push(previewSegment);
-                    editingIndex = -1;
                 }
                 previewSegment = null;
             }
