@@ -507,7 +507,7 @@
                 return;
             }
 
-            const data = segments.map(segment => `${segment.length},${segment.angle}`).join('\n') + '\n';
+            const data = segments.map(segment => `${segment.length},${segment.angle}`).join(',\n') + '\n';
             const blob = new Blob([data], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
