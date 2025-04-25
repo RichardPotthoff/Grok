@@ -11,6 +11,12 @@
         .controls {
             margin: 10px;
         }
+        .controls input[type="number"] {
+            width: 100px;
+        }
+        .controls button {
+            margin: 0 5px;
+        }
     </style>
 </head>
 <body>
@@ -21,6 +27,9 @@
         <input type="number" id="angle" value="30" step="1">
         <button onclick="addSegment()">Add Segment</button>
         <button onclick="clearCanvas()">Clear</button>
+        <button onclick="exportPath()">Export Path</button>
+        <label for="importFile">Import Path:</label>
+        <input type="file" id="importFile" accept=".txt" onchange="importPath(event)">
     </div>
     <canvas id="canvas" width="800" height="600"></canvas>
 
@@ -120,6 +129,58 @@
         function clearCanvas() {
             segments = [];
             redraw();
+        }
+
+        // Export path data as a text file
+        function exportPath() {
+            if (segments.length === 0) {
+                alert("No segments to export!");
+                return;
+            }
+
+            // Format segments as "length,angle\n"
+            const data = segments.map(segment => `${segment.length},${segment.angle}`).join('\n') + '\n';
+            const blob = new Blob([data], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'turtle_path.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Import path data from a text file
+        function importPath(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                try {
+                    // Parse the text: each line is "length,angle"
+                    const lines = text.trim().split('\n');
+                    segments = [];
+                    for (const line of lines) {
+                        const [length, angle] = line.split(',').map(num => parseFloat(num.trim()));
+                        if (isNaN(length) || isNaN(angle)) {
+                            throw new Error(`Invalid format in line: ${line}`);
+                        }
+                        segments.push({ length, angle });
+                    }
+                    redraw();
+                } catch (error) {
+                    alert(`Error loading file: ${error.message}`);
+                    segments = [];
+                    redraw();
+                }
+            };
+            reader.onerror = function() {
+                alert("Error reading file!");
+            };
+            reader.readAsText(file);
         }
 
         // Initial draw
