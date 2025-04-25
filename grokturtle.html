@@ -48,16 +48,29 @@
         // Path segments
         let segments = [];
 
+        // Touch/mouse state
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let previewSegment = null;
+
         // Convert degrees to radians
         function toRadians(degrees) {
             return degrees * Math.PI / 180;
         }
 
+        // Convert radians to degrees
+        function toDegrees(radians) {
+            return radians * 180 / Math.PI;
+        }
+
         // Draw a single arc segment
-        function drawArcSegment(length, angle) {
+        function drawArcSegment(length, angle, isPreview = false) {
             // If length is 0, it's a sharp turn (just update heading)
             if (length === 0) {
-                turtle.heading += toRadians(angle);
+                if (!isPreview) {
+                    turtle.heading += toRadians(angle);
+                }
                 return;
             }
 
@@ -67,11 +80,15 @@
                 const dy = length * Math.sin(turtle.heading);
                 ctx.beginPath();
                 ctx.moveTo(turtle.x, turtle.y);
-                turtle.x += dx;
-                turtle.y += dy;
-                ctx.lineTo(turtle.x, turtle.y);
+                const endX = turtle.x + dx;
+                const endY = turtle.y + dy;
+                if (!isPreview) {
+                    turtle.x = endX;
+                    turtle.y = endY;
+                }
+                ctx.lineTo(endX, endY);
                 ctx.stroke();
-                return;
+                return { endX, endY };
             }
 
             // General case: arc approximated by short line segments
@@ -84,22 +101,32 @@
             ctx.beginPath();
             ctx.moveTo(turtle.x, turtle.y);
 
+            let currentX = turtle.x;
+            let currentY = turtle.y;
+            let currentHeading = turtle.heading;
+
             for (let i = 0; i < steps; i++) {
                 // Move forward by stepLength
-                const dx = stepLength * Math.cos(turtle.heading);
-                const dy = stepLength * Math.sin(turtle.heading);
-                turtle.x += dx;
-                turtle.y += dy;
+                const dx = stepLength * Math.cos(currentHeading);
+                const dy = stepLength * Math.sin(currentHeading);
+                currentX += dx;
+                currentY += dy;
                 // Turn by stepAngle
-                turtle.heading += stepAngle;
+                currentHeading += stepAngle;
                 // Draw line to new position
-                ctx.lineTo(turtle.x, turtle.y);
+                ctx.lineTo(currentX, currentY);
             }
 
             ctx.stroke();
+            if (!isPreview) {
+                turtle.x = currentX;
+                turtle.y = currentY;
+                turtle.heading = currentHeading;
+            }
+            return { endX: currentX, endY: currentY };
         }
 
-        // Redraw all segments
+        // Redraw all segments and show cursor
         function redraw() {
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -115,6 +142,23 @@
             segments.forEach(segment => {
                 drawArcSegment(segment.length, segment.angle);
             });
+
+            // Draw preview segment if dragging
+            if (isDragging && previewSegment) {
+                ctx.strokeStyle = 'gray';
+                ctx.lineWidth = 1;
+                drawArcSegment(previewSegment.length, previewSegment.angle, true);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+            }
+
+            // Draw cursor at turtle's current position
+            ctx.beginPath();
+            ctx.arc(turtle.x, turtle.y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'red';
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.stroke();
         }
 
         // Add a new segment
@@ -138,7 +182,7 @@
                 return;
             }
 
-            // Format segments as "length,angle\n"
+            // Format segments as "length,angle" (no trailing comma)
             const data = segments.map(segment => `${segment.length},${segment.angle}`).join('\n') + '\n';
             const blob = new Blob([data], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
@@ -163,10 +207,20 @@
                     // Parse the text: each line is "length,angle"
                     const lines = text.trim().split('\n');
                     segments = [];
+                    let lineNumber = 0;
                     for (const line of lines) {
-                        const [length, angle] = line.split(',').map(num => parseFloat(num.trim()));
-                        if (isNaN(length) || isNaN(angle)) {
-                            throw new Error(`Invalid format in line: ${line}`);
+                        lineNumber++;
+                        const parts = line.split(',').map(num => num.trim());
+                        if (parts.length !== 2) {
+                            throw new Error(`Invalid number of values in line ${lineNumber}: ${line} (expected "length,angle")`);
+                        }
+                        const length = parseFloat(parts[0]);
+                        const angle = parseFloat(parts[1]);
+                        if (isNaN(length)) {
+                            throw new Error(`Invalid length in line ${lineNumber}: ${parts[0]} is not a number`);
+                        }
+                        if (isNaN(angle)) {
+                            throw new Error(`Invalid angle in line ${lineNumber}: ${parts[1]} is not a number`);
                         }
                         segments.push({ length, angle });
                     }
@@ -182,6 +236,67 @@
             };
             reader.readAsText(file);
         }
+
+        // Touch/Mouse event handlers
+        function getRelativePosition(event) {
+            const rect = canvas.getBoundingClientRect();
+            let x, y;
+            if (event.type.startsWith('touch')) {
+                const touch = event.touches[0] || event.changedTouches[0];
+                x = touch.clientX - rect.left;
+                y = touch.clientY - rect.top;
+            } else {
+                x = event.clientX - rect.left;
+                y = event.clientY - rect.top;
+            }
+            return { x, y };
+        }
+
+        function startDragging(event) {
+            event.preventDefault();
+            isDragging = true;
+            const pos = getRelativePosition(event);
+            dragStartX = pos.x;
+            dragStartY = pos.y;
+            previewSegment = { length: 0, angle: 0 };
+            redraw();
+        }
+
+        function updateDragging(event) {
+            if (!isDragging) return;
+            event.preventDefault();
+            const pos = getRelativePosition(event);
+            const dx = pos.x - dragStartX;
+            const dy = pos.y - dragStartY;
+
+            // Calculate length and angle from relative movement
+            const length = Math.sqrt(dx * dx + dy * dy);
+            let angle = toDegrees(Math.atan2(dy, dx)) - toDegrees(turtle.heading);
+            // Normalize angle to [-180, 180]
+            angle = ((angle + 180) % 360) - 180;
+
+            previewSegment = { length, angle };
+            redraw();
+        }
+
+        function stopDragging(event) {
+            if (!isDragging) return;
+            event.preventDefault();
+            isDragging = false;
+            if (previewSegment) {
+                segments.push(previewSegment);
+                previewSegment = null;
+            }
+            redraw();
+        }
+
+        // Add event listeners for touch and mouse
+        canvas.addEventListener('mousedown', startDragging);
+        canvas.addEventListener('mousemove', updateDragging);
+        canvas.addEventListener('mouseup', stopDragging);
+        canvas.addEventListener('touchstart', startDragging);
+        canvas.addEventListener('touchmove', updateDragging);
+        canvas.addEventListener('touchend', stopDragging);
 
         // Initial draw
         ctx.strokeStyle = 'black';
