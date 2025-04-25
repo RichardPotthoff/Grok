@@ -64,11 +64,21 @@
             border: 1px solid black;
         }
         th, td {
-            padding: 5px;
+            padding: 3px;
             text-align: center;
         }
+        th:nth-child(1), td:nth-child(1) {
+            width: 40px; /* # column */
+        }
+        th:nth-child(2), td:nth-child(2) {
+            width: 120px; /* Length column */
+        }
+        th:nth-child(3), td:nth-child(3) {
+            width: 120px; /* Angle column */
+        }
         td input[type="number"] {
-            width: 80px;
+            width: 90px;
+            padding: 2px;
         }
         .selected {
             background-color: #d3d3d3;
@@ -82,6 +92,7 @@
         }
         .control-buttons button {
             margin: 0 5px;
+            padding: 5px 10px;
         }
         .settings-option {
             margin: 10px 0;
@@ -98,6 +109,18 @@
             }
             .scrollable-table {
                 max-height: 200px;
+            }
+            th:nth-child(1), td:nth-child(1) {
+                width: 30px;
+            }
+            th:nth-child(2), td:nth-child(2) {
+                width: 100px;
+            }
+            th:nth-child(3), td:nth-child(3) {
+                width: 100px;
+            }
+            td input[type="number"] {
+                width: 70px;
             }
         }
     </style>
@@ -116,6 +139,8 @@
                 </div>
                 <div class="control-buttons">
                     <button onclick="clearCanvas()">Clear</button>
+                    <button onclick="insertArc()" id="insertBtn">Insert Arc</button>
+                    <button onclick="deleteArc()" id="deleteBtn">Delete Arc</button>
                 </div>
                 <div class="scrollable-table">
                     <table id="segmentTable">
@@ -124,7 +149,6 @@
                                 <th>#</th>
                                 <th>Length (pixels)</th>
                                 <th>Angle (degrees)</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="segmentTableBody"></tbody>
@@ -175,7 +199,7 @@
         let previewSegment = null;
         let previewEndX = 0;
         let previewEndY = 0;
-        let editingIndex = -1; // Index of the segment being edited (-1 for adding new segment)
+        let editingIndex = -1; // Index of the segment being edited (-1 for adding new segment at end, -2 for start)
         let editingStartX = 0;
         let editingStartY = 0;
         let editingStartHeading = 0;
@@ -270,6 +294,18 @@
             return { endX: currentX, endY: currentY, heading: currentHeading };
         }
 
+        // Calculate the position and heading up to a given segment index
+        function calculatePositionUpTo(index) {
+            let tempTurtle = { x: canvas.width / 2, y: canvas.height / 2, heading: 0 };
+            for (let i = 0; i < index && i < segments.length; i++) {
+                const { endX, endY, heading } = drawArcSegment(segments[i].length, segments[i].angle, true, tempTurtle.x, tempTurtle.y, tempTurtle.heading);
+                tempTurtle.x = endX;
+                tempTurtle.y = endY;
+                tempTurtle.heading = heading;
+            }
+            return tempTurtle;
+        }
+
         // Redraw all segments and show cursor
         function redraw() {
             // Clear canvas
@@ -294,17 +330,23 @@
 
             // Update editing start position
             if (editingIndex >= 0 && editingIndex < segments.length) {
-                editingStartX = tempTurtle.x;
-                editingStartY = tempTurtle.y;
-                editingStartHeading = tempTurtle.heading;
+                const pos = calculatePositionUpTo(editingIndex);
+                editingStartX = pos.x;
+                editingStartY = pos.y;
+                editingStartHeading = pos.heading;
             } else if (editingIndex === -1) {
-                editingStartX = tempTurtle.x;
-                editingStartY = tempTurtle.y;
-                editingStartHeading = tempTurtle.heading;
+                const pos = calculatePositionUpTo(segments.length);
+                editingStartX = pos.x;
+                editingStartY = pos.y;
+                editingStartHeading = pos.heading;
+                previewEndX = editingStartX;
+                previewEndY = editingStartY;
             } else if (editingIndex === -2) {
                 editingStartX = canvas.width / 2;
                 editingStartY = canvas.height / 2;
                 editingStartHeading = 0;
+                previewEndX = editingStartX;
+                previewEndY = editingStartY;
             }
 
             // Draw preview segment if dragging
@@ -361,8 +403,12 @@
                 <td>Start</td>
                 <td>-</td>
                 <td>-</td>
-                <td><button onclick="insertSegment(-1)">Insert</button></td>
             `;
+            startRow.onclick = (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    editSegment(-2);
+                }
+            };
             tbody.appendChild(startRow);
 
             // Add rows for each segment
@@ -375,12 +421,12 @@
                     <td>${index + 1}</td>
                     <td><input type="number" value="${segment.length.toFixed(2)}" onchange="updateSegment(${index}, 'length', this.value)"></td>
                     <td><input type="number" value="${segment.angle.toFixed(2)}" onchange="updateSegment(${index}, 'angle', this.value)"></td>
-                    <td>
-                        <button onclick="editSegment(${index})">Edit</button>
-                        <button onclick="insertSegment(${index})">Insert</button>
-                        <button onclick="deleteSegment(${index})">Delete</button>
-                    </td>
                 `;
+                row.onclick = (e) => {
+                    if (e.target.tagName !== 'INPUT') {
+                        editSegment(index);
+                    }
+                };
                 tbody.appendChild(row);
             });
 
@@ -391,9 +437,17 @@
                 <td>End</td>
                 <td>-</td>
                 <td>-</td>
-                <td><button onclick="editSegment(-1)">Add</button></td>
             `;
+            endRow.onclick = (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    editSegment(-1);
+                }
+            };
             tbody.appendChild(endRow);
+
+            // Enable/disable toolbar buttons
+            document.getElementById('insertBtn').disabled = false;
+            document.getElementById('deleteBtn').disabled = editingIndex < 0 || editingIndex >= segments.length;
         }
 
         // Update a segment's value
@@ -408,19 +462,25 @@
             redraw();
         }
 
-        // Insert a new segment
-        function insertSegment(index) {
-            segments.splice(index + 1, 0, { length: 0, angle: 0 });
+        // Insert a new arc
+        function insertArc() {
+            if (editingIndex === -2) {
+                segments.unshift({ length: 0, angle: 0 });
+            } else if (editingIndex === -1 || editingIndex === segments.length) {
+                segments.push({ length: 0, angle: 0 });
+            } else {
+                segments.splice(editingIndex + 1, 0, { length: 0, angle: 0 });
+            }
+            editingIndex = editingIndex === -2 ? 0 : editingIndex + 1;
             redraw();
         }
 
-        // Delete a segment
-        function deleteSegment(index) {
-            segments.splice(index, 1);
-            if (editingIndex === index) {
+        // Delete the selected arc
+        function deleteArc() {
+            if (editingIndex < 0 || editingIndex >= segments.length) return;
+            segments.splice(editingIndex, 1);
+            if (editingIndex >= segments.length) {
                 editingIndex = -1;
-            } else if (editingIndex > index) {
-                editingIndex--;
             }
             redraw();
         }
@@ -568,11 +628,10 @@
                 if (editingIndex >= 0) {
                     // Update the existing segment
                     segments[editingIndex] = previewSegment;
-                    editingIndex = -1;
                 } else if (editingIndex === -2) {
                     // Insert at the start
                     segments.unshift(previewSegment);
-                    editingIndex = -1;
+                    editingIndex = 0;
                 } else {
                     // Add a new segment at the end
                     segments.push(previewSegment);
