@@ -53,6 +53,8 @@
         let dragStartX = 0;
         let dragStartY = 0;
         let previewSegment = null;
+        let previewEndX = 0;
+        let previewEndY = 0;
 
         // Convert degrees to radians
         function toRadians(degrees) {
@@ -65,23 +67,23 @@
         }
 
         // Draw a single arc segment
-        function drawArcSegment(length, angle, isPreview = false) {
+        function drawArcSegment(length, angle, isPreview = false, startX = turtle.x, startY = turtle.y, startHeading = turtle.heading) {
             // If length is 0, it's a sharp turn (just update heading)
             if (length === 0) {
                 if (!isPreview) {
                     turtle.heading += toRadians(angle);
                 }
-                return;
+                return { endX: startX, endY: startY };
             }
 
             // If angle is 0, it's a straight line
             if (angle === 0) {
-                const dx = length * Math.cos(turtle.heading);
-                const dy = length * Math.sin(turtle.heading);
+                const dx = length * Math.cos(startHeading);
+                const dy = length * Math.sin(startHeading);
                 ctx.beginPath();
-                ctx.moveTo(turtle.x, turtle.y);
-                const endX = turtle.x + dx;
-                const endY = turtle.y + dy;
+                ctx.moveTo(startX, startY);
+                const endX = startX + dx;
+                const endY = startY + dy;
                 if (!isPreview) {
                     turtle.x = endX;
                     turtle.y = endY;
@@ -99,11 +101,11 @@
             const stepAngle = angleRad / steps;
 
             ctx.beginPath();
-            ctx.moveTo(turtle.x, turtle.y);
+            ctx.moveTo(startX, startY);
 
-            let currentX = turtle.x;
-            let currentY = turtle.y;
-            let currentHeading = turtle.heading;
+            let currentX = startX;
+            let currentY = startY;
+            let currentHeading = startHeading;
 
             for (let i = 0; i < steps; i++) {
                 // Move forward by stepLength
@@ -147,18 +149,30 @@
             if (isDragging && previewSegment) {
                 ctx.strokeStyle = 'gray';
                 ctx.lineWidth = 1;
-                drawArcSegment(previewSegment.length, previewSegment.angle, true);
+                const { endX, endY } = drawArcSegment(previewSegment.length, previewSegment.angle, true);
+                previewEndX = endX;
+                previewEndY = endY;
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = 2;
             }
 
-            // Draw cursor at turtle's current position
+            // Draw cursor at turtle's current position (start point)
             ctx.beginPath();
             ctx.arc(turtle.x, turtle.y, 5, 0, 2 * Math.PI);
             ctx.fillStyle = 'red';
             ctx.fill();
             ctx.strokeStyle = 'black';
             ctx.stroke();
+
+            // Draw endpoint cursor if dragging
+            if (isDragging) {
+                ctx.beginPath();
+                ctx.arc(previewEndX, previewEndY, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'green';
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.stroke();
+            }
         }
 
         // Add a new segment
@@ -259,6 +273,8 @@
             dragStartX = pos.x;
             dragStartY = pos.y;
             previewSegment = { length: 0, angle: 0 };
+            previewEndX = turtle.x;
+            previewEndY = turtle.y;
             redraw();
         }
 
@@ -269,13 +285,32 @@
             const dx = pos.x - dragStartX;
             const dy = pos.y - dragStartY;
 
-            // Calculate length and angle from relative movement
-            const length = Math.sqrt(dx * dx + dy * dy);
-            let angle = toDegrees(Math.atan2(dy, dx)) - toDegrees(turtle.heading);
-            // Normalize angle to [-180, 180]
-            angle = ((angle + 180) % 360) - 180;
+            // The endpoint position relative to the start point should match the touch position relative to the touch start
+            previewEndX = turtle.x + dx;
+            previewEndY = turtle.y + dy;
 
-            previewSegment = { length, angle };
+            // Calculate the secant length (distance from start to end)
+            const secantLength = Math.sqrt(dx * dx + dy * dy);
+
+            // Calculate the angle between the turtle's heading and the secant
+            const secantAngle = Math.atan2(dy, dx);
+            const angleRad = secantAngle - turtle.heading;
+            const angleDeg = toDegrees(angleRad);
+
+            // The arc's change in heading is twice the angle between the heading and the secant
+            const arcAngleDeg = 2 * angleDeg;
+
+            // Calculate the arc length: arcLength = radius * |angleRad|, where radius = secantLength / (2 * sin(|angleRad| / 2))
+            const absAngleRad = toRadians(Math.abs(arcAngleDeg));
+            let arcLength = 0;
+            if (absAngleRad > 0.0001) { // Avoid division by zero
+                const radius = secantLength / (2 * Math.sin(absAngleRad / 2));
+                arcLength = radius * absAngleRad;
+            } else {
+                arcLength = secantLength; // For very small angles, approximate as a straight line
+            }
+
+            previewSegment = { length: arcLength, angle: arcAngleDeg };
             redraw();
         }
 
