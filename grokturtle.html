@@ -17,6 +17,23 @@
         .controls button {
             margin: 0 5px;
         }
+        table {
+            border-collapse: collapse;
+            margin: 10px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 5px;
+            text-align: center;
+        }
+        td input[type="number"] {
+            width: 80px;
+        }
+        .selected {
+            background-color: #d3d3d3;
+        }
     </style>
 </head>
 <body>
@@ -31,6 +48,17 @@
         <label for="importFile">Import Path:</label>
         <input type="file" id="importFile" accept=".txt" onchange="importPath(event)">
     </div>
+    <table id="segmentTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Length (pixels)</th>
+                <th>Angle (degrees)</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="segmentTableBody"></tbody>
+    </table>
     <canvas id="canvas" width="800" height="600"></canvas>
 
     <script>
@@ -55,6 +83,7 @@
         let previewSegment = null;
         let previewEndX = 0;
         let previewEndY = 0;
+        let editingIndex = -1; // Index of the segment being edited (-1 for adding new segment)
 
         // Convert degrees to radians
         function toRadians(degrees) {
@@ -64,6 +93,11 @@
         // Convert radians to degrees
         function toDegrees(radians) {
             return radians * 180 / Math.PI;
+        }
+
+        // Normalize angle to [-360, 360] for touch input
+        function normalizeAngleForTouch(angle) {
+            return ((angle + 360) % 720) - 360;
         }
 
         // Draw a single arc segment
@@ -138,27 +172,35 @@
             turtle.y = canvas.height / 2;
             turtle.heading = 0;
 
-            // Draw all segments
+            // Draw all segments up to the editing index
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 2;
-            segments.forEach(segment => {
-                drawArcSegment(segment.length, segment.angle);
-            });
+            let tempTurtle = { x: turtle.x, y: turtle.y, heading: turtle.heading };
+            for (let i = 0; i < segments.length; i++) {
+                if (editingIndex === i && isDragging) continue; // Skip the segment being edited
+                const { endX, endY } = drawArcSegment(segments[i].length, segments[i].angle, false, tempTurtle.x, tempTurtle.y, tempTurtle.heading);
+                tempTurtle.x = endX;
+                tempTurtle.y = endY;
+                tempTurtle.heading = turtle.heading;
+            }
 
             // Draw preview segment if dragging
             if (isDragging && previewSegment) {
                 ctx.strokeStyle = 'gray';
                 ctx.lineWidth = 1;
-                const { endX, endY } = drawArcSegment(previewSegment.length, previewSegment.angle, true);
+                const { endX, endY } = drawArcSegment(previewSegment.length, previewSegment.angle, true, tempTurtle.x, tempTurtle.y, tempTurtle.heading);
                 previewEndX = endX;
                 previewEndY = endY;
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = 2;
+            } else {
+                previewEndX = tempTurtle.x;
+                previewEndY = tempTurtle.y;
             }
 
-            // Draw cursor at turtle's current position (start point)
+            // Draw cursor at the current start position
             ctx.beginPath();
-            ctx.arc(turtle.x, turtle.y, 5, 0, 2 * Math.PI);
+            ctx.arc(tempTurtle.x, tempTurtle.y, 5, 0, 2 * Math.PI);
             ctx.fillStyle = 'red';
             ctx.fill();
             ctx.strokeStyle = 'black';
@@ -173,6 +215,61 @@
                 ctx.strokeStyle = 'black';
                 ctx.stroke();
             }
+
+            // Update the table
+            updateSegmentTable();
+        }
+
+        // Update the segment table
+        function updateSegmentTable() {
+            const tbody = document.getElementById('segmentTableBody');
+            tbody.innerHTML = '';
+            segments.forEach((segment, index) => {
+                const row = document.createElement('tr');
+                if (index === editingIndex) {
+                    row.classList.add('selected');
+                }
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><input type="number" value="${segment.length.toFixed(2)}" onchange="updateSegment(${index}, 'length', this.value)"></td>
+                    <td><input type="number" value="${segment.angle.toFixed(2)}" onchange="updateSegment(${index}, 'angle', this.value)"></td>
+                    <td>
+                        <button onclick="editSegment(${index})">Edit</button>
+                        <button onclick="insertSegment(${index})">Insert</button>
+                        <button onclick="deleteSegment(${index})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update a segment's value
+        function updateSegment(index, field, value) {
+            segments[index][field] = parseFloat(value) || 0;
+            redraw();
+        }
+
+        // Edit a segment using touch/mouse
+        function editSegment(index) {
+            editingIndex = index;
+            redraw();
+        }
+
+        // Insert a new segment
+        function insertSegment(index) {
+            segments.splice(index + 1, 0, { length: 0, angle: 0 });
+            redraw();
+        }
+
+        // Delete a segment
+        function deleteSegment(index) {
+            segments.splice(index, 1);
+            if (editingIndex === index) {
+                editingIndex = -1;
+            } else if (editingIndex > index) {
+                editingIndex--;
+            }
+            redraw();
         }
 
         // Add a new segment
@@ -186,6 +283,7 @@
         // Clear the canvas and reset segments
         function clearCanvas() {
             segments = [];
+            editingIndex = -1;
             redraw();
         }
 
@@ -238,10 +336,12 @@
                         }
                         segments.push({ length, angle });
                     }
+                    editingIndex = -1;
                     redraw();
                 } catch (error) {
                     alert(`Error loading file: ${error.message}`);
                     segments = [];
+                    editingIndex = -1;
                     redraw();
                 }
             };
@@ -272,6 +372,16 @@
             const pos = getRelativePosition(event);
             dragStartX = pos.x;
             dragStartY = pos.y;
+
+            // Calculate the start position for the segment being added or edited
+            turtle.x = canvas.width / 2;
+            turtle.y = canvas.height / 2;
+            turtle.heading = 0;
+            for (let i = 0; i < segments.length; i++) {
+                if (editingIndex === i) continue;
+                drawArcSegment(segments[i].length, segments[i].angle);
+            }
+
             previewSegment = { length: 0, angle: 0 };
             previewEndX = turtle.x;
             previewEndY = turtle.y;
@@ -298,7 +408,10 @@
             const angleDeg = toDegrees(angleRad);
 
             // The arc's change in heading is twice the angle between the heading and the secant
-            const arcAngleDeg = 2 * angleDeg;
+            let arcAngleDeg = 2 * angleDeg;
+
+            // Normalize the angle to [-360, 360] for touch input
+            arcAngleDeg = normalizeAngleForTouch(arcAngleDeg);
 
             // Calculate the arc length: arcLength = radius * |angleRad|, where radius = secantLength / (2 * sin(|angleRad| / 2))
             const absAngleRad = toRadians(Math.abs(arcAngleDeg));
@@ -319,7 +432,14 @@
             event.preventDefault();
             isDragging = false;
             if (previewSegment) {
-                segments.push(previewSegment);
+                if (editingIndex >= 0) {
+                    // Update the existing segment
+                    segments[editingIndex] = previewSegment;
+                    editingIndex = -1;
+                } else {
+                    // Add a new segment
+                    segments.push(previewSegment);
+                }
                 previewSegment = null;
             }
             redraw();
