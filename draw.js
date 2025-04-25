@@ -7,6 +7,11 @@ export let segs = [];
 export let isDrag = false, dragX = 0, dragY = 0, prvSeg = null, prvEndX = 0, prvEndY = 0;
 export let editIdx = -1, origEditIdx = -1, editStartX = 0, editStartY = 0, editStartHdg = 0, initOffX = 0, initOffY = 0;
 
+
+export function setEditIdx(newIdx) {
+    editIdx = newIdx;
+}
+
 export function setupDrawing() {
     cvs = document.createElement('canvas');
     document.querySelector('.canvas-container').appendChild(cvs);

@@ -1,4 +1,4 @@
-import { turtle, segs, editIdx, prvSeg, prvEndX, prvEndY, redraw, updateSeg } from './draw.js';
+import { turtle, segs, editIdx, prvSeg, prvEndX, prvEndY, redraw, updateSeg, setEditIdx } from './draw.js';
 
 export function setupControls() {
     const cont = document.querySelector('.controls');
@@ -61,7 +61,7 @@ export function setupControls() {
 
 function clear() {
     segs.length = 0;
-    editIdx = -1;
+    setEditIdx(-1);
     redraw();
 }
 
@@ -73,14 +73,14 @@ function insertArc() {
     } else {
         segs.splice(editIdx + 1, 0, { len: 0, ang: 0 });
     }
-    editIdx = editIdx === -2 ? 0 : editIdx + 1;
+    setEditIdx(editIdx === -2 ? 0 : editIdx + 1);
     redraw();
 }
 
 function deleteArc() {
     if (editIdx < 0 || editIdx >= segs.length) return;
     segs.splice(editIdx, 1);
-    if (editIdx >= segs.length) editIdx = -1;
+    if (editIdx >= segs.length) setEditIdx(-1);
     redraw();
 }
 
@@ -132,12 +132,12 @@ function importPath(e) {
                     segs.push({ len, ang });
                 }
             }
-            editIdx = -1;
+            setEditIdx(-1);
             redraw();
         } catch (err) {
             alert(`Error loading file: ${err.message}`);
             segs.length = 0;
-            editIdx = -1;
+            setEditIdx(-1);
             redraw();
         }
     };
