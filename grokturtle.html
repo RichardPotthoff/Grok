@@ -200,6 +200,7 @@
         let previewEndX = 0;
         let previewEndY = 0;
         let editingIndex = -1; // Index of the segment being edited (-1 for adding new segment at end, -2 for start)
+        let originalEditingIndex = -1; // Store the original editingIndex before dragging
         let editingStartX = 0;
         let editingStartY = 0;
         let editingStartHeading = 0;
@@ -583,6 +584,9 @@
             dragStartX = pos.x;
             dragStartY = pos.y;
 
+            // Store the original editingIndex
+            originalEditingIndex = editingIndex;
+
             // Handle adding a new segment at the end
             if (editingIndex === -1) {
                 // Add a new segment with [0, 0]
@@ -667,6 +671,10 @@
             if (previewSegment) {
                 if (editingIndex >= 0) {
                     // Already updated in real-time
+                    // If the original selection was "End", move selection back to "End"
+                    if (originalEditingIndex === -1) {
+                        editingIndex = -1;
+                    }
                 } else if (editingIndex === -2) {
                     // Insert at the start
                     segments.unshift(previewSegment);
