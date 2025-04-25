@@ -534,18 +534,25 @@
                     for (const line of lines) {
                         lineNumber++;
                         const parts = line.split(',').map(num => num.trim());
-                        if (parts.length !== 2) {
+						console.log(parts);
+						let n=parts.length;
+						if (parts[n-1]===""){ //adjust for trailing ","
+							n-=1;
+						}
+                        if (n%2 !== 0) {
                             throw new Error(`Invalid number of values in line ${lineNumber}: ${line} (expected "length,angle")`);
                         }
-                        const length = parseFloat(parts[0]);
-                        const angle = parseFloat(parts[1]);
-                        if (isNaN(length)) {
-                            throw new Error(`Invalid length in line ${lineNumber}: ${parts[0]} is not a number`);
-                        }
-                        if (isNaN(angle)) {
-                            throw new Error(`Invalid angle in line ${lineNumber}: ${parts[1]} is not a number`);
-                        }
-                        segments.push({ length, angle });
+						for (let i=0;i<n;i+=2){
+	                        const length = parseFloat(parts[i]);
+	                        const angle = parseFloat(parts[i+1]);
+	                        if (isNaN(length)) {
+	                            throw new Error(`Invalid length in line ${lineNumber}: ${parts[0]} is not a number`);
+	                        }
+	                        if (isNaN(angle)) {
+	                            throw new Error(`Invalid angle in line ${lineNumber}: ${parts[1]} is not a number`);
+	                        }
+	                        segments.push({ length, angle });
+						}
                     }
                     editingIndex = -1;
                     redraw();
