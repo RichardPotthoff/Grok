@@ -19,6 +19,7 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); }
       button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+      button:disabled { opacity: 0.4; cursor: default; }
       #app {
         height: 100%;
         display: grid;
@@ -36,6 +37,7 @@
         border-radius: 8px; padding: 8px 10px; font: inherit; min-height: 40px;
       }
       header button.primary { background: var(--primary); color: #12110f; border-color: transparent; font-weight: 600; }
+      .hint { width: 100%; margin: 0; font-size: 12px; color: var(--muted); }
       .stage {
         display: grid; grid-template-columns: 1fr 1fr; min-height: 0;
       }
@@ -84,6 +86,7 @@
         <button id="insert" type="button">Insert</button>
         <button id="del" type="button">Delete</button>
         <button id="exportJson" type="button" class="primary">Export JSON</button>
+        <p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -111,6 +114,7 @@
 
       const shapeSel = document.getElementById("shape");
       const scaleIn = document.getElementById("scale");
+      const delBtn = document.getElementById("del");
       const rows = document.getElementById("rows");
       for (const name of OUTLINE_NAMES.filter((n) => n !== "Blade")) {
         const opt = document.createElement("option");
@@ -125,7 +129,6 @@
       shapeSel.value = "Duck";
 
       let outline = getOutline("Duck");
-      let selected = -1;
 
       const editor = new CurveEditor(document.getElementById("edit"), {
         outline,
@@ -134,8 +137,7 @@
           preview.setOutline(outline, { scale: Number(scaleIn.value) });
           renderTable();
         },
-        onSelect(idx) {
-          selected = idx;
+        onSelect() {
           renderTable();
         },
       });
@@ -151,13 +153,14 @@
           name === "Blank"
             ? { name: "Custom", startPoint: [0, 0], startAngle: 0, turtlePath: [] }
             : getOutline(name);
-        editor.setOutline(outline, { fit: true });
+        editor.setOutline(outline, { fit: true, keepSelection: false });
         preview.setOutline(outline, { scale: Number(scaleIn.value) });
-        selected = -1;
         renderTable();
       }
 
       function renderTable() {
+        const selected = editor.getSelected();
+        delBtn.disabled = outline.turtlePath.length === 0;
         rows.innerHTML = "";
         outline.turtlePath.forEach(([len, ang], i) => {
           const tr = document.createElement("tr");
@@ -167,7 +170,6 @@
             <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}" /></td>`;
           tr.addEventListener("click", (e) => {
             if (e.target.tagName === "INPUT") return;
-            selected = i;
             editor.setSelected(i);
             renderTable();
           });
@@ -185,6 +187,7 @@
         next[i][f === "len" ? 0 : 1] = v;
         outline = { ...outline, turtlePath: next };
         editor.setOutline(outline);
+        editor.setSelected(i);
         preview.setOutline(outline, { scale: Number(scaleIn.value) });
       });
 
@@ -193,28 +196,8 @@
         preview.setOutline(outline, { scale: Number(scaleIn.value) });
       });
       document.getElementById("fit").onclick = () => editor.fit();
-      document.getElementById("insert").onclick = () => {
-        const i = selected >= 0 ? selected : outline.turtlePath.length;
-        const next = outline.turtlePath.slice();
-        next.splice(i, 0, [4, 0]);
-        outline = { ...outline, turtlePath: next };
-        selected = i;
-        editor.setOutline(outline);
-        editor.setSelected(i);
-        preview.setOutline(outline, { scale: Number(scaleIn.value) });
-        renderTable();
-      };
-      document.getElementById("del").onclick = () => {
-        if (selected < 0) return;
-        const next = outline.turtlePath.slice();
-        next.splice(selected, 1);
-        outline = { ...outline, turtlePath: next };
-        selected = Math.min(selected, next.length - 1);
-        editor.setOutline(outline);
-        editor.setSelected(selected);
-        preview.setOutline(outline, { scale: Number(scaleIn.value) });
-        renderTable();
-      };
+      document.getElementById("insert").onclick = () => editor.insertSegment();
+      delBtn.onclick = () => editor.deleteSegment();
       document.getElementById("exportJson").onclick = () => {
         const blob = new Blob([serializeOutline(outline)], { type: "application/json" });
         const a = document.createElement("a");
@@ -224,6 +207,15 @@
         URL.revokeObjectURL(a.href);
       };
       document.getElementById("spin").onclick = () => preview.setAnimate(true);
+      window.addEventListener("keydown", (e) => {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          editor.deleteSegment();
+        } else if (e.key === "i" || e.key === "Insert") {
+          editor.insertSegment();
+        }
+      });
 
       renderTable();
     </script>
