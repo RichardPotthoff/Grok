@@ -4,6 +4,14 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="yes" name="mobile-web-app-capable"/>
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="Cutter" name="apple-mobile-web-app-title"/>
+<meta content="#12110f" name="theme-color"/>
+<link href="./manifest.json" rel="manifest"/>
+<link href="./icon-180.png" rel="apple-touch-icon"/>
+<link href="./favicon.svg" rel="icon" type="image/svg+xml"/>
 <title>Cookie Cutter</title>
 <style>:root{--bg:#12110f;--surface:#1c1b18;--fg:#ece7dc;--muted:#9a9488;--primary:#7a9e96;--paper:#f3ead8;--ink:#2a241c;--border:color-mix(in oklab,#ece7dc 12%,transparent);--font:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;}*{box-sizing:border-box;}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:var(--font);}
@@ -13,7 +21,8 @@ button:disabled{opacity:0.4;cursor:default;}
 header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);}
 header h1{font-size:1.05rem;font-weight:600;margin:0 12px 0 0;letter-spacing:-0.02em;}
 header select,header input,header button{background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:inherit;min-height:40px;}
-header button.primary{background:var(--primary);color:#12110f;border-color:transparent;font-weight:600;}.hint{width:100%;margin:0;font-size:12px;color:var(--muted);}.stage{display:grid;grid-template-columns:1fr 1fr;min-height:0;}
+header button.primary{background:var(--primary);color:#12110f;border-color:transparent;font-weight:600;}.hint{width:100%;margin:0;font-size:12px;color:var(--muted);}
+#sw-status{margin-left:auto;font-size:12px;color:var(--muted);}.stage{display:grid;grid-template-columns:1fr 1fr;min-height:0;}
 @media(max-width:800px){.stage{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}}.panel{position:relative;min-height:220px;}.panel+.panel{border-left:1px solid var(--border);}
 canvas{width:100%;height:100%;display:block;}.label{position:absolute;top:10px;left:10px;z-index:2;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);pointer-events:none;}.spin{position:absolute;bottom:10px;left:10px;z-index:2;background:color-mix(in oklab,var(--bg) 80%,transparent);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-height:40px;font:inherit;}
 footer{border-top:1px solid var(--border);background:var(--surface);max-height:34vh;overflow:auto;padding:8px 12px 16px;}
@@ -38,7 +47,9 @@ tr.sel td{background:color-mix(in oklab,var(--primary) 18%,transparent);}
 <button id="insert" type="button">Insert</button>
 <button id="del" type="button">Delete</button>
 <button class="primary" id="exportJson" type="button">Export JSON</button>
-<p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row</p>
+<button id="kit" type="button">Download kit</button>
+<span id="sw-status"></span>
+<p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row · iPad: Safari → Share → Add to Home Screen, then try airplane mode</p>
 </header>
 <div class="stage">
 <div class="panel">
@@ -201,11 +212,26 @@ gl.viewport(0,0,w,h);gl.clearColor(0.086,0.082,0.075,1);gl.clear(gl.COLOR_BUFFER
 function compile(gl,type,src){const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error("WebGLCutter shader",gl.getShaderInfoLog(sh));}
 return sh;}
 if(!("modules" in global)){global["modules"]={}}
-global.modules["webgl-cutter.js"]={WebGLCutter};})(window);(function(global){let{CurveEditor}=modules["curve-editor.js"];let{WebGLCutter}=modules["webgl-cutter.js"];let{getOutline,OUTLINE_NAMES}=modules["cookiecutters.js"];let{serializeOutline}=modules["path-utils.js"];const shapeSel=document.getElementById("shape");const scaleIn=document.getElementById("scale");const delBtn=document.getElementById("del");const rows=document.getElementById("rows");for(const name of OUTLINE_NAMES.filter((n)=>n !=="Blade")){const opt=document.createElement("option");opt.value=name;opt.textContent=name;shapeSel.appendChild(opt);}
+global.modules["webgl-cutter.js"]={WebGLCutter};})(window);(function(global){const KIT_FILES=["standalone.html","README.md","Progress.md","es6_html_to_iife_html.py","sw.js","manifest.json","icon-180.png","favicon.svg","es6/README.md","es6/turtle-graphics.js","es6/geometry.js","es6/m4.js","es6/cookiecutters.js","es6/path-utils.js","es6/curve-editor.js","es6/webgl-cutter.js","es6/curve-editor-widget.js","es6/webgl-cutter-widget.js","es6/download-kit.js",];async function downloadKit(){const files=[];for(const name of KIT_FILES){const res=await fetch("./"+name);if(!res.ok) continue;files.push({name:"cutter-es6/"+name,data:new Uint8Array(await res.arrayBuffer())});}
+if(!files.length) throw new Error("Could not collect kit files");const zip=buildZip(files);const blob=new Blob([zip],{type:"application/zip"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="cutter-es6.zip";a.click();URL.revokeObjectURL(a.href);}
+function buildZip(files){const locals=[];const centrals=[];let offset=0;for(const f of files){const name=utf8(f.name);const crc=crc32(f.data);const local=concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(f.data.length),u32(f.data.length),u16(name.length),u16(0),name,f.data,);locals.push(local);centrals.push(concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(f.data.length),u32(f.data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),name,),);offset+=local.length;}
+const central=concat(...centrals);const end=concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(central.length),u32(offset),u16(0));return concat(...locals,central,end);}
+const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++) c=c&1?0xedb88320 ^(c>>>1):c>>>1;t[n]=c>>>0;}
+return t;})();function crc32(u8){let c=0xffffffff;for(let i=0;i<u8.length;i++) c=CRC_TABLE[(c ^ u8[i])&255] ^(c>>>8);return(c ^ 0xffffffff)>>>0;}
+function utf8(s){return new TextEncoder().encode(s);}
+function u16(n){const b=new Uint8Array(2);new DataView(b.buffer).setUint16(0,n,true);return b;}
+function u32(n){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,true);return b;}
+function concat(...parts){const len=parts.reduce((s,p)=>s+p.length,0);const out=new Uint8Array(len);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}
+return out;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["download-kit.js"]={KIT_FILES,downloadKit};})(window);(function(global){let{CurveEditor}=modules["curve-editor.js"];let{WebGLCutter}=modules["webgl-cutter.js"];let{getOutline,OUTLINE_NAMES}=modules["cookiecutters.js"];let{serializeOutline}=modules["path-utils.js"];let{downloadKit}=modules["download-kit.js"];const shapeSel=document.getElementById("shape");const scaleIn=document.getElementById("scale");const delBtn=document.getElementById("del");const rows=document.getElementById("rows");for(const name of OUTLINE_NAMES.filter((n)=>n !=="Blade")){const opt=document.createElement("option");opt.value=name;opt.textContent=name;shapeSel.appendChild(opt);}
 const blank=document.createElement("option");blank.value="Blank";blank.textContent="Blank";shapeSel.appendChild(blank);shapeSel.value="Duck";let outline=getOutline("Duck");const editor=new CurveEditor(document.getElementById("edit"),{outline,onChange(next){outline=next;preview.setOutline(outline,{scale:Number(scaleIn.value)});renderTable();},onSelect(){renderTable();},});const preview=new WebGLCutter(document.getElementById("view"),{outline,outlineScale:11,bladeScale:5,animate:true,});function load(name){outline=name==="Blank"?{name:"Custom",startPoint:[0,0],startAngle:0,turtlePath:[]}:getOutline(name);editor.setOutline(outline,{fit:true,keepSelection:false});preview.setOutline(outline,{scale:Number(scaleIn.value)});renderTable();}
 function renderTable(){const selected=editor.getSelected();delBtn.disabled=outline.turtlePath.length===0;rows.innerHTML="";outline.turtlePath.forEach(([len,ang],i)=>{const tr=document.createElement("tr");if(i===selected) tr.className="sel";tr.innerHTML=`<td>${i + 1}</td>
             <td><input data-i="${i}" data-f="len" type="number" step="0.01" value="${len}" /></td>
             <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}" /></td>`;tr.addEventListener("click",(e)=>{if(e.target.tagName==="INPUT") return;editor.setSelected(i);renderTable();});rows.appendChild(tr);});}
-rows.addEventListener("change",(e)=>{const t=e.target;if(!(t instanceof HTMLInputElement)) return;const i=Number(t.dataset.i);const f=t.dataset.f;const v=Number(t.value);const next=outline.turtlePath.map((s)=>s.slice());next[i][f==="len"?0:1]=v;outline={...outline,turtlePath:next};editor.setOutline(outline);editor.setSelected(i);preview.setOutline(outline,{scale:Number(scaleIn.value)});});shapeSel.addEventListener("change",()=>load(shapeSel.value));scaleIn.addEventListener("change",()=>{preview.setOutline(outline,{scale:Number(scaleIn.value)});});document.getElementById("fit").onclick=()=>editor.fit();document.getElementById("insert").onclick=()=>editor.insertSegment();delBtn.onclick=()=>editor.deleteSegment();document.getElementById("exportJson").onclick=()=>{const blob=new Blob([serializeOutline(outline)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${outline.name || "cutter"}.json`;a.click();URL.revokeObjectURL(a.href);};document.getElementById("spin").onclick=()=>preview.setAnimate(true);window.addEventListener("keydown",(e)=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement) return;if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();editor.deleteSegment();} else if(e.key==="i"||e.key==="Insert"){editor.insertSegment();}});renderTable();})(window);</script>
+rows.addEventListener("change",(e)=>{const t=e.target;if(!(t instanceof HTMLInputElement)) return;const i=Number(t.dataset.i);const f=t.dataset.f;const v=Number(t.value);const next=outline.turtlePath.map((s)=>s.slice());next[i][f==="len"?0:1]=v;outline={...outline,turtlePath:next};editor.setOutline(outline);editor.setSelected(i);preview.setOutline(outline,{scale:Number(scaleIn.value)});});shapeSel.addEventListener("change",()=>load(shapeSel.value));scaleIn.addEventListener("change",()=>{preview.setOutline(outline,{scale:Number(scaleIn.value)});});document.getElementById("fit").onclick=()=>editor.fit();document.getElementById("insert").onclick=()=>editor.insertSegment();delBtn.onclick=()=>editor.deleteSegment();document.getElementById("exportJson").onclick=()=>{const blob=new Blob([serializeOutline(outline)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${outline.name || "cutter"}.json`;a.click();URL.revokeObjectURL(a.href);};document.getElementById("kit").onclick=()=>{downloadKit().catch((err)=>alert(err.message||String(err)));};document.getElementById("spin").onclick=()=>preview.setAnimate(true);window.addEventListener("keydown",(e)=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement) return;if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();editor.deleteSegment();} else if(e.key==="i"||e.key==="Insert"){editor.insertSegment();}});renderTable();})(window);</script>
+<script>(function(){const el=document.getElementById("sw-status");function set(msg){if(el) el.textContent=msg;}
+if(!("serviceWorker" in navigator)||location.protocol==="file:"){set("offline: n/a (needs https)");return;}
+set("offline: installing…");navigator.serviceWorker.register("./sw.js").then(()=>navigator.serviceWorker.ready).then(()=>caches.keys()).then((keys)=>set(keys.length?"offline: ready":"offline: waiting")).catch((err)=>set("offline: "+(err.message||"failed")));})();</script>
 </body>
 </html>

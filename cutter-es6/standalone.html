@@ -3,6 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cutter" />
+    <meta name="theme-color" content="#12110f" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <title>Cookie Cutter</title>
     <style>
       :root {
@@ -38,6 +46,7 @@
       }
       header button.primary { background: var(--primary); color: #12110f; border-color: transparent; font-weight: 600; }
       .hint { width: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+      #sw-status { margin-left: auto; font-size: 12px; color: var(--muted); }
       .stage {
         display: grid; grid-template-columns: 1fr 1fr; min-height: 0;
       }
@@ -86,7 +95,9 @@
         <button id="insert" type="button">Insert</button>
         <button id="del" type="button">Delete</button>
         <button id="exportJson" type="button" class="primary">Export JSON</button>
-        <p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row</p>
+        <button id="kit" type="button">Download kit</button>
+        <span id="sw-status"></span>
+        <p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row · iPad: Safari → Share → Add to Home Screen, then try airplane mode</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -111,6 +122,7 @@
       import { WebGLCutter } from "./es6/webgl-cutter.js";
       import { getOutline, OUTLINE_NAMES } from "./es6/cookiecutters.js";
       import { serializeOutline } from "./es6/path-utils.js";
+      import { downloadKit } from "./es6/download-kit.js";
 
       const shapeSel = document.getElementById("shape");
       const scaleIn = document.getElementById("scale");
@@ -206,6 +218,9 @@
         a.click();
         URL.revokeObjectURL(a.href);
       };
+      document.getElementById("kit").onclick = () => {
+        downloadKit().catch((err) => alert(err.message || String(err)));
+      };
       document.getElementById("spin").onclick = () => preview.setAnimate(true);
       window.addEventListener("keydown", (e) => {
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
@@ -218,6 +233,25 @@
       });
 
       renderTable();
+    </script>
+    <script>
+      (function () {
+        const el = document.getElementById("sw-status");
+        function set(msg) {
+          if (el) el.textContent = msg;
+        }
+        if (!("serviceWorker" in navigator) || location.protocol === "file:") {
+          set("offline: n/a (needs https)");
+          return;
+        }
+        set("offline: installing…");
+        navigator.serviceWorker
+          .register("./sw.js")
+          .then(() => navigator.serviceWorker.ready)
+          .then(() => caches.keys())
+          .then((keys) => set(keys.length ? "offline: ready" : "offline: waiting"))
+          .catch((err) => set("offline: " + (err.message || "failed")));
+      })();
     </script>
   </body>
 </html>
