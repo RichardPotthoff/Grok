@@ -1,0 +1,12 @@
+.anyui-tab { border: 1px solid #ccc; border-radius: 4px; overflow: hidden; margin: 4px 0; }
+.anyui-tab-header { display: flex; background: #f8f8f8; border-bottom: 1px solid #ccc; }
+.anyui-tab-header button {
+  padding: 8px 16px; border: none; background: none; cursor: pointer;
+  border-bottom: 3px solid transparent; font-size: 14px;
+}
+.anyui-tab-header button:hover { background: #eee; }
+.anyui-tab-header button.active {
+  border-bottom: 3px solid #007acc; font-weight: bold; background: white;
+}
+.anyui-tab-content { padding: 12px; background: white; }
+.anyui-tab-panel { display: none; }
