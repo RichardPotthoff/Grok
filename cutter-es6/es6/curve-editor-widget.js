@@ -1,14 +1,8 @@
 /**
  * anywidget / anyui _esm adapter for CurveEditor.
  *
- *   export function render({ model, el }) { ... return cleanup; }
- *
- * Model keys (same names you would traitlet):
- *   turtlePath      number[][]     [length, angleDegrees]
- *   startPoint      number[]       default [0, 0]
- *   startAngle      number         degrees
- *   name            string
- *   selected_index  number
+ * Model keys:
+ *   turtlePath, startPoint, startAngle, name, selected_index
  */
 
 import { CurveEditor } from "./curve-editor.js";
@@ -20,6 +14,8 @@ export function render({ model, el }) {
   canvas.style.height = "100%";
   canvas.style.touchAction = "none";
   el.style.position = el.style.position || "relative";
+  el.style.flex = el.style.flex || "1 1 auto";
+  el.style.minHeight = el.style.minHeight || "220px";
   el.appendChild(canvas);
 
   let applying = false;
@@ -42,6 +38,7 @@ export function render({ model, el }) {
       applying = false;
     },
   });
+  model._editor = editor;
 
   const syncFromModel = () => {
     if (applying) return;
@@ -60,7 +57,10 @@ export function render({ model, el }) {
     if (typeof sel === "number") editor.setSelected(sel);
   });
 
-  return () => editor.destroy();
+  return () => {
+    editor.destroy();
+    model._editor = null;
+  };
 }
 
 function outlineFromModel(model) {
@@ -71,3 +71,5 @@ function outlineFromModel(model) {
     turtlePath: model.get("turtlePath") || [],
   };
 }
+
+export default { render };

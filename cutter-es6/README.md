@@ -4,12 +4,13 @@ Vanilla cookie-cutter designer. No Node, no bundler.
 
 | File | What |
 | --- | --- |
-| `standalone.html` | Modular app (GitHub Pages can serve the `es6/` imports) |
-| `es6_html_to_iife_html.py` | Your converter → single-file `index.html` |
-| `es6/` | Turtle math, curve editor, WebGL cutter, anywidget adapters |
-
-Open `standalone.html` next to `es6/`, or run the Python script to bake `index.html`.
+| `standalone.html` | Reference app: HTML chrome + `es6/` editor |
+| `cutter_anyui.html` | Same app, chrome built from copied `anyui/` widgets |
+| `cutter_anyui_main.js` | Programmatic widget tree (VBox / HBox / Button / …) |
+| `anyui/` | Copied UI widgets (from the anyui project) |
+| `es6/` | Turtle math, curve editor, WebGL cutter, app widgets |
+| `es6_html_to_iife_html.py` | Converter → single-file `index.html` |
 
 `turtlePath` is `[length, angleDegrees]`.
 
-**Download kit** in the header packs this folder as `cutter-es6.zip`.
+Open `cutter_anyui.html` or `standalone.html` next to `es6/` and `anyui/`.

@@ -3,9 +3,7 @@
  *
  * Model keys:
  *   turtlePath, startPoint, startAngle, name
- *   outlineScale   number   default 11
- *   bladeScale     number   default 5
- *   animate        boolean
+ *   outlineScale, bladeScale, animate
  */
 
 import { WebGLCutter } from "./webgl-cutter.js";
@@ -17,6 +15,8 @@ export function render({ model, el }) {
   canvas.style.height = "100%";
   canvas.style.touchAction = "none";
   el.style.position = el.style.position || "relative";
+  el.style.flex = el.style.flex || "1 1 auto";
+  el.style.minHeight = el.style.minHeight || "220px";
   el.appendChild(canvas);
 
   const view = new WebGLCutter(canvas, {
@@ -25,6 +25,7 @@ export function render({ model, el }) {
     bladeScale: model.get("bladeScale") ?? 5,
     animate: model.get("animate") ?? true,
   });
+  model._view = view;
 
   const sync = () => {
     view.setOutline(outlineFromModel(model), {
@@ -36,11 +37,15 @@ export function render({ model, el }) {
   model.on("change:turtlePath", sync);
   model.on("change:startPoint", sync);
   model.on("change:startAngle", sync);
+  model.on("change:name", sync);
   model.on("change:outlineScale", sync);
   model.on("change:bladeScale", sync);
   model.on("change:animate", () => view.setAnimate(!!model.get("animate")));
 
-  return () => view.destroy();
+  return () => {
+    view.destroy();
+    model._view = null;
+  };
 }
 
 function outlineFromModel(model) {
@@ -51,3 +56,5 @@ function outlineFromModel(model) {
     turtlePath: model.get("turtlePath") || [],
   };
 }
+
+export default { render };
