@@ -225,7 +225,7 @@ if __name__ == "__main__":
     print(os.getcwd())
   
     html_file = "cutter_anyui.html"
-    process_html(html_file,minify=True,output_file='index_anyui.html')
+    process_html(html_file,minify=False,output_file='index_anyui.html')
     print("HTML processing completed with embedded ES6 modules converted to IIFE.")
     t2=perf_counter()
     print(f'{t2-t1=}')
