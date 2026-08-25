@@ -1,10 +1,11 @@
 // // anyui/static/float-text-cls.js
 import { AnyuiWidget,widgetManager} from './anyui-model.js';
-import { loadCSS} from './css-loader.js';
+import { loadCSS} from './css-loader.js'; //@exclude-iife
 
 
 import _esm from "./float-text.js";
-const _css_promise = loadCSS("./float-text.css");
+const _css_promise = loadCSS(new URL('./float-text.css', import.meta.url).href); //@exclude-iife
+//const _css_promise = Promise.resolve(); //@include-iife
 
 export default class FloatText extends AnyuiWidget {
   constructor(initialState = {}) {

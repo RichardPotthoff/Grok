@@ -46,7 +46,9 @@ textarea:focus {
 <script type="text/javascript">
 (function(global) {
 // static/anyui-model.js
-const _css_promise = Promise.resolve();
+// import { loadCSS} from './css-loader.js'; //@exclude-iife
+// const _css_promise = loadCSS(new URL('./anyui.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 
 const classCounters = new Map();
 class  AnyuiWidget {
@@ -365,10 +367,12 @@ global.modules["box.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
 // anyui/static/v-box.js
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
 
 //import _esm from './v-box.js';
-let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
+let _esm = modules["box.js"].default;
+// const _css_promise = loadCSS(new URL('./v-box.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  VBox extends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"column"};
@@ -388,12 +392,10 @@ global.modules["v-box-cls.js"] = {VBox,default:VBox} ;
 })(window);
 (function(global) {
 // anyui/static/h-box-cls.js
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
-// const test="es6" //@exclude-iife
-const test="iife"//@include-iife
-
-//import _esm from './h-box.js';
-let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
+let _esm = modules["box.js"].default;
+// const _css_promise = loadCSS(new URL('./h-box.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  HBox extends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"row"};
@@ -449,8 +451,11 @@ if(!("modules" in global)){
 global.modules["button.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["button.js"].default;const _css_promise = Promise.resolve();
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
+let _esm = modules["button.js"].default;
+
+// const _css_promise = loadCSS(new URL('./button.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  Button extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = { description: "Click", disabled: false, button_style: "" };
@@ -547,8 +552,11 @@ if(!("modules" in global)){
 global.modules["dropdown.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["dropdown.js"].default;const _css_promise = Promise.resolve();
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
+let _esm = modules["dropdown.js"].default;
+
+// const _css_promise = loadCSS(new URL('./dropdown.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  Dropdown extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = {
@@ -595,8 +603,10 @@ global.modules["html.js"] = {default:{render}} ;
 })(window);
 (function(global) {
 // anyui/static/html-cls.js
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["html.js"].default;const _css_promise = Promise.resolve();
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
+let _esm = modules["html.js"].default;
+// const _css_promise = loadCSS(new URL('./html.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  Html extends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);
@@ -667,8 +677,10 @@ global.modules["float-text.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
 // // anyui/static/float-text-cls.js
-let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["float-text.js"].default;const _css_promise = Promise.resolve();
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"]; //@exclude-iife
+let _esm = modules["float-text.js"].default;
+// const _css_promise = loadCSS(new URL('./float-text.css', import.meta.url).href); //@exclude-iife
+const _css_promise = Promise.resolve(); //@include-iife
 class  FloatText extends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);

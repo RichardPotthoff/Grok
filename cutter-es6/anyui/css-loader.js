@@ -1,6 +1,6 @@
-export function loadCSS(relpath) {
+/** Load a stylesheet. `href` must already be absolute (caller uses `new URL(..., import.meta.url).href`). */
+export function loadCSS(href) {
     return new Promise((resolve, reject) => {
-        const href = new URL(relpath, import.meta.url).href;
         if (document.querySelector(`link[href="${href}"]`)) return resolve();
 
         const link = document.createElement("link");
@@ -11,4 +11,3 @@ export function loadCSS(relpath) {
         document.head.appendChild(link);
     });
 }
-

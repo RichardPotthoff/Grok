@@ -1,10 +1,11 @@
 // anyui/static/v-box.js
 import { AnyuiWidget,widgetManager} from './anyui-model.js';
-import { loadCSS} from './css-loader.js';
+import { loadCSS} from './css-loader.js'; //@exclude-iife
 
 //import _esm from './v-box.js';
 import _esm from './box.js';
-const _css_promise = loadCSS('./v-box.css');
+const _css_promise = loadCSS(new URL('./v-box.css', import.meta.url).href); //@exclude-iife
+//const _css_promise = Promise.resolve(); //@include-iife
 
 export default class VBox extends AnyuiWidget {
   constructor(initialState = {} ) {  

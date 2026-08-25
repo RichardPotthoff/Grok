@@ -101,6 +101,16 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
     return f'const {css_promise_name} = Promise.resolve()'
     
   import_css_loader_pattern=r'\s*import\s*{\s*loadCSS\s*}\s*from\s*[\'"][^\'"]*[\'"];'
+
+  css_from_line=re.compile(
+      r"""loadCSS\s*\(\s*(?:new\s+URL\s*\(\s*['\"](?P<url>[^'\"]+)['\"]|['\"](?P<plain>[^'\"]+)['\"])"""
+  )
+  def exclude_iife_callback(match):
+      line=match.groupdict()['exclude_iife']
+      m=css_from_line.search(line)
+      if m:
+          css_imports.add(m.group('url') or m.group('plain'))
+      return '// '+line + '\n'
   
   exports={}
   export_pattern = r'(?=^|;)\s*(export\s+(?P<export_default>default\s+)?(?P<export_type>(?:async\s+)?(?:function|const|let|var|class)(?:\s+|\s*\*\s*))?(?P<export_name>\w+)\s*)'
@@ -133,7 +143,7 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
       (r'//\s*(?P<include_iife>.*//\s*@include-iife.*?)(?:\n|$)', lambda match: match.groupdict()['include_iife'] + '\n'),
       
       # 2. EXCLUDE: Erase lines targeted for exclusion
-      (r'(^(?P<exclude_iife>.*//\s*@exclude-iife.*?)(?:\n|$))', lambda match: '// '+match.groupdict()['exclude_iife'] + '\n'),
+      (r'(^(?P<exclude_iife>.*//\s*@exclude-iife.*?)(?:\n|$))', exclude_iife_callback),
       # ==============================
       (comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #remove comments only if minify
       (multiline_comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #

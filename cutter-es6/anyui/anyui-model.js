@@ -1,6 +1,7 @@
 // static/anyui-model.js
-import { loadCSS} from './css-loader.js';
-const _css_promise = loadCSS('./anyui.css');
+import { loadCSS} from './css-loader.js'; //@exclude-iife
+const _css_promise = loadCSS(new URL('./anyui.css', import.meta.url).href); //@exclude-iife
+//const _css_promise = Promise.resolve(); //@include-iife
 
 const classCounters = new Map();
 

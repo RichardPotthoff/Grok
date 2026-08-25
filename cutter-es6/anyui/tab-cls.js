@@ -1,12 +1,11 @@
 // anyui/static/tab-cls.js
 import { AnyuiWidget,widgetManager} from './anyui-model.js';
-import { loadCSS} from './css-loader.js';
+import { loadCSS} from './css-loader.js'; //@exclude-iife
 
 import _esm from "./tab.js";
 
-// Load CSS at module level (easy to parse later for IIFE)
-//const _css_promise = loadCSS("../anyui/static/tab.css");
-const _css_promise = loadCSS("./tab.css");
+const _css_promise = loadCSS(new URL('./tab.css', import.meta.url).href); //@exclude-iife
+//const _css_promise = Promise.resolve(); //@include-iife
 
 export default class Tab extends AnyuiWidget {
   constructor(initialState = {}) {

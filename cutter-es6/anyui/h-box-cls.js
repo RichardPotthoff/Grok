@@ -1,12 +1,9 @@
 // anyui/static/h-box-cls.js
 import { AnyuiWidget,widgetManager} from './anyui-model.js';
-import { loadCSS} from './css-loader.js';
-const test="es6" //@exclude-iife
-//const test="iife"//@include-iife
-
-//import _esm from './h-box.js';
+import { loadCSS} from './css-loader.js'; //@exclude-iife
 import _esm from './box.js';
-const _css_promise = loadCSS('./h-box.css');
+const _css_promise = loadCSS(new URL('./h-box.css', import.meta.url).href); //@exclude-iife
+//const _css_promise = Promise.resolve(); //@include-iife
 
 export default class HBox extends AnyuiWidget {
   constructor(initialState = {} ) {  
