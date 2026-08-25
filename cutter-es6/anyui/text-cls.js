@@ -1,5 +1,6 @@
 // anyui/static/itext-cls.js
-import { AnyuiWidget,loadCSS,widgetManager} from './anyui-model.js';
+import { AnyuiWidget,widgetManager} from './anyui-model.js';
+import { loadCSS} from './css-loader.js';
 
 import _esm from "./text.js";
 const _css_promise = loadCSS("./text.css");   // optional for now

@@ -1,5 +1,6 @@
 // anyui/static/label-cls.js 
-import { AnyuiWidget,loadCSS,widgetManager} from './anyui-model.js';
+import { AnyuiWidget,widgetManager} from './anyui-model.js';
+import { loadCSS} from './css-loader.js';
 
 import _esm from "./label.js";
 const _css_promise = loadCSS("./label.css");

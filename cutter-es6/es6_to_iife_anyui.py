@@ -4,7 +4,8 @@ import os
 import sys
 import json
 from collections import defaultdict
-
+from pprint import pprint as pp
+import pathlib
 def combine_patterns(*patterns):
   combined_pattern ='|'.join(f'(?P<pattern{i}>'+pattern[0]+')' for i,pattern in enumerate(patterns))
   return (re.compile(combined_pattern,flags=re.MULTILINE),patterns)
@@ -42,6 +43,18 @@ combined_minify_patterns=combine_patterns(
 
 minify_javascript=lambda code:combined_re_sub(code,combined_minify_patterns)      
 
+import re
+
+def basic_css_minifier(css_text):
+    # 1. Remove all CSS comments /* ... */
+    css_text = re.sub(r'/\*[\s\S]*?\*/', '', css_text)
+    # 2. Remove whitespace around braces, colons, and semicolons
+    css_text = re.sub(r'\s*([\{\};,])\s*', r'\1', css_text)
+    # 3. Consolidate multiple spaces/newlines into a single space
+    css_text = re.sub(r'\s+', ' ', css_text)
+    return css_text.strip()
+
+
 def add_exports(exportlist,exports):
   for item in exportlist.split(','):
     name,*alias=item.split('as')
@@ -68,7 +81,18 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
       if module_alias:result.append(f'let {module_alias.strip()} = modules["{module_filename}"];')
       if default_import:result.append(f'let {default_import.strip()} = modules["{module_filename}"].default;')
       return '\n'.join(result)
-
+      
+  css_imports=set()
+  loadCSS_pattern=r'\s*const\s*(?P<css_promise_name>\w+)\s*=\s*loadCSS\s*\(\s*[\'"](?P<css_path>[^"\']+)[\'"]\s*\)'
+  def loadCSS_callback(match):
+    groupdict=match.groupdict()
+    css_path=groupdict['css_path']
+    css_promise_name=groupdict['css_promise_name']
+    css_imports.add(css_path)
+    return f'const {css_promise_name} = Promise.resolve()'
+    
+  import_css_loader_pattern=r'\s*import\s*{\s*loadCSS\s*}\s*from\s*[\'"][^\'"]*[\'"];'
+  
   exports={}
   export_pattern = r'(?=^|;)\s*(export\s+(?P<export_default>default\s+)?(?P<export_type>(?:async\s+)?(?:function|const|let|var|class)(?:\s+|\s*\*\s*))?(?P<export_name>\w+)\s*)'
 
@@ -84,7 +108,8 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
         return export_type+' '+export_name #remove the 'export' and 'default' keywords
       else:
         return ''
-
+        
+      
   # here we are parsing for import and export patterns.
   # strings and comment patterns are detected simultaneously, thus preventing the detection of 
   # import/export patterns inside of strings and comments
@@ -93,6 +118,8 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
       (multiline_string_pattern, lambda match:match.group()),    #       
       (comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #remove comments only if minify
       (multiline_comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #
+      (import_css_loader_pattern,lambda match:''),#eliminate the loading of the 'loadCSS' function
+      (loadCSS_pattern,loadCSS_callback),#collect 'loadCSS' style file imports
       (import_pattern,import_callback),#parse import statements, and replace them with equivalent let statements
       (r'(?=^|;)\s*(export\s+default\s+\{(?P<default_export_list>[^}]*)\}\s*;?)', lambda match: add_exports(f"{{{match.group('default_export_list')}}} as default",exports)), # ad-hoc pattern for default export of group " export default {f1, f2 as g, ...}; "
       (export_pattern,export_callback),#parse export statements, collect export names, remove 'export [default]'
@@ -112,7 +139,7 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
   if minify:
       iife_wrapper = minify_javascript(iife_wrapper)
 
-  return iife_wrapper,imports
+  return iife_wrapper,imports,css_imports
 
 def gather_dependencies(content, processed_modules, dependencies, in_process=None, module_dir=None, module_filename=None, minify=False,open=open,import_map=None):
     if import_map==None:
@@ -123,7 +150,7 @@ def gather_dependencies(content, processed_modules, dependencies, in_process=Non
       if module_filename in processed_modules:
         if module_filename in in_process:
           print(f'Circular dependency detected: Module "{module_filename}" is already being processed.')
-        return ""
+        return "",set()
       else:
         in_process.add(module_filename)
         processed_modules.add(module_filename)
@@ -131,37 +158,42 @@ def gather_dependencies(content, processed_modules, dependencies, in_process=Non
     # Process dependencies first
     print(f'Processing module "{module_filename if module_filename else "html <script>"}"')
         # Convert the module itself 
-    converted,imports = convert_es6_to_iife(content, module_filename, minify=minify)
+    converted,imports,css_imports = convert_es6_to_iife(content, module_filename, minify=minify)
     dependency_content = ""
+    css_importlist=set()
     for ifile_name,ifile_path in imports.items():
         ifile_path=import_map.get(ifile_path,ifile_path)
         dependencies[module_filename].add(ifile_name)
-        full_path = os.path.join(os.path.abspath(module_dir), ifile_path)
+        #full_path = os.path.join(os.path.abspath(module_dir), ifile_path)
+        full_path=pathlib.Path(module_dir)/ifile_path
 #        print(f'{full_path = }')
         imodule_dir=os.path.dirname(full_path)
         try:
-          with open(full_path, 'rb') as f:
-             content = f.read().decode()
+          with open(full_path, 'r',encoding='utf-8') as f:
+             content = f.read()
         except Exception as e:
           print(f'{module_dir=}\n{module_filename=}\n{ifile_name=}\n{ifile_path=}\n{full_path=}\n{imodule_dir=}\n',file=sys.stderr)
           raise e
-        dependency_content += gather_dependencies(content, processed_modules, dependencies,in_process,module_dir=imodule_dir,module_filename=ifile_name, minify=minify,open=open,import_map=import_map)
+        i_content, i_css_files= gather_dependencies(content, processed_modules, dependencies,in_process,module_dir=imodule_dir,module_filename=ifile_name, minify=minify,open=open,import_map=import_map)
+        css_importlist|=i_css_files 
+        dependency_content+=i_content
     if module_filename:
       in_process.remove(module_filename)
-    return dependency_content + converted
+    #print(f'{module_dir=} {module_filename=} {css_imports=}')
+    return dependency_content + converted, css_importlist|set(pathlib.Path(module_dir)/css for css in css_imports)
 
 def convertES6toIIFE(content="import from './main.js';",module_dir='',module_filename='',minify=True,open=open,import_map=None):
   processed_modules = set()
   dependencies = defaultdict(set)
-  iife_content = gather_dependencies(content, processed_modules, dependencies,  
+  iife_content,css_imports = gather_dependencies(content, processed_modules, dependencies,  
                 module_dir=module_dir, module_filename=module_filename,  minify=minify,open=open,import_map=import_map)
-  return iife_content
+  return iife_content,css_imports
 
   
 def process_html(html_path,minify=False,output_file='output.html',open=open):
     from bs4 import BeautifulSoup
-    with open(html_path, 'rb') as file:
-        soup = BeautifulSoup(file.read().decode(), 'html.parser')
+    with open(html_path, 'r',encoding='utf-8') as file:
+        soup = BeautifulSoup(file.read(), 'html.parser')
     try:
         importmap_script = soup.find('script', {'type': 'importmap'})
         import_map = json.loads(importmap_script.string)
@@ -169,23 +201,28 @@ def process_html(html_path,minify=False,output_file='output.html',open=open):
         import_map = import_map.get('imports', {})
         print(f'{import_map=}')
     except Exception as e:
-        print(e)
+        print(f'No import map found in {html_path}. Continuing ...')
         import_map=dict()
-    
     processed_modules = set()
+    css_import_list=set()
     dependencies = defaultdict(set)
-    for style in soup.find_all('style'):
-      style.string=minify_javascript(style.string)
+    if minify:
+        for style in soup.find_all('style'):
+            minified_style=basic_css_minifier(style.get_text())
+            style.clear()
+            style.append(minified_style)
     for script in soup.find_all('script'):
         if script.get('type') == 'module':
             module_path = script.get('src',None)
             if module_path!=None:
-                full_path = os.path.join(os.path.dirname(html_path), module_path)
+                #full_path = os.path.join(os.path.dirname(html_path), module_path)
+                full_path = pathlib.Path(html_path).parent/module_path
+                #print(f'{html_path=} {module_path=} {full_path=} ')
                 module_dir = os.path.dirname(full_path)
                 module_filename = os.path.basename(full_path)
                 # Gather all dependencies for this module
-                with open(full_path, 'rb') as f:
-                    content = f.read().decode()
+                with open(full_path, 'r',encoding='utf-8') as f:
+                    content = f.read()
                 del script['src']  # Remove the src attribute as we've included the content
             else:
                 content=script.string
@@ -194,25 +231,45 @@ def process_html(html_path,minify=False,output_file='output.html',open=open):
                 module_dir=os.path.dirname(html_path)
             script['type'] = 'text/javascript'  # Change type to standard JavaScript
             # Insert the converted IIFE content for this module and its dependencies
-            iife_content = gather_dependencies(content, processed_modules, dependencies,  
+            iife_content,css_imports = gather_dependencies(content, processed_modules, dependencies,  
                 module_dir=module_dir, module_filename=module_filename,  minify=minify,open=open,import_map=import_map)
+            css_import_list|=css_imports
             script.string = iife_content
         else:
             # For regular scripts, insert their content
             script_path = script.get('src',None)
             if script_path:
-               with open(os.path.join(os.path.dirname(html_path), script['src']), 'rb') as f:
+               with open(os.path.join(os.path.dirname(html_path), script['src']), 'r',encoding='utf-8') as f:
                    if minify:
-                     script.string = minify_javascript(f.read().decode())
+                     script.string = minify_javascript(f.read())
                    else:
-                     script.string = f.read().decode()
+                     script.string = f.read()
                del script['src']
             else:
                 if minify:
                    script.string=minify_javascript(script.string)
+    if not soup.head:
+       soup.insert(0, soup.new_tag("head"))
+    style_tag=soup.head.find("style")
+    if not style_tag:
+      style_tag=soup.new_tag("style")
+      soup.head.append(style_tag)
+    style_tag.append("\n/* --- Bundled Dynamic Styles --- */\n")
+    for css_file_path in css_import_list:
+       #print(f'{css_file_path=} {css_file_path.is_file()=}') 
+       if css_file_path.is_file():
+           with open(css_file_path,'r',encoding="utf-8") as f:
+             new_style=f.read().strip()
+             if new_style:
+               if minify:
+                 style_tag.append(basic_css_minifier('\n'+style+'\n'))
+               else:
+                 style_tag.append(f"\n/* From: {css_file_path} */\n{new_style}\n")
+       else:
+         print(f"Warning: {css_file_path} not found, skipping.",file=sys.stderr)
     if output_file:
-        with open(output_file, 'wb') as file:
-           file.write(str(soup).encode())
+        with open(output_file, 'w',encoding="utf-8") as file:
+           file.write(str(soup))
     else:
         return str(soup)
 
@@ -222,11 +279,13 @@ if __name__ == "__main__":
 #    raise Exception
     from time import perf_counter
     t1=perf_counter()
-    print(os.getcwd())
   
     html_file = "cutter_anyui.html"
-    process_html(html_file,minify=False,output_file='index_anyui.html')
-    print("HTML processing completed with embedded ES6 modules converted to IIFE.")
+    output_file='index_anyui.html'
+    print(f'ES6 to IIFE convertersion of{html_file} started.')
+    print(f'root directory: {os.getcwd()}')
+    process_html(html_file,minify=False,output_file=output_file)
+    print(f"{html_file}(ES6)  -> {output_file}(iife) conversion completed.")
     t2=perf_counter()
     print(f'{t2-t1=}')
 

@@ -14,12 +14,39 @@
 <link href="./favicon.svg" rel="icon" type="image/svg+xml"/>
 <link href="./cutter_anyui.css" rel="stylesheet"/>
 <title>Cookie Cutter · anyui</title>
-</head>
+<style>
+/* --- Bundled Dynamic Styles --- */
+
+/* From: anyui/anyui.css */
+/* Global form element styles matching Jupyter defaults */
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+    font-size: inherit;
+    border: 1px solid #ccc;
+    border-radius: 0;
+    background-color: white;
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+}
+</style></head>
 <body>
 <div id="app"></div>
 <script type="text/javascript">
 (function(global) {
 // static/anyui-model.js
+const _css_promise = Promise.resolve();
 
 const classCounters = new Map();
 class  AnyuiWidget{
@@ -171,19 +198,6 @@ class  AnyuiWidget{
         return this.widget_manager.create_view(this, {el: el, attribs: attribs});
     }
 }
-function  loadCSS(relpath) {
-    return new Promise((resolve, reject) => {
-        const href = new URL(relpath, import.meta.url).href;
-        if (document.querySelector(`link[href="${href}"]`)) return resolve();
-
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        link.onload = resolve;
-        link.onerror = () => reject(new Error(`Could not load CSS at ${href}`));
-        document.head.appendChild(link);
-    });
-}
 
 
 function toKebabCase(str) {
@@ -288,15 +302,13 @@ class  WidgetManager{
         return {el:container,cleanup:cleanup};
     }
 }
-
-const _css_promise = loadCSS('./anyui.css');
 const  widgetManager= new WidgetManager();
 
 
 if(!("modules" in global)){
  global["modules"]={}
 }
-global.modules["anyui-model.js"] = {AnyuiWidget,loadCSS,WidgetManager,widgetManager} ;
+global.modules["anyui-model.js"] = {AnyuiWidget,WidgetManager,widgetManager} ;
 })(window);
 (function(global) {
 function render({ model, el }) {
@@ -384,11 +396,10 @@ global.modules["box.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
 // anyui/static/v-box.js
-let { AnyuiWidget,loadCSS,widgetManager} = modules["anyui-model.js"];
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 
 //import _esm from './v-box.js';
-let _esm = modules["box.js"].default;
-const _css_promise = loadCSS('./v-box.css');
+let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
 class  VBoxextends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"column"};
@@ -408,11 +419,11 @@ global.modules["v-box-cls.js"] = {VBox,default:VBox} ;
 })(window);
 (function(global) {
 // anyui/static/h-box-cls.js
-let { AnyuiWidget,loadCSS,widgetManager} = modules["anyui-model.js"];
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+
 
 //import _esm from './h-box.js';
-let _esm = modules["box.js"].default;
-const _css_promise = loadCSS('./h-box.css');
+let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
 class  HBoxextends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"row"};
@@ -468,10 +479,8 @@ if(!("modules" in global)){
 global.modules["button.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
-let { AnyuiWidget, loadCSS, widgetManager } = modules["anyui-model.js"];
-let _esm = modules["button.js"].default;
-
-const _css_promise = loadCSS("./button.css");
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+let _esm = modules["button.js"].default;const _css_promise = Promise.resolve();
 class  Buttonextends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = { description: "Click", disabled: false, button_style: "" };
@@ -568,10 +577,8 @@ if(!("modules" in global)){
 global.modules["dropdown.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
-let { AnyuiWidget, loadCSS, widgetManager } = modules["anyui-model.js"];
-let _esm = modules["dropdown.js"].default;
-
-const _css_promise = loadCSS("./dropdown.css");
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+let _esm = modules["dropdown.js"].default;const _css_promise = Promise.resolve();
 class  Dropdownextends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = {
@@ -618,9 +625,8 @@ global.modules["html.js"] = {default:{render}} ;
 })(window);
 (function(global) {
 // anyui/static/html-cls.js
-let { AnyuiWidget,loadCSS,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["html.js"].default;
-const _css_promise = loadCSS("./html.css");
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+let _esm = modules["html.js"].default;const _css_promise = Promise.resolve();
 class  Htmlextends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);
@@ -691,9 +697,8 @@ global.modules["float-text.js"] = {default:{ render }} ;
 })(window);
 (function(global) {
 // // anyui/static/float-text-cls.js
-let { AnyuiWidget,loadCSS,widgetManager} = modules["anyui-model.js"];
-let _esm = modules["float-text.js"].default;
-const _css_promise = loadCSS("./float-text.css");
+let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
+let _esm = modules["float-text.js"].default;const _css_promise = Promise.resolve();
 class  FloatTextextends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);

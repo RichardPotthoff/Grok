@@ -1,5 +1,6 @@
 // anyui/static/v-box.js
-import { AnyuiWidget,loadCSS,widgetManager} from './anyui-model.js';
+import { AnyuiWidget,widgetManager} from './anyui-model.js';
+import { loadCSS} from './css-loader.js';
 
 //import _esm from './v-box.js';
 import _esm from './box.js';

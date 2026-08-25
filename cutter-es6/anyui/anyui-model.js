@@ -1,4 +1,6 @@
 // static/anyui-model.js
+import { loadCSS} from './css-loader.js';
+const _css_promise = loadCSS('./anyui.css');
 
 const classCounters = new Map();
 
@@ -152,20 +154,6 @@ export class AnyuiWidget {
     }
 }
 
-export function loadCSS(relpath) {
-    return new Promise((resolve, reject) => {
-        const href = new URL(relpath, import.meta.url).href;
-        if (document.querySelector(`link[href="${href}"]`)) return resolve();
-
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        link.onload = resolve;
-        link.onerror = () => reject(new Error(`Could not load CSS at ${href}`));
-        document.head.appendChild(link);
-    });
-}
-
 
 function toKebabCase(str) {
     return str.replace(/([A-Z])/g, "-$1").replace(/^-/,"").toLowerCase();
@@ -271,8 +259,6 @@ export class WidgetManager {
         return {el:container,cleanup:cleanup};
     }
 }
-
-const _css_promise = loadCSS('./anyui.css');
 
 export const widgetManager = new WidgetManager();
 
