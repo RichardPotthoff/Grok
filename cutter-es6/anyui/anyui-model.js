@@ -159,20 +159,6 @@ function toKebabCase(str) {
     return str.replace(/([A-Z])/g, "-$1").replace(/^-/,"").toLowerCase();
 }
 
-async function loadModule(relpath) {
-  const href = new URL(relpath, import.meta.url).href;
-  try {
-    console.log(`[Loading module] ${relpath}`);
-    const module = await import(href);
-    console.log(`✅ Loaded module: ${relpath}`);
-    return module;
-  } catch (err) {
-    console.warn(`⚠️ Failed to load module ${relpath}`);
-    return null;
-  }
-}
-
-
 export class WidgetManager {
     constructor() {
         this.classes = new Map();
@@ -188,27 +174,9 @@ export class WidgetManager {
     }
 
     async getOrLoadClass(tagName) {
-        // 1. Check if it was already registered (statically or previously loaded)
-        
-        if (this.classes.has(tagName)) return this.classes.get(tagName);
-        
-        // 2. Prevent re-fetching known failures
-        if (this.failedClasses.has(tagName)) return null;
-        
-        try {
-          // 3. Dynamic load: the module's own execution will trigger registerClass()
-          const relpath = `./${tagName.replace(/^anyui-/,"")}-cls.js`;
-          const module = await loadModule(relpath);
-          // Fallback: if the module didn't auto-register for some reason
-          if (module?.default && !this.classes.has(tagName)) {
-            this.register_class(module.default);
-          }
-          return this.classes.get(tagName);
-        } catch (e) {
-          console.error(e.message);
-          this.failedClasses.add(tagName);
-          return null;
-        }
+        // Registry only. Dynamic loading belongs in widget-upgrader.js
+        // so the IIFE bundle stays classic-script-safe.
+        return this.classes.get(tagName) ?? null;
     }
     
     register_model(model) {

@@ -49,7 +49,7 @@ textarea:focus {
 const _css_promise = Promise.resolve();
 
 const classCounters = new Map();
-class  AnyuiWidget{
+class  AnyuiWidget {
     /** Set to true to log every change:/send/trigger (noisy during CurveEditor playback). */
     static debug = false;
 
@@ -203,20 +203,7 @@ class  AnyuiWidget{
 function toKebabCase(str) {
     return str.replace(/([A-Z])/g, "-$1").replace(/^-/,"").toLowerCase();
 }
-
-async function loadModule(relpath) {
-  const href = new URL(relpath, import.meta.url).href;
-  try {
-    console.log(`[Loading module] ${relpath}`);
-    const module = await import(href);
-    console.log(`✅ Loaded module: ${relpath}`);
-    return module;
-  } catch (err) {
-    console.warn(`⚠️ Failed to load module ${relpath}`);
-    return null;
-  }
-}
-class  WidgetManager{
+class  WidgetManager {
     constructor() {
         this.classes = new Map();
         this.failedClasses = new Set();
@@ -231,27 +218,9 @@ class  WidgetManager{
     }
 
     async getOrLoadClass(tagName) {
-        // 1. Check if it was already registered (statically or previously loaded)
-        
-        if (this.classes.has(tagName)) return this.classes.get(tagName);
-        
-        // 2. Prevent re-fetching known failures
-        if (this.failedClasses.has(tagName)) return null;
-        
-        try {
-          // 3. Dynamic load: the module's own execution will trigger registerClass()
-          const relpath = `./${tagName.replace(/^anyui-/,"")}-cls.js`;
-          const module = await loadModule(relpath);
-          // Fallback: if the module didn't auto-register for some reason
-          if (module?.default && !this.classes.has(tagName)) {
-            this.register_class(module.default);
-          }
-          return this.classes.get(tagName);
-        } catch (e) {
-          console.error(e.message);
-          this.failedClasses.add(tagName);
-          return null;
-        }
+        // Registry only. Dynamic loading belongs in widget-upgrader.js
+        // so the IIFE bundle stays classic-script-safe.
+        return this.classes.get(tagName) ?? null;
     }
     
     register_model(model) {
@@ -302,7 +271,7 @@ class  WidgetManager{
         return {el:container,cleanup:cleanup};
     }
 }
-const  widgetManager= new WidgetManager();
+const  widgetManager = new WidgetManager();
 
 
 if(!("modules" in global)){
@@ -400,7 +369,7 @@ let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 
 //import _esm from './v-box.js';
 let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
-class  VBoxextends AnyuiWidget {
+class  VBox extends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"column"};
     super({...defaultState, ...initialState});
@@ -424,7 +393,7 @@ let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 
 //import _esm from './h-box.js';
 let _esm = modules["box.js"].default;const _css_promise = Promise.resolve();
-class  HBoxextends AnyuiWidget {
+class  HBox extends AnyuiWidget {
   constructor(initialState = {} ) {  
     const defaultState={children:[], orientation:"row"};
     super({...defaultState, ...initialState});    
@@ -481,7 +450,7 @@ global.modules["button.js"] = {default:{ render }} ;
 (function(global) {
 let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 let _esm = modules["button.js"].default;const _css_promise = Promise.resolve();
-class  Buttonextends AnyuiWidget {
+class  Button extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = { description: "Click", disabled: false, button_style: "" };
     super({ ...defaultState, ...initialState });
@@ -579,7 +548,7 @@ global.modules["dropdown.js"] = {default:{ render }} ;
 (function(global) {
 let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 let _esm = modules["dropdown.js"].default;const _css_promise = Promise.resolve();
-class  Dropdownextends AnyuiWidget {
+class  Dropdown extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaultState = {
       options: [],
@@ -627,7 +596,7 @@ global.modules["html.js"] = {default:{render}} ;
 // anyui/static/html-cls.js
 let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 let _esm = modules["html.js"].default;const _css_promise = Promise.resolve();
-class  Htmlextends AnyuiWidget {
+class  Html extends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);
     this._esm = _esm;
@@ -699,7 +668,7 @@ global.modules["float-text.js"] = {default:{ render }} ;
 // // anyui/static/float-text-cls.js
 let { AnyuiWidget,widgetManager} = modules["anyui-model.js"];
 let _esm = modules["float-text.js"].default;const _css_promise = Promise.resolve();
-class  FloatTextextends AnyuiWidget {
+class  FloatText extends AnyuiWidget {
   constructor(initialState = {}) {
     super(initialState);
     this._esm = _esm;
@@ -717,7 +686,7 @@ global.modules["float-text-cls.js"] = {FloatText,default:FloatText} ;
 })(window);
 (function(global) {
 /** Turtle-path math — same API as Notebooks/anywidget turtle-graphics.js */
-function  TurtlePathLengthArea(TurtlePath, arcStartAngle = 0) {
+function  TurtlePathLengthArea (TurtlePath, arcStartAngle = 0) {
   let totalLength = 0;
   let totalArea = 0;
   let firstMoment = [0, 0];
@@ -778,7 +747,7 @@ function  TurtlePathLengthArea(TurtlePath, arcStartAngle = 0) {
  *
  * Angle here is a heading as [cos, sin] — same as the original module.
  */
-function*  Segments2Complex({
+function*  Segments2Complex ({
   p0_a0_segs = [
     [
       [0, 0],
@@ -848,7 +817,7 @@ function*  Segments2Complex({
     if (loops === 1) break;
   }
 }
-function  plot_segments(
+function  plot_segments (
   ctx,
   {
     p0 = [0, 0],
@@ -893,17 +862,17 @@ global.modules["turtle-graphics.js"] = {TurtlePathLengthArea,Segments2Complex,pl
 (function(global) {
 /** Convert turtle outlines to polylines / epaths for the 2D editor and WebGL. */
 let { Segments2Complex, TurtlePathLengthArea } = modules["turtle-graphics.js"];
-const  DEG= Math.PI / 180;
-function  headingFromDeg(deg) {
+const  DEG = Math.PI / 180;
+function  headingFromDeg (deg) {
   const r = deg * DEG;
   return [Math.cos(r), Math.sin(r)];
 }
 
 /** Degrees in, radians out — what Segments2Complex wants. */
-function  segsToRadians(turtlePath) {
+function  segsToRadians (turtlePath) {
   return turtlePath.map(([l, a]) => [Number(l), Number(a) * DEG]);
 }
-function  walkPath(outline, { scale = 1, tol = 0.05, returnStart = true } = {}) {
+function  walkPath (outline, { scale = 1, tol = 0.05, returnStart = true } = {}) {
   const startPoint = outline.startPoint || [0, 0];
   const startAngle = outline.startAngle ?? 0;
   const a0 = headingFromDeg(startAngle);
@@ -921,13 +890,13 @@ function  walkPath(outline, { scale = 1, tol = 0.05, returnStart = true } = {}) 
 }
 
 /** [point, heading] pairs for extrude(). */
-function  outlineToEpath(outline, { scale = 1, tol = 0.05 } = {}) {
+function  outlineToEpath (outline, { scale = 1, tol = 0.05 } = {}) {
   return walkPath(outline, { scale, tol, returnStart: false }).map(({ point, angle }) => [
     point,
     angle,
   ]);
 }
-function  pathStats(outline, { scale = 1 } = {}) {
+function  pathStats (outline, { scale = 1 } = {}) {
   const segs = segsToRadians(outline.turtlePath || []).map(([l, a]) => [l * scale, a]);
   const startAngle = (outline.startAngle ?? 0) * DEG;
   const [length, area, end, endAngle, centroid] = TurtlePathLengthArea(segs, startAngle);
@@ -937,7 +906,7 @@ function  pathStats(outline, { scale = 1 } = {}) {
   const gap = Math.hypot(dx, dy);
   return { length, area, end, endAngle, centroid, gap, closed: gap < 0.35 * scale };
 }
-function  boundsOf(points) {
+function  boundsOf (points) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of points) {
     if (p[0] < minX) minX = p[0];
@@ -954,7 +923,7 @@ function  boundsOf(points) {
     h: Math.max(maxY - minY, 1e-6),
   };
 }
-function  centerEpath(epath) {
+function  centerEpath (epath) {
   const b = boundsOf(epath.map(([p]) => p));
   return epath.map(([p, a]) => [[p[0] - b.cx, p[1] - b.cy], a]);
 }
@@ -963,7 +932,7 @@ function  centerEpath(epath) {
  * Inverse of a turtle arc: given start, heading (radians), and a target end
  * point, return { len, angDeg } matching the notebook convention.
  */
-function  fitArc(start, headingRad, end) {
+function  fitArc (start, headingRad, end) {
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const chord = Math.hypot(dx, dy);
@@ -981,7 +950,7 @@ function  fitArc(start, headingRad, end) {
   }
   return { len, ang: ang / DEG };
 }
-function  serializeOutline(outline) {
+function  serializeOutline (outline) {
   return JSON.stringify(
     {
       name: outline.name || "Custom",
@@ -993,7 +962,7 @@ function  serializeOutline(outline) {
     2,
   );
 }
-function  parseOutline(text) {
+function  parseOutline (text) {
   const t = text.trim();
   if (t.startsWith("{") || t.startsWith("[")) {
     const data = JSON.parse(t);
@@ -1047,7 +1016,7 @@ let { walkPath, boundsOf, fitArc, DEG } = modules["path-utils.js"];
 
 const HIT_PX = 26;
 const ADD_PX = 22;
-class  CurveEditor{
+class  CurveEditor {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
@@ -1553,7 +1522,7 @@ global.modules["curve-editor.js"] = {CurveEditor} ;
  *   turtlePath, startPoint, startAngle, name, selected_index
  */
 let { CurveEditor } = modules["curve-editor.js"];
-function  render({ model, el }) {
+function  render ({ model, el }) {
   const canvas = document.createElement("canvas");
   canvas.style.display = "block";
   canvas.style.width = "100%";
@@ -1627,7 +1596,7 @@ global.modules["curve-editor-widget.js"] = {render,default:{ render }} ;
 (function(global) {
 let { AnyuiWidget, widgetManager } = modules["anyui-model.js"];
 let _esm = modules["curve-editor-widget.js"].default;
-class  CurveEditorWidgetextends AnyuiWidget {
+class  CurveEditorWidget extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaults = {
       name: "Custom",
@@ -1704,7 +1673,7 @@ global.modules["curve-editor-cls.js"] = {CurveEditorWidget,default:CurveEditorWi
 })(window);
 (function(global) {
 // geometry.js — cube, circle, extrude (same algorithm as Notebooks/anywidget)
-function  cube(dx = 1, dy, dz) {
+function  cube (dx = 1, dy, dz) {
   const numVertices = 24;
   const stride = 6 * 4;
   const X = 0.5 * dx;
@@ -1724,7 +1693,7 @@ function  cube(dx = 1, dy, dz) {
   ]);
   return { indices, vertices, stride, numVertices };
 }
-function  circle(r, n) {
+function  circle (r, n) {
   const epath = [];
   for (let i = 0; i < n; i++) {
     const theta = (i * 2 * Math.PI) / n;
@@ -1737,7 +1706,7 @@ function  circle(r, n) {
   }
   return epath;
 }
-function  extrude(epath, shape) {
+function  extrude (epath, shape) {
   const m = epath.length;
   const n = shape.length;
   const numVertices = m * n;
@@ -1773,7 +1742,7 @@ global.modules["geometry.js"] = {cube,circle,extrude} ;
 })(window);
 (function(global) {
 /** Cookie-cutter outlines. turtlePath is [length, angleDegrees]. */
-const  cookiecutters= {
+const  cookiecutters = {
   outlines: {
     Star: {
       turtlePath: [
@@ -1863,8 +1832,8 @@ const  cookiecutters= {
     },
   },
 };
-const  OUTLINE_NAMES= Object.keys(cookiecutters.outlines);
-function  getOutline(name) {
+const  OUTLINE_NAMES = Object.keys(cookiecutters.outlines);
+function  getOutline (name) {
   const o = cookiecutters.outlines[name];
   if (!o) return null;
   return {
@@ -1884,22 +1853,22 @@ global.modules["cookiecutters.js"] = {cookiecutters,OUTLINE_NAMES,getOutline} ;
 // Column major matrix functions
 const {sin,cos,sqrt,tan,PI}=Math,
        pi=PI;
-function  xRot(a){
+function  xRot (a){
   const s=sin(a);
   const c=cos(a);
   return [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1];
 }
-function  yRot(a){
+function  yRot (a){
   const s=sin(a);
   const c=cos(a);
   return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1];
 }
-function  zRot(a){
+function  zRot (a){
   const s=sin(a);
   const c=cos(a);
   return [c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 }
-function  vRot([x,y,z],theta){
+function  vRot ([x,y,z],theta){
   x??=0; y??=0; z??=0;
   const length = sqrt(x*x + y*y + z*z);
   if (length==0) {
@@ -1919,18 +1888,18 @@ function  vRot([x,y,z],theta){
   z/=length;
   return[c + c1*x**2, c1*x*y + s*z, c1*x*z - s*y, 0, c1*x*y - s*z, c + c1*y**2, c1*y*z + s*x, 0, c1*x*z + s*y, c1*y*z - s*x, c + c1*z**2, 0, 0, 0, 0, 1];
 }
-function  tLat([tx,ty,tz]){
+function  tLat ([tx,ty,tz]){
   tx??=0; ty??=0; tz??=0;
   return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
 }
-function  scal([sx, sy, sz]) {
+function  scal ([sx, sy, sz]) {
   sx??=1; sy??=1; sz??=1;
   return [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1];
 }
-function  T(A){
+function  T (A){
   return new Float32Array([A[0], A[4], A[8], A[12], A[1], A[5], A[9], A[13], A[2], A[6], A[10], A[14], A[3], A[7], A[11], A[15]]);
 }
-function  mMul(B,A){
+function  mMul (B,A){
   const C=new Array(16);
   let sum;
   for (let i=0;i<4;++i)
@@ -1942,18 +1911,18 @@ function  mMul(B,A){
     }
   return C;
 }
-function  vMul(A,[x0,x1,x2,x3]){
+function  vMul (A,[x0,x1,x2,x3]){
   x0??=0; x1??=0; x2??=0; x3??=0;
   return new Float32Array([A[0]*x0+A[4]*x1+A[8]*x2+A[12]*x3, A[1]*x0+A[5]*x1+A[9]*x2+A[13]*x3, A[2]*x0+A[6]*x1+A[10]*x2+A[14]*x3, A[3]*x0+A[7]*x1+A[11]*x2+A[15]*x3]);
 }
-function   persp(fov, aspR, near, far) {
+function   persp (fov, aspR, near, far) {
   const f = tan(pi * 0.5 - 0.5 * fov);
   const nfInv = 1.0 / (near - far);
   return [f/aspR, 0, 0, 0, 0, f, 0, 0, 0, 0, nfInv*(far + near), -1, 0, 0, 2*far*near*nfInv, 0];
 }
-function  cMaj(A){return A;}
-function  rMaj(A){return T(A);}
-function  camMat([tx,ty,tz],azim,elev,d){
+function  cMaj (A){return A;}
+function  rMaj (A){return T(A);}
+function  camMat ([tx,ty,tz],azim,elev,d){
   // The function camMat calculates the camera matrix (similar to lookAt, but with different input parameters)
   // tx,ty,tz: target coordinates
   // azim: azimuth angle in radians
@@ -1966,7 +1935,7 @@ function  camMat([tx,ty,tz],azim,elev,d){
         ce=cos(elev);
   return new Float32Array([-s, -c*se, c*ce, 0, c, -s*se, ce*s, 0, 0, ce, se, 0, -c*ty + s*tx, c*se*tx - ce*tz + s*se*ty, -c*ce*tx - ce*s*ty - d - se*tz, 1])
 };
-function  icamMat(t,C,d){
+function  icamMat (t,C,d){
   // The function icamMat calculates the inverse of the camera matrix for a given camera matrix
   // t: target coordinates
   // C: camera matrix
@@ -1974,7 +1943,7 @@ function  icamMat(t,C,d){
   d??=0;
   return new Float32Array([C[0], C[4], C[8], 0, C[1], C[5], C[9], 0, C[2], C[6], C[10], 0, C[2]*d+t[0]??0, C[6]*d+t[1]??0, C[10]*d+t[2]??0, 1])
 };
-function  camPos(targ,camMat,d){
+function  camPos (targ,camMat,d){
   //camera position in world coordinates  // tx,ty,tz: target coordinates
   // camMat: camera matrix
   // d: distance of camera from target. 
@@ -2033,7 +2002,7 @@ precision mediump float;
 varying vec4 v_color;
 void main() { gl_FragColor = v_color; }
 `;
-class  WebGLCutter{
+class  WebGLCutter {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
     this.gl = canvas.getContext("webgl", { antialias: true, alpha: false, preserveDrawingBuffer: true });
@@ -2275,7 +2244,7 @@ global.modules["webgl-cutter.js"] = {WebGLCutter} ;
  *   outlineScale, bladeScale, animate
  */
 let { WebGLCutter } = modules["webgl-cutter.js"];
-function  render({ model, el }) {
+function  render ({ model, el }) {
   const canvas = document.createElement("canvas");
   canvas.style.display = "block";
   canvas.style.width = "100%";
@@ -2333,7 +2302,7 @@ global.modules["webgl-cutter-widget.js"] = {render,default:{ render }} ;
 (function(global) {
 let { AnyuiWidget, widgetManager } = modules["anyui-model.js"];
 let _esm = modules["webgl-cutter-widget.js"].default;
-class  WebGLCutterWidgetextends AnyuiWidget {
+class  WebGLCutterWidget extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaults = {
       name: "Custom",
@@ -2462,7 +2431,7 @@ global.modules["path-table.js"] = {default:{ render },render} ;
 (function(global) {
 let { AnyuiWidget, widgetManager } = modules["anyui-model.js"];
 let _esm = modules["path-table.js"].default;
-class  PathTableWidgetextends AnyuiWidget {
+class  PathTableWidget extends AnyuiWidget {
   constructor(initialState = {}) {
     const defaults = {
       name: "Custom",
@@ -2490,7 +2459,7 @@ global.modules["path-table-cls.js"] = {PathTableWidget,default:PathTableWidget} 
  * Pack the cutter-es6 folder into a zip in the browser (STORE, no compression).
  * Works from standalone.html on GitHub Pages and in the Grok preview.
  */
-const  KIT_FILES= [
+const  KIT_FILES = [
   "standalone.html",
   "cutter_anyui.html",
   "cutter_anyui_main.js",
@@ -2537,7 +2506,7 @@ const  KIT_FILES= [
   "anyui/float-text-cls.js",
   "anyui/float-text.js",
 ];
-async function  downloadKit() {
+async function  downloadKit () {
   const files = [];
   for (const name of KIT_FILES) {
     const res = await fetch("./" + name);
@@ -2946,8 +2915,18 @@ else mq.addListener(applyStageLayout);
 applyStageLayout();
 
 const mount = document.getElementById("app");
-const view = await root.create_view({ el: mount });
-withSync(pushFromEditor);
+let view = null;
+
+async function boot() {
+  view = await root.create_view({ el: mount });
+  withSync(pushFromEditor);
+  window.cutterAnyui = { root, editor, viewer, table, view };
+}
+
+boot().catch((err) => {
+  console.error(err);
+  alert(err.message || String(err));
+});
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -2957,7 +2936,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 if(!("modules" in global)){
  global["modules"]={}
 }
-global.modules["cutter_anyui_main.js"] = {root,editor,viewer,table,view} ;
+global.modules["cutter_anyui_main.js"] = {root,editor,viewer,table,view,boot} ;
 })(window);</script>
 </body>
 </html>

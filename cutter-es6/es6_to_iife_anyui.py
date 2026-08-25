@@ -105,7 +105,8 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
       if groupdict['export_default']:
         exports['default']=export_name;
       if export_type:
-        return export_type+' '+export_name #remove the 'export' and 'default' keywords
+        # Keep a trailing space so `class Foo extends Bar` does not become `Fooextends`.
+        return export_type+' '+export_name+' '
       else:
         return ''
         

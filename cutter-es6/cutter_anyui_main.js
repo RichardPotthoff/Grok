@@ -290,11 +290,21 @@ else mq.addListener(applyStageLayout);
 applyStageLayout();
 
 const mount = document.getElementById("app");
-const view = await root.create_view({ el: mount });
-withSync(pushFromEditor);
+let view = null;
+
+async function boot() {
+  view = await root.create_view({ el: mount });
+  withSync(pushFromEditor);
+  window.cutterAnyui = { root, editor, viewer, table, view };
+}
+
+boot().catch((err) => {
+  console.error(err);
+  alert(err.message || String(err));
+});
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
-export { root, editor, viewer, table, view };
+export { root, editor, viewer, table, view, boot };

@@ -66,7 +66,7 @@ if (document.readyState === "loading") {
   setupLogger();
 }
 
-import { widgetManager,loadCSS } from "./anyui-model.js";
+import { widgetManager } from "./anyui-model.js";
 import HTML from "./html-cls.js";   // ← added as requested
 
 // Dynamic module loader
@@ -106,12 +106,16 @@ async function buildWidgetTree(el) {
   let usePlaceholder = false;
 
   if (isAnyUI) {
-      
     WidgetClass = await widgetManager.getOrLoadClass(tagName);
-    
     if (!WidgetClass) {
-      console.warn(`⚠️ Widget &lt${tagName}&gt not found → using HTML placeholder`);
-      WidgetClass = HTML; // Fallback class
+      const relpath = `./${tagName.replace(/^anyui-/, "")}-cls.js`;
+      const module = await loadModule(relpath);
+      if (module?.default) widgetManager.register_class(module.default);
+      WidgetClass = await widgetManager.getOrLoadClass(tagName);
+    }
+    if (!WidgetClass) {
+      console.warn(`Widget <${tagName}> not found → using HTML placeholder`);
+      WidgetClass = HTML;
       usePlaceholder = true;
     }
   }
