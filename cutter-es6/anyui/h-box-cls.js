@@ -1,7 +1,8 @@
 // anyui/static/h-box-cls.js
 import { AnyuiWidget,widgetManager} from './anyui-model.js';
 import { loadCSS} from './css-loader.js';
-
+const test="es6" //@exclude-iife
+//const test="iife"//@include-iife
 
 //import _esm from './h-box.js';
 import _esm from './box.js';

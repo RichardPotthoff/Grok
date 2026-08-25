@@ -66,6 +66,15 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
   imports={}
   import_pattern = r'(?=^|;)\s*(import\s+(?:(?:(?:(?P<default_import>\w+)(?:[,]|\s)\s*)?(?:(?P<import_group>\{[^}]*\}\s)|(?:\*\s+as\s+(?P<module_alias>\w+))\s)?)\s*from\s+)?[\'"](?P<module_path>[^"\']+)[\'"]\s*;?)'
 
+  #The (?=^|;) Anchor Gotcha:Your import_pattern and export_pattern use (?=^|;)\s*. This assumes a statement always follows the start of a line or a semicolon.The Risk: If a statement follows a closing curly brace } from a block (like an if block or a prior function definition) without an explicit semicolon, the lookahead assertion will fail to match.The Fix (Optional): Changing it to (?=^|[;}\n])\s* or entirely omitting the lookahead since your string/comment guards are already doing the heavy lifting to prevent false positives inside literal blocks.
+  #import_pattern = r'(?=^|[;}\n])\s*(import\s+(?:(?:(?:(?P<default_import>\w+)(?:[,]|\s)\s*)?(?:(?P<import_group>\{[^}]*\}\s)|(?:\*\s+as\s+(?P<module_alias>\w+))\s)?)\s*from\s+)?[\'"](?P<module_path>[^"\']+)[\'"]\s*;?)'
+  #import_pattern = r'\s*(import\s+(?:(?:(?:(?P<default_import>\w+)(?:[,]|\s)\s*)?(?:(?P<import_group>\{[^}]*\}\s)|(?:\*\s+as\s+(?P<module_alias>\w+))\s)?)\s*from\s+)?[\'"](?P<module_path>[^"\']+)[\'"]\s*;?)'
+  #Result: both did not work: the export statement changed 
+  #from: global.modules["box.js"] = {default:{ render }} ;
+  #to: global.modules["box.js"] = {default) ;
+  #resulting in an error message: "Cannot use the keyword 'default' as a shorthand property name."
+
+  
   def import_callback(match):
       groupdict=match.groupdict()
       default_import=groupdict['default_import'] # these are the named groups in the regular expression
@@ -95,6 +104,8 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
   
   exports={}
   export_pattern = r'(?=^|;)\s*(export\s+(?P<export_default>default\s+)?(?P<export_type>(?:async\s+)?(?:function|const|let|var|class)(?:\s+|\s*\*\s*))?(?P<export_name>\w+)\s*)'
+  #export_pattern = r'(?=^|[;}\n])\s*(export\s+(?P<export_default>default\s+)?(?P<export_type>(?:async\s+)?(?:function|const|let|var|class)(?:\s+|\s*\*\s*))?(?P<export_name>\w+)\s*)'
+  #export_pattern = r'\s*(export\s+(?P<export_default>default\s+)?(?P<export_type>(?:async\s+)?(?:function|const|let|var|class)(?:\s+|\s*\*\s*))?(?P<export_name>\w+)\s*)'
 
   def export_callback(match):
       #print(match)
@@ -117,6 +128,13 @@ def convert_es6_to_iife(content, module_filename=None, minify=False):
   combined_es6_to_iife_patterns=combine_patterns(
       (string_pattern, lambda match:match.group()), #detect strings, and put them back unchanged
       (multiline_string_pattern, lambda match:match.group()),    #       
+            # === NEW PREPROCESSOR RULES ===
+      # 1. INCLUDE: Extract code from commented-out preprocessor directives
+      (r'//\s*(?P<include_iife>.*//\s*@include-iife.*?)(?:\n|$)', lambda match: match.groupdict()['include_iife'] + '\n'),
+      
+      # 2. EXCLUDE: Erase lines targeted for exclusion
+      (r'(^(?P<exclude_iife>.*//\s*@exclude-iife.*?)(?:\n|$))', lambda match: '// '+match.groupdict()['exclude_iife'] + '\n'),
+      # ==============================
       (comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #remove comments only if minify
       (multiline_comment_pattern, (lambda match:'') if minify else (lambda match:match.group())), #
       (import_css_loader_pattern,lambda match:''),#eliminate the loading of the 'loadCSS' function
