@@ -29,6 +29,7 @@ export default class WebGLCutterWidget extends AnyuiWidget {
   setAnimate(on) {
     this.set("animate", !!on);
     this.save_changes();
+    this._view?.setAnimate(!!on);
   }
 
   static {

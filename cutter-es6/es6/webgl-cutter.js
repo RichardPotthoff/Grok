@@ -58,6 +58,7 @@ export class WebGLCutter {
       dist: 400,
     };
     this.mesh = { vertices: new Float32Array(0), indices: new Uint16Array(0), stride: 24, numVertices: 0 };
+    this.onAnimate = opts.onAnimate || (() => {});
     this._raf = 0;
     this._dragging = false;
     this._prev = [0, 0];
@@ -99,9 +100,15 @@ export class WebGLCutter {
   }
 
   setAnimate(on) {
-    const was = this.animate;
-    this.animate = !!on;
-    if (this.animate && !was) this._loop();
+    const next = !!on;
+    const changed = next !== this.animate;
+    this.animate = next;
+    if (!next && this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = 0;
+    }
+    if (next) this._loop();
+    if (changed) this.onAnimate(next);
   }
 
   destroy() {
@@ -216,8 +223,12 @@ export class WebGLCutter {
   }
 
   _loop() {
+    if (this._raf) cancelAnimationFrame(this._raf);
     const tick = () => {
-      if (!this.animate) return;
+      if (!this.animate) {
+        this._raf = 0;
+        return;
+      }
       this.camera.azim = (this.camera.azim + 0.012) % (Math.PI * 2);
       this._draw();
       this._raf = requestAnimationFrame(tick);

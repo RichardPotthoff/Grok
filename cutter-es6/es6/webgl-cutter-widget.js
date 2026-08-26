@@ -24,6 +24,11 @@ export function render({ model, el }) {
     outlineScale: model.get("outlineScale") ?? 11,
     bladeScale: model.get("bladeScale") ?? 5,
     animate: model.get("animate") ?? true,
+    onAnimate(on) {
+      if (!!model.get("animate") === !!on) return;
+      model.set("animate", !!on);
+      model.save_changes();
+    },
   });
   model._view = view;
 
@@ -41,6 +46,9 @@ export function render({ model, el }) {
   model.on("change:outlineScale", sync);
   model.on("change:bladeScale", sync);
   model.on("change:animate", () => view.setAnimate(!!model.get("animate")));
+  model.on("msg:custom", (msg) => {
+    if (msg && msg.cmd === "spin") view.setAnimate(true);
+  });
 
   return () => {
     view.destroy();

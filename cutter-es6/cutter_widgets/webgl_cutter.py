@@ -29,3 +29,8 @@ class WebGLCutterWidget(anywidget.AnyWidget):
             self.outlineScale = float(scale)
         if blade_scale is not None:
             self.bladeScale = float(blade_scale)
+
+    def spin(self) -> None:
+        """Restart auto-rotate even if `animate` is already True."""
+        self.animate = True
+        self.send({"cmd": "spin"})
