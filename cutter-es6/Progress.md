@@ -63,16 +63,27 @@ Degrees in storage/UI, radians in `Segments2Complex`. Canvas is y-up in world co
 - Hitting the path body selects; it does not split a segment.
 - Closed-path / start-handle move of `startPoint` not exposed.
 
+## Notebook `_esm` (2026-08-26)
+
+Carnets kernel can read `es6/` from disk. Jupyter `/api/contents` and `/files/` see a **different** root (no `es6/`, no current notebook). Do not use `localhost:8888/files/…` as `_esm`.
+
+Compatibility path: `_esm` = Pages file URL
+
+`https://richardpotthoff.github.io/Grok/cutter-es6/es6/curve-editor-widget.js`
+
+(and `webgl-cutter-widget.js`, `path-table.js`). CORS `*`, `application/javascript`. Confirmed in Carnets: `import keys=default,render`.
+
+Python classes: `cutter_widgets/` (`curve_editor.py`, `webgl_cutter.py`, `path_table.py`) — twins of `es6/*-cls.js`. Notebook only imports and lays out. After pulling `.py` files, restart the kernel; after editing the `.ipynb`, Carnets **reload from disk**.
+
 ## Notebook twin (2026-08-26)
 
-`cutter_anyui.ipynb` is now a working layout twin of `cutter_anyui.html`:
+`cutter_anyui.ipynb` is a layout twin of `cutter_anyui.html`:
 
 - ipywidgets chrome: Dropdown / FloatText / Button / HBox / VBox
-- anywidget canvases + table pointed at `es6/curve-editor-widget.js`, `es6/webgl-cutter-widget.js`, `es6/path-table.js`
+- `from cutter_widgets import CurveEditorWidget, WebGLCutterWidget, PathTableWidget`
 - Shared model: `turtlePath` as `[[length, angleDegrees], …]`
 - Duck loads with the last segment selected; Insert / Delete / Export JSON / Fit / Spin wired
-- ESM is bundled at kernel start with `es6_to_iife_anyui.convertES6toIIFE` so Jupyter does not have to resolve `./curve-editor.js` from a blob URL
-- `curve-editor-widget.js` also accepts `msg:custom` `{cmd: "fit"|"insert"|"delete"}` for Fit (view-only). Insert/Delete in the notebook mutate the Python traits so the 3D view follows even if the canvas message is dropped.
+- Fit uses `msg:custom` `{cmd: "fit"}`. Insert/Delete mutate Python `turtlePath`.
 
 Needs `pip install anywidget ipywidgets`. `standalone.html` is untouched.
 

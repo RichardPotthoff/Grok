@@ -17,6 +17,8 @@ Vanilla modules — no React, no bundler. GitHub Pages can serve them as-is.
 | `webgl-cutter-cls.js` | anyui class wrapper (app-specific) |
 | `path-table-cls.js` | Segment table widget (app-specific) |
 
+Python twins for Jupyter (same defaults, `_esm` on Pages) live in `../cutter_widgets/`.
+
 UI chrome widgets live in `../anyui/`, not here.
 
 `turtlePath` is always `[length, angleDegrees]`.

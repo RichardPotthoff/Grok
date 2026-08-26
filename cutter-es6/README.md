@@ -9,6 +9,8 @@ Vanilla cookie-cutter designer. No Node, no bundler.
 | `cutter_anyui_main.js` | Programmatic widget tree (VBox / HBox / Button / …) |
 | `anyui/` | Copied UI widgets (from the anyui project) |
 | `es6/` | Turtle math, curve editor, WebGL cutter, app widgets |
+| `cutter_widgets/` | Python anywidget twins (`_esm` → Pages `es6/*-widget.js`) |
+| `cutter_anyui.ipynb` | Jupyter layout twin |
 | `es6_html_to_iife_html.py` | Converter → single-file `index.html` |
 
 `turtlePath` is `[length, angleDegrees]`.
