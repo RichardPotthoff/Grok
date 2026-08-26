@@ -57,6 +57,17 @@ export function render({ model, el }) {
     if (typeof sel === "number") editor.setSelected(sel);
   });
 
+  // Notebook chrome (ipywidgets buttons) talks over anywidget custom messages.
+  // standalone / cutter_anyui.html keep calling editor.insertSegment() directly.
+  const onMsg = (msg) => {
+    if (!msg || applying) return;
+    const cmd = msg.cmd || msg.action;
+    if (cmd === "fit") editor.fit();
+    else if (cmd === "insert") editor.insertSegment(msg.at);
+    else if (cmd === "delete") editor.deleteSegment(msg.at);
+  };
+  model.on("msg:custom", onMsg);
+
   return () => {
     editor.destroy();
     model._editor = null;
