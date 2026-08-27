@@ -74,7 +74,7 @@ const compare = new Html({
 });
 
 const hint = new Html({
-  value: `<p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row · this page is the anyui chrome; standalone.html is the reference</p>`,
+  value: `<p class="hint">Path tools sit on the canvas: Select / Add / Pan / Close. Close rewrites the last two arcs so the path meets with matching heading. standalone.html is the reference.</p>`,
 });
 
 const toolbar = new HBox({

@@ -65,6 +65,8 @@ export function render({ model, el }) {
     if (cmd === "fit") editor.fit();
     else if (cmd === "insert") editor.insertSegment(msg.at);
     else if (cmd === "delete") editor.deleteSegment(msg.at);
+    else if (cmd === "close") editor.closePath({ smooth: msg.smooth !== false, mode: msg.mode });
+    else if (cmd === "tool") editor.setTool(msg.tool || msg.name);
   };
   model.on("msg:custom", onMsg);
 

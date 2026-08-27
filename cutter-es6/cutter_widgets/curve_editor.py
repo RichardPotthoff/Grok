@@ -63,3 +63,7 @@ class CurveEditorWidget(anywidget.AnyWidget):
 
     def fit(self) -> None:
         self.send({"cmd": "fit"})
+
+    def close_path(self, *, smooth: bool = True, mode: str = "adjust") -> None:
+        """Ask the JS editor to G1-close (last two arcs). Result syncs back on turtlePath."""
+        self.send({"cmd": "close", "smooth": smooth, "mode": mode})

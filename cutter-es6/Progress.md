@@ -1,96 +1,89 @@
 # Cookie cutter designer — progress
 
-Handoff notes so we can pick up here. Last updated 2026-08-26.
+Handoff notes so we can pick up here. Last updated 2026-08-27.
 
-**Goal:** a turtle-path editor + WebGL blade preview, reusable as ES6 modules (Marimo / Jupyter / anywidget) and as a single-file HTML via `es6_html_to_iife_html.py`. First product: cookie cutter.
+**Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
-Related:
+**Source of truth:** this folder (`cutter-es6/`), also `RichardPotthoff/Grok` on `main`. Not the Node/TanStack host.
 
-- anyui layout (new): `cutter_anyui.html` + `cutter_anyui_main.js`
-- reference chrome: `standalone.html`
-- IIFE (standalone): `index.html`
-- IIFE (anyui): `es6_to_iife_anyui.py` → `index_anyui.html`. CSS inlined from `@exclude-iife` `loadCSS` lines; IIFE side uses `@include-iife` `Promise.resolve()`.
-- `css-loader.js` stays a module-only file (not bundled). Callers pass `new URL('./x.css', import.meta.url).href`.
-- `loadModule` lives only in `widget-upgrader.js`. Demo: `anyui/upgrade-demo.html`.
-- anyui project: https://github.com/RichardPotthoff/anyui
+## What works now (tested)
 
-## Two layers (do not mix them up)
+| Surface | Status |
+| --- | --- |
+| `standalone.html` | Reference app. Unchanged by the notebook work. |
+| `cutter_anyui.html` + `cutter_anyui_main.js` | Same editor, anyui chrome. |
+| `index.html` / `index_anyui.html` | IIFE deployables (Safari / Pages). |
+| `cutter_anyui.ipynb` on Carnets Plus | Working twin. Duck, Insert/Delete, Export, Fit, 3D follows path, **Spin restarts after a drag**. |
+| Pages modules | `https://richardpotthoff.github.io/Grok/cutter-es6/es6/*.js` serve as `application/javascript` with CORS `*`. Carnets `import()` keys: `default,render`. |
 
-| Layer | What it is | Needed on the iPad? |
-| --- | --- | --- |
-| **Grok Build host** | Node + TanStack Start so the live preview can run | **No.** |
-| **This folder (`cutter-es6/`)** | Vanilla ES6 + HTML | **Yes.** |
+Carnets workflow: **reload from disk** after pulling the `.ipynb`; **restart kernel** after changing `cutter_widgets/*.py`. Pages `_esm` is cached ~10 min after a push.
 
-## Folder split (2026-08-24)
+## Layout (do not merge these layers)
 
 | Folder | Owns |
 | --- | --- |
-| `anyui/` | Copied general UI widgets (Box, HBox, VBox, Button, Dropdown, Label, Html, FloatText, …). Safe to edit locally; copy improvements back to the anyui repo later. |
-| `es6/` | App core (turtle math, CurveEditor, WebGL cutter) and **app-specific** widgets (`curve-editor-cls.js`, `webgl-cutter-cls.js`, `path-table-cls.js`). |
+| `anyui/` | Copied general UI widgets (Box, HBox, VBox, Button, Dropdown, …). |
+| `es6/` | Turtle math, `CurveEditor`, `WebGLCutter`, `*-widget.js` (anywidget render), `*-cls.js` (anyui class). |
+| `cutter_widgets/` | Python twins of `es6/*-cls.js`. `_esm` → Pages widget URLs. |
 
 Do **not** put layout chrome in `es6/` or turtle math in `anyui/`.
 
-## Two UIs, same editor
+## Notebook `_esm` lesson (keep this)
 
-| Entry | Chrome |
-| --- | --- |
-| `standalone.html` | Hand-written HTML elements. Stable reference. |
-| `cutter_anyui.html` | Programmatic anyui widget tree (`cutter_anyui_main.js`). Stress-test for anyui. |
+anywidget `Path` / source string becomes a **blob URL**. Relative `import "./curve-editor.js"` does not resolve from a blob.
 
-Both import the same `es6/curve-editor.js` and `es6/webgl-cutter.js`.
+Carnets `/files/` and `/api/contents/` see a **different root** from the kernel `cwd`. Local `http://localhost:8888/files/es6/…` is 404 even when Python can read the file. Do not chase that.
 
-## Shared data model
+Working pattern (same idea as anyui `box.py` + `static/box.js`):
 
-`turtlePath` is always `[[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
+```text
+cutter_widgets/curve_editor.py   _esm = Pages …/curve-editor-widget.js
+es6/curve-editor-cls.js          import _esm from "./curve-editor-widget.js"
+```
 
-Degrees in storage/UI, radians in `Segments2Complex`. Canvas is y-up in world coords, flipped at draw time.
+IIFE bundle remains the **offline / deploy** path, not the notebook default.
+
+## Spin (fixed 2026-08-26)
+
+Drag called `WebGLCutter.setAnimate(false)` without updating the widget `animate` trait. Setting `animate = True` again was a no-op.
+
+Now: drag writes `animate: false` back to the model; `viewer.spin()` sends `{cmd: "spin"}`; `setAnimate(true)` always starts a fresh RAF loop. HTML `WebGLCutterWidget.setAnimate` also forwards to `_view`.
 
 ## Editor behavior (current)
 
 - Duck loads with the **last** segment selected.
-- Drag a **handle** = edit that segment (does not append).
-- Empty drag = pan; pinch = zoom.
-- Hollow **+** past the red end (or **Insert**) = add a segment.
-- **Delete** / Backspace = remove the highlighted row (or the last one if none).
+- Tool strip on the path canvas: **Select / Add / Pan / Close**.
+- Select: drag a handle to edit that segment; empty drag pans; pinch zooms.
+- Add: drag empty space (or the hollow +) appends an arc from the current end.
+- Pan: drag never edits.
+- **Close** rewrites the last two arcs as a G1 biarc onto `startPoint` + `startAngle`. Already-closed paths are left alone. Canvas shows gap dashed line, heading ticks, and a `gap · Δθ` badge.
+- Hollow **+** past the red end (or header **Insert**) still adds `[4, 0]` in Select.
+- **Delete** / Backspace = remove the highlighted row (or the last if none).
 - Table edits length/angle; 3D updates on change.
-- **Export JSON** = outline in notebook format.
-- anyui version: layout is VBox / HBox / Button / Dropdown / FloatText. App widgets wrap the canvases.
+- **Export JSON** = outline object.
+- Fit = `{cmd: "fit"}` to the canvas (view only).
+- Notebook: `editor.close_path()` sends `{cmd: "close"}`. Insert/Delete still mutate Python `turtlePath` (do not also send insert/delete messages).
 
 ## Known nits
 
-- Copied anyui Button originally `alert()`ed on click — local copy now `model.send({ event: "click" })`.
-- Insert after a delete still drops in `[4, 0]` (dummy straight segment).
+- Insert still drops in a dummy `[4, 0]` straight segment.
 - Hitting the path body selects; it does not split a segment.
-- Closed-path / start-handle move of `startPoint` not exposed.
+- Start-handle move of `startPoint` / `startAngle` not exposed.
+- Append-two close is weak when the end heading already matches and the start is directly behind the turtle (adjust-two is the product path and works).
+- Notebook `_esm` needs network + a published Pages tree (not the file you are mid-edit).
+- IIFE HTML should be regenerated after `es6/` edits if you care about `index*.html` on Pages.
 
-## Notebook `_esm` (2026-08-26)
+## Sensible next steps
 
-Carnets kernel can read `es6/` from disk. Jupyter `/api/contents` and `/files/` see a **different** root (no `es6/`, no current notebook). Do not use `localhost:8888/files/…` as `_esm`.
+Pick **one** thread per conversation. Suggested order for the drawing app (not packaging):
 
-Compatibility path: `_esm` = Pages file URL
+1. **Start-point / first-tangent handle.** Move `startPoint` and `startAngle` without inventing extra primitives. Green start dot is visible; it does not drag yet.
+2. **Split-on-path and smarter Insert.** Tap the stroke to split an arc; stop inserting dummy `[4, 0]` as the only add gesture.
+3. **Offset that stays exact-arc.** Parallel curve as another `turtlePath`. Needed later for cutter wall / blade; keep it geometric, not mesh.
+4. **Regenerate IIFE** (`es6_to_iife_anyui.py`) so Pages `index_anyui.html` matches Close + tool strip.
+5. **Copy anyui fixes back** to `RichardPotthoff/anyui` (Button click, Box fill, Dropdown cleanup, `loadCSS` href). Separate repo, separate conversation.
+6. **Marimo twin** on the Pi, only after the editor feels like a drawing tool in HTML + Carnets.
 
-`https://richardpotthoff.github.io/Grok/cutter-es6/es6/curve-editor-widget.js`
+Leave alone unless asked: Node/TanStack host, merging `anyui/` into `es6/`, Pythonista static server, bundling `_esm` in the notebook.
 
-(and `webgl-cutter-widget.js`, `path-table.js`). CORS `*`, `application/javascript`. Confirmed in Carnets: `import keys=default,render`.
-
-Python classes: `cutter_widgets/` (`curve_editor.py`, `webgl_cutter.py`, `path_table.py`) — twins of `es6/*-cls.js`. Notebook only imports and lays out. After pulling `.py` files, restart the kernel; after editing the `.ipynb`, Carnets **reload from disk**.
-
-## Notebook twin (2026-08-26)
-
-`cutter_anyui.ipynb` is a layout twin of `cutter_anyui.html`:
-
-- ipywidgets chrome: Dropdown / FloatText / Button / HBox / VBox
-- `from cutter_widgets import CurveEditorWidget, WebGLCutterWidget, PathTableWidget`
-- Shared model: `turtlePath` as `[[length, angleDegrees], …]`
-- Duck loads with the last segment selected; Insert / Delete / Export JSON / Fit / Spin wired
-- Fit uses `msg:custom` `{cmd: "fit"}`. Insert/Delete mutate Python `turtlePath`.
-
-Needs `pip install anywidget ipywidgets`. `standalone.html` is untouched.
-
-## Sensible next picks
-
-1. Smoke `anyui/upgrade-demo.html` (custom tags + dynamic `import()`).
-2. Run `cutter_anyui.ipynb` on the Pi / Jupyter and confirm WebGL + handle drag round-trip.
-3. Copy useful anyui fixes (Button click, Box fill, Dropdown cleanup, `loadCSS` href, registry-only `getOrLoadClass`, `@include-iife` / `@exclude-iife`) back to the anyui repo.
-
-When you come back: treat **this folder** as source. Ignore the Node host. Iterate the modules. Keep `standalone.html` until the anyui chrome feels better.
+When you come back: this folder is source. Keep `standalone.html` as the reference until the anyui chrome is clearly better. Interaction and exact-arc operations first; packaging is done enough.

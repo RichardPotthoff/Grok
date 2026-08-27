@@ -13,6 +13,9 @@
  */
 
 import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
+import { closePath, closureInfo } from "./close-path.js";
+
+export const EDITOR_TOOLS = ["select", "add", "pan"];
 
 const HIT_PX = 26;
 const ADD_PX = 22;
@@ -33,6 +36,8 @@ export class CurveEditor {
     this._raf = 0;
     this._ro = null;
     this._moved = false;
+    this.tool = opts.tool || "select";
+    this.onTool = opts.onTool || (() => {});
 
     this._onPtrDown = this._onPtrDown.bind(this);
     this._onPtrMove = this._onPtrMove.bind(this);
@@ -50,8 +55,41 @@ export class CurveEditor {
       this._ro = new ResizeObserver(() => this.redraw());
       this._ro.observe(canvas);
     }
+    this._mountTools();
     this.fit();
     this.redraw();
+  }
+
+  setTool(name) {
+    const tool = EDITOR_TOOLS.includes(name) ? name : "select";
+    if (this.tool === tool) {
+      this._syncToolButtons();
+      return this.tool;
+    }
+    this.tool = tool;
+    this._syncToolButtons();
+    this.onTool(this.tool);
+    this.redraw();
+    return this.tool;
+  }
+
+  getTool() {
+    return this.tool;
+  }
+
+  closePath(opts = {}) {
+    const next = closePath(this.outline, { smooth: opts.smooth !== false, mode: opts.mode });
+    this.outline = next;
+    const n = this.outline.turtlePath.length;
+    this.editIdx = n ? n - 1 : -1;
+    this.redraw();
+    this.onSelect(this.editIdx);
+    this.onChange(this.getOutline());
+    return closureInfo(this.outline);
+  }
+
+  closureInfo() {
+    return closureInfo(this.outline);
   }
 
   setOutline(outline, { fit = false, keepSelection = true } = {}) {
@@ -133,6 +171,95 @@ export class CurveEditor {
     c.removeEventListener("wheel", this._onWheel);
     this._ro?.disconnect();
     if (this._raf) cancelAnimationFrame(this._raf);
+    this._tools?.remove();
+    this._status?.remove();
+  }
+
+  _mountTools() {
+    const parent = this.canvas.parentElement;
+    if (!parent || this._tools) return;
+    if (getComputedStyle(parent).position === "static") parent.style.position = "relative";
+
+    if (!document.getElementById("curve-editor-tools-css")) {
+      const style = document.createElement("style");
+      style.id = "curve-editor-tools-css";
+      style.textContent = `
+        .curve-tools {
+          position: absolute; left: 8px; bottom: 8px; z-index: 3;
+          display: flex; flex-wrap: wrap; gap: 4px;
+          padding: 4px; border-radius: 10px;
+          background: color-mix(in oklab, #1c1b18 82%, transparent);
+          border: 1px solid color-mix(in oklab, #ece7dc 16%, transparent);
+          backdrop-filter: blur(8px);
+        }
+        .curve-tools button {
+          font: 600 12px/1.1 system-ui, sans-serif;
+          min-height: 36px; min-width: 52px;
+          padding: 6px 10px; border-radius: 8px;
+          border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
+          background: #12110f; color: #ece7dc;
+        }
+        .curve-tools button[aria-pressed="true"] {
+          background: #7a9e96; color: #12110f; border-color: transparent;
+        }
+        .curve-tools button.action { font-weight: 700; }
+        .curve-close-status {
+          position: absolute; left: 8px; top: 28px; z-index: 3;
+          font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+          color: #6b3b32; background: color-mix(in oklab, #f3ead8 80%, transparent);
+          border-radius: 6px; padding: 3px 7px; pointer-events: none;
+        }
+        .curve-close-status.ok { color: #2f7a4a; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const bar = document.createElement("div");
+    bar.className = "curve-tools";
+    bar.innerHTML = `
+      <button type="button" data-tool="select" title="Select and drag handles">Select</button>
+      <button type="button" data-tool="add" title="Drag from the end to add an arc">Add</button>
+      <button type="button" data-tool="pan" title="Drag to pan">Pan</button>
+      <button type="button" data-action="close" class="action" title="Adjust last two arcs so the path meets with matching heading">Close</button>
+    `;
+    bar.addEventListener("pointerdown", (e) => e.stopPropagation());
+    bar.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      if (btn.dataset.tool) this.setTool(btn.dataset.tool);
+      if (btn.dataset.action === "close") this.closePath();
+    });
+    parent.appendChild(bar);
+    this._tools = bar;
+
+    const status = document.createElement("div");
+    status.className = "curve-close-status";
+    parent.appendChild(status);
+    this._status = status;
+    this._syncToolButtons();
+  }
+
+  _syncToolButtons() {
+    if (!this._tools) return;
+    this._tools.querySelectorAll("[data-tool]").forEach((btn) => {
+      btn.setAttribute("aria-pressed", btn.dataset.tool === this.tool ? "true" : "false");
+    });
+  }
+
+  _syncStatus(info) {
+    if (!this._status) return;
+    if (!info || info.n === 0) {
+      this._status.textContent = "";
+      return;
+    }
+    if (info.g1) {
+      this._status.className = "curve-close-status ok";
+      this._status.textContent = "closed · G1";
+      return;
+    }
+    this._status.className = "curve-close-status";
+    const gap = info.gap < 0.001 ? info.gap.toExponential(2) : info.gap.toFixed(3);
+    this._status.textContent = `gap ${gap} · Δθ ${info.dHeadingDeg.toFixed(2)}°`;
   }
 
   worldFromEvent(e) {
@@ -160,7 +287,7 @@ export class CurveEditor {
       return;
     }
 
-    if (e.button === 1 || e.shiftKey || e.altKey) {
+    if (e.button === 1 || e.shiftKey || e.altKey || this.tool === "pan") {
       this._drag = { mode: "pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
       return;
     }
@@ -177,7 +304,11 @@ export class CurveEditor {
     let idx = this.editIdx;
     let append = false;
 
-    if (hitAdd) {
+    if (this.tool === "add" && !hitV && !hitAdd) {
+      this.outline.turtlePath.push([0, 0]);
+      idx = this.outline.turtlePath.length - 1;
+      append = true;
+    } else if (hitAdd) {
       this.outline.turtlePath.push([0, 0]);
       idx = this.outline.turtlePath.length - 1;
       append = true;
@@ -352,9 +483,13 @@ export class CurveEditor {
       disc(ctx, p[0], p[1], sel || last || i === 0 ? r * 1.25 : r);
     });
 
+    const info = closureInfo(this.outline);
+    this._syncStatus(info);
+    this._drawClosure(ctx, info, paper);
+
     const end = vertices[vertices.length - 1];
     const tail = samples[samples.length - 1];
-    if (end && tail) {
+    if (end && tail && this.tool !== "pan") {
       const add = addHandlePoint(samples, ADD_PX / this.view.scale);
       ctx.strokeStyle = "#a33b2b";
       ctx.lineWidth = 1.4 / this.view.scale;
@@ -406,6 +541,39 @@ export class CurveEditor {
     ctx.lineTo(0, y1);
     ctx.stroke();
   }
+
+  _drawClosure(ctx, info, paper) {
+    const a = info.startPoint;
+    const b = info.endPoint;
+    if (!a || !b) return;
+
+    const tick = 14 / this.view.scale;
+    ctx.lineWidth = 1.3 / this.view.scale;
+    ctx.strokeStyle = "#2f7a4a";
+    headingTick(ctx, a, info.startHeading, tick);
+    ctx.strokeStyle = "#a33b2b";
+    headingTick(ctx, b, info.endHeading, tick);
+
+    if (info.g1) return;
+    ctx.save();
+    ctx.strokeStyle = info.g0 ? "rgba(122,158,150,0.85)" : "rgba(163,59,43,0.85)";
+    ctx.setLineDash([6 / this.view.scale, 5 / this.view.scale]);
+    ctx.lineWidth = 1.5 / this.view.scale;
+    ctx.beginPath();
+    ctx.moveTo(b[0], b[1]);
+    ctx.lineTo(a[0], a[1]);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function headingTick(ctx, p, heading, len) {
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  ctx.beginPath();
+  ctx.moveTo(p[0], p[1]);
+  ctx.lineTo(p[0] + c * len, p[1] + s * len);
+  ctx.stroke();
 }
 
 function normalizeOutline(o = {}) {

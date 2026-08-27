@@ -54,6 +54,14 @@ export default class CurveEditorWidget extends AnyuiWidget {
     this._editor?.fit();
   }
 
+  closePath(opts) {
+    return this._editor ? this._editor.closePath(opts) : null;
+  }
+
+  setTool(name) {
+    return this._editor ? this._editor.setTool(name) : name;
+  }
+
   setSelected(idx) {
     if (this._editor) this._editor.setSelected(idx);
     else {
