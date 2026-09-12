@@ -1,6 +1,6 @@
 # Cookie cutter designer — progress
 
-Handoff notes so we can pick up here. Last updated 2026-08-27.
+Handoff notes so we can pick up here. Last updated 2026-09-12.
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
@@ -56,7 +56,7 @@ Now: drag writes `animate: false` back to the model; `viewer.spin()` sends `{cmd
 - Select: drag a handle to edit that segment; empty drag pans; pinch zooms.
 - Add: drag empty space (or the hollow +) appends an arc from the current end.
 - Pan: drag never edits.
-- **Close** rewrites the last two arcs as a G1 biarc onto `startPoint` + `startAngle`. Already-closed paths are left alone. Canvas shows gap dashed line, heading ticks, and a `gap · Δθ` badge.
+- **Close** default (**Ends**) rewrites the first and last arcs as a G1 pair; the middle chain keeps its `(s, Δθ)`. Menu: Ends / Tail / Cap / Spread / Corner. Already-closed paths are left alone. Canvas shows gap dashed line, heading ticks, and a `gap · Δθ` badge.
 - Hollow **+** past the red end (or header **Insert**) still adds `[4, 0]` in Select.
 - **Delete** / Backspace = remove the highlighted row (or the last if none).
 - Table edits length/angle; 3D updates on change.

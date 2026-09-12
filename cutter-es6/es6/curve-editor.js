@@ -13,7 +13,7 @@
  */
 
 import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
-import { closePath, closureInfo } from "./close-path.js";
+import { closePath, closureInfo, CLOSE_MODES } from "./close-path.js";
 
 export const EDITOR_TOOLS = ["select", "add", "pan"];
 
@@ -38,6 +38,7 @@ export class CurveEditor {
     this._moved = false;
     this.tool = opts.tool || "select";
     this.onTool = opts.onTool || (() => {});
+    this.closeMode = CLOSE_MODES.includes(opts.closeMode) ? opts.closeMode : "ends";
 
     this._onPtrDown = this._onPtrDown.bind(this);
     this._onPtrMove = this._onPtrMove.bind(this);
@@ -77,8 +78,17 @@ export class CurveEditor {
     return this.tool;
   }
 
+  setCloseMode(mode) {
+    const next = CLOSE_MODES.includes(mode) ? mode : "ends";
+    this.closeMode = next;
+    const sel = this._tools?.querySelector("[data-close-mode]");
+    if (sel) sel.value = next;
+    return this.closeMode;
+  }
+
   closePath(opts = {}) {
-    const next = closePath(this.outline, { smooth: opts.smooth !== false, mode: opts.mode });
+    const mode = opts.mode || this.closeMode || "ends";
+    const next = closePath(this.outline, { smooth: opts.smooth !== false, mode });
     this.outline = next;
     const n = this.outline.turtlePath.length;
     this.editIdx = n ? n - 1 : -1;
@@ -203,6 +213,12 @@ export class CurveEditor {
           background: #7a9e96; color: #12110f; border-color: transparent;
         }
         .curve-tools button.action { font-weight: 700; }
+        .curve-tools select {
+          font: 600 12px/1.1 system-ui, sans-serif;
+          min-height: 36px; padding: 6px 8px; border-radius: 8px;
+          border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
+          background: #12110f; color: #ece7dc;
+        }
         .curve-close-status {
           position: absolute; left: 8px; top: 28px; z-index: 3;
           font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -220,15 +236,27 @@ export class CurveEditor {
       <button type="button" data-tool="select" title="Select and drag handles">Select</button>
       <button type="button" data-tool="add" title="Drag from the end to add an arc">Add</button>
       <button type="button" data-tool="pan" title="Drag to pan">Pan</button>
-      <button type="button" data-action="close" class="action" title="Adjust last two arcs so the path meets with matching heading">Close</button>
+      <select data-close-mode title="How Close rewrites the path">
+        <option value="ends">Ends</option>
+        <option value="last-two">Tail</option>
+        <option value="append">Cap</option>
+        <option value="spread">Spread</option>
+        <option value="corner">Corner</option>
+      </select>
+      <button type="button" data-action="close" class="action" title="Close the path with the selected method">Close</button>
     `;
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
     bar.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
       if (btn.dataset.tool) this.setTool(btn.dataset.tool);
-      if (btn.dataset.action === "close") this.closePath();
+      if (btn.dataset.action === "close") this.closePath({ mode: this.closeMode });
     });
+    const modeSel = bar.querySelector("[data-close-mode]");
+    if (modeSel) {
+      modeSel.value = this.closeMode;
+      modeSel.addEventListener("change", () => this.setCloseMode(modeSel.value));
+    }
     parent.appendChild(bar);
     this._tools = bar;
 

@@ -62,6 +62,10 @@ export default class CurveEditorWidget extends AnyuiWidget {
     return this._editor ? this._editor.setTool(name) : name;
   }
 
+  setCloseMode(mode) {
+    return this._editor ? this._editor.setCloseMode(mode) : mode;
+  }
+
   setSelected(idx) {
     if (this._editor) this._editor.setSelected(idx);
     else {
