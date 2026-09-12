@@ -66,6 +66,10 @@ export default class CurveEditorWidget extends AnyuiWidget {
     return this._editor ? this._editor.setCloseMode(mode) : mode;
   }
 
+  splitSegment(at) {
+    return this._editor ? this._editor.splitSegment(at) : -1;
+  }
+
   setSelected(idx) {
     if (this._editor) this._editor.setSelected(idx);
     else {

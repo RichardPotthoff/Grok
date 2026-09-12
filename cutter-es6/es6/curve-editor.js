@@ -14,8 +14,23 @@
 
 import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
 import { closePath, closureInfo, CLOSE_MODES } from "./close-path.js";
+import {
+  applyBiarc,
+  applyVertex,
+  recoverP,
+  splitSeg,
+  pairIdx,
+  quadIdx,
+  jointPose,
+  locusCircle,
+  projectToCircle,
+  xy,
+  arr,
+} from "./biarc.js";
 
-export const EDITOR_TOOLS = ["select", "add", "pan"];
+export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "through", "p", "locus", "vertex"];
+export const SPAN2 = new Set(["through", "p", "locus"]);
+export const SPAN4 = new Set(["vertex"]);
 
 const HIT_PX = 26;
 const ADD_PX = 22;
@@ -39,6 +54,9 @@ export class CurveEditor {
     this.tool = opts.tool || "select";
     this.onTool = opts.onTool || (() => {});
     this.closeMode = CLOSE_MODES.includes(opts.closeMode) ? opts.closeMode : "ends";
+    const n0 = this.outline.turtlePath.length;
+    this.joint = n0;
+    this.pVal = 1;
 
     this._onPtrDown = this._onPtrDown.bind(this);
     this._onPtrMove = this._onPtrMove.bind(this);
@@ -86,6 +104,19 @@ export class CurveEditor {
     return this.closeMode;
   }
 
+  splitSegment(at) {
+    const n = this.outline.turtlePath.length;
+    const i = at == null ? (this.editIdx >= 0 ? this.editIdx : n - 1) : at;
+    const next = splitSeg(this.outline, i);
+    this.outline = next;
+    this.editIdx = i;
+    this.joint = i + 1;
+    this.redraw();
+    this.onSelect(this.editIdx);
+    this.onChange(this.getOutline());
+    return this.editIdx;
+  }
+
   closePath(opts = {}) {
     const mode = opts.mode || this.closeMode || "ends";
     const next = closePath(this.outline, { smooth: opts.smooth !== false, mode });
@@ -113,8 +144,17 @@ export class CurveEditor {
   setSelected(idx) {
     const n = this.outline.turtlePath.length;
     this.editIdx = n === 0 ? -1 : Math.max(-1, Math.min(idx, n - 1));
+    if (this.editIdx >= 0) this.joint = this.editIdx + 1;
     this.redraw();
     this.onSelect(this.editIdx);
+  }
+
+  span() {
+    const n = this.outline.turtlePath.length;
+    if (n <= 0 || this.editIdx < 0) return [];
+    if (SPAN4.has(this.tool)) return quadIdx(this.joint, n) || [this.editIdx];
+    if (SPAN2.has(this.tool)) return pairIdx(this.joint, n) || [this.editIdx];
+    return [this.editIdx];
   }
 
   getSelected() {
@@ -195,17 +235,19 @@ export class CurveEditor {
       style.id = "curve-editor-tools-css";
       style.textContent = `
         .curve-tools {
-          position: absolute; left: 8px; bottom: 8px; z-index: 3;
-          display: flex; flex-wrap: wrap; gap: 4px;
-          padding: 4px; border-radius: 10px;
+          position: absolute; left: 6px; top: 28px; bottom: 8px; z-index: 3;
+          display: flex; flex-direction: column; gap: 3px;
+          width: 52px; padding: 4px; border-radius: 10px;
           background: color-mix(in oklab, #1c1b18 82%, transparent);
           border: 1px solid color-mix(in oklab, #ece7dc 16%, transparent);
-          backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px); overflow: auto;
         }
-        .curve-tools button {
-          font: 600 12px/1.1 system-ui, sans-serif;
-          min-height: 36px; min-width: 52px;
-          padding: 6px 10px; border-radius: 8px;
+        .curve-tools .grp { display: flex; flex-direction: column; gap: 3px; }
+        .curve-tools .gap { height: 6px; }
+        .curve-tools button, .curve-tools select, .curve-tools input {
+          font: 600 11px/1.1 system-ui, sans-serif;
+          min-height: 32px; width: 100%;
+          padding: 4px 2px; border-radius: 7px;
           border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
           background: #12110f; color: #ece7dc;
         }
@@ -213,14 +255,9 @@ export class CurveEditor {
           background: #7a9e96; color: #12110f; border-color: transparent;
         }
         .curve-tools button.action { font-weight: 700; }
-        .curve-tools select {
-          font: 600 12px/1.1 system-ui, sans-serif;
-          min-height: 36px; padding: 6px 8px; border-radius: 8px;
-          border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
-          background: #12110f; color: #ece7dc;
-        }
+        .curve-tools input { text-align: center; }
         .curve-close-status {
-          position: absolute; left: 8px; top: 28px; z-index: 3;
+          position: absolute; left: 64px; top: 28px; z-index: 3;
           font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
           color: #6b3b32; background: color-mix(in oklab, #f3ead8 80%, transparent);
           border-radius: 6px; padding: 3px 7px; pointer-events: none;
@@ -233,17 +270,33 @@ export class CurveEditor {
     const bar = document.createElement("div");
     bar.className = "curve-tools";
     bar.innerHTML = `
-      <button type="button" data-tool="select" title="Select and drag handles">Select</button>
-      <button type="button" data-tool="add" title="Drag from the end to add an arc">Add</button>
-      <button type="button" data-tool="pan" title="Drag to pan">Pan</button>
-      <select data-close-mode title="How Close rewrites the path">
-        <option value="ends">Ends</option>
-        <option value="last-two">Tail</option>
-        <option value="append">Cap</option>
-        <option value="spread">Spread</option>
-        <option value="corner">Corner</option>
-      </select>
-      <button type="button" data-action="close" class="action" title="Close the path with the selected method">Close</button>
+      <div class="grp">
+        <button type="button" data-tool="select" title="Select">Select</button>
+        <button type="button" data-tool="add" title="Add arc">Add</button>
+        <button type="button" data-tool="pan" title="Pan">Pan</button>
+      </div>
+      <div class="gap"></div>
+      <div class="grp">
+        <button type="button" data-tool="arc" title="Edit one arc">Arc</button>
+        <button type="button" data-tool="through" title="Biarc through a point">Thru</button>
+        <button type="button" data-tool="p" title="Biarc family p">p</button>
+        <input data-pval type="number" step="0.1" value="1" title="p" />
+        <button type="button" data-tool="locus" title="Drag junction on locus">Locus</button>
+        <button type="button" data-tool="vertex" title="Move joint and tangent">Vert</button>
+      </div>
+      <div class="gap"></div>
+      <div class="grp">
+        <select data-close-mode title="Close method">
+          <option value="ends">Ends</option>
+          <option value="last-two">Tail</option>
+          <option value="append">Cap</option>
+          <option value="spread">Sprd</option>
+          <option value="corner">Corn</option>
+        </select>
+        <button type="button" data-action="close" class="action" title="Close path">Close</button>
+        <button type="button" data-action="split" title="Split selected arc">Split</button>
+        <button type="button" data-action="del" title="Delete selected arc">Del</button>
+      </div>
     `;
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
     bar.addEventListener("click", (e) => {
@@ -251,11 +304,26 @@ export class CurveEditor {
       if (!btn) return;
       if (btn.dataset.tool) this.setTool(btn.dataset.tool);
       if (btn.dataset.action === "close") this.closePath({ mode: this.closeMode });
+      if (btn.dataset.action === "split") this.splitSegment();
+      if (btn.dataset.action === "del") this.deleteSegment();
     });
     const modeSel = bar.querySelector("[data-close-mode]");
     if (modeSel) {
       modeSel.value = this.closeMode;
       modeSel.addEventListener("change", () => this.setCloseMode(modeSel.value));
+    }
+    const pIn = bar.querySelector("[data-pval]");
+    if (pIn) {
+      pIn.addEventListener("change", () => {
+        const v = Number(pIn.value);
+        if (!Number.isFinite(v)) return;
+        this.pVal = v;
+        if (SPAN2.has(this.tool) || this.tool === "p") {
+          this.outline = applyBiarc(this.outline, this.joint, { p: v });
+          this.onChange(this.getOutline());
+          this.redraw();
+        }
+      });
     }
     parent.appendChild(bar);
     this._tools = bar;
@@ -355,7 +423,50 @@ export class CurveEditor {
     }
 
     this.editIdx = idx;
+    this.joint = hitV >= 0 ? hitV : idx + 1;
     const startState = stateBefore(this.outline, idx);
+
+    if (this.tool === "through") {
+      this._drag = { mode: "through", j: this.joint };
+      this.outline = applyBiarc(this.outline, this.joint, { P: xy(world) });
+      this.onSelect(idx);
+      this.redraw();
+      return;
+    }
+    if (this.tool === "locus") {
+      this._drag = { mode: "locus", j: this.joint, loc: locusCircle(this.outline, this.joint) };
+      this.onSelect(idx);
+      this.redraw();
+      return;
+    }
+    if (this.tool === "vertex") {
+      const jp = jointPose(this.outline, this.joint === n ? 0 : this.joint);
+      const tick = 22 / this.view.scale;
+      const tx = jp.point[0] + Math.cos(jp.heading) * tick;
+      const ty = jp.point[1] + Math.sin(jp.heading) * tick;
+      const hitT = Math.hypot(world[0] - tx, world[1] - ty) < tol * 1.2;
+      const q = quadIdx(this.joint, n);
+      this._pL = q ? recoverP(this.outline, q[1]) : 1;
+      this._pR = q ? recoverP(this.outline, q[3]) : 1;
+      this._drag = {
+        mode: hitT ? "tangent" : "vertex",
+        j: this.joint,
+        P: jp.point.slice(),
+        θ: jp.heading,
+      };
+      this.onSelect(idx);
+      this.redraw();
+      return;
+    }
+    if (this.tool === "p") {
+      this.pVal = recoverP(this.outline, this.joint);
+      const pIn = this._tools?.querySelector("[data-pval]");
+      if (pIn) pIn.value = String(roundN(this.pVal, 3));
+      this.onSelect(idx);
+      this.redraw();
+      return;
+    }
+
     this._drag = {
       mode: "edit",
       idx,
@@ -393,6 +504,32 @@ export class CurveEditor {
     }
 
     const world = this.worldFromEvent(e);
+    if (this._drag.mode === "through") {
+      this.outline = applyBiarc(this.outline, this._drag.j, { P: xy(world) });
+      this.redraw();
+      return;
+    }
+    if (this._drag.mode === "locus") {
+      const loc = this._drag.loc;
+      let P = xy(world);
+      if (loc?.c && Number.isFinite(loc.r)) P = projectToCircle(loc.c, loc.r, P);
+      this.outline = applyBiarc(this.outline, this._drag.j, { P });
+      this.redraw();
+      return;
+    }
+    if (this._drag.mode === "vertex") {
+      this._drag.P = world.slice();
+      this.outline = applyVertex(this.outline, this._drag.j, this._drag.P, this._drag.θ, this._pL, this._pR);
+      this.redraw();
+      return;
+    }
+    if (this._drag.mode === "tangent") {
+      const P = this._drag.P;
+      this._drag.θ = Math.atan2(world[1] - P[1], world[0] - P[0]);
+      this.outline = applyVertex(this.outline, this._drag.j, P, this._drag.θ, this._pL, this._pR);
+      this.redraw();
+      return;
+    }
     const { len, ang } = fitArc(this._drag.start, this._drag.heading, world);
     const idx = this._drag.idx;
     if (idx >= 0) {
@@ -404,7 +541,7 @@ export class CurveEditor {
   _onPtrUp(e) {
     this._pointers.delete(e.pointerId);
     if (this._pointers.size < 2) this._pinch = null;
-    if (this._drag?.mode === "edit") {
+    if (this._drag?.mode && this._drag.mode !== "pan") {
       const segs = this.outline.turtlePath;
       const idx = this._drag.idx;
       const last = segs[idx];
@@ -481,21 +618,22 @@ export class CurveEditor {
     for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].point[0], samples[i].point[1]);
     ctx.stroke();
 
-    if (this.editIdx >= 0) {
+    const span = new Set(this.span());
+    if (span.size) {
       ctx.strokeStyle = accent;
       ctx.lineWidth = 3.4 / this.view.scale;
       ctx.beginPath();
       let pen = false;
       let prev = samples[0].point;
       for (const s of samples) {
-        if (s.segmentIndex === this.editIdx) {
+        if (span.has(s.segmentIndex)) {
           if (!pen) {
             ctx.moveTo(prev[0], prev[1]);
             pen = true;
           }
           ctx.lineTo(s.point[0], s.point[1]);
-        } else if (pen) {
-          break;
+        } else {
+          pen = false;
         }
         prev = s.point;
       }
@@ -514,6 +652,7 @@ export class CurveEditor {
     const info = closureInfo(this.outline);
     this._syncStatus(info);
     this._drawClosure(ctx, info, paper);
+    this._drawToolHandles(ctx, paper, r);
 
     const end = vertices[vertices.length - 1];
     const tail = samples[samples.length - 1];
@@ -536,6 +675,51 @@ export class CurveEditor {
       ctx.lineTo(add[0] + r * 0.7, add[1]);
       ctx.moveTo(add[0], add[1] - r * 0.7);
       ctx.lineTo(add[0], add[1] + r * 0.7);
+      ctx.stroke();
+    }
+  }
+
+  _drawToolHandles(ctx, paper, r) {
+    const n = this.outline.turtlePath.length;
+    if (n < 2) return;
+    const j = this.joint;
+    const jp = jointPose(this.outline, j === n ? 0 : j);
+    const sc = this.view.scale;
+
+    if (this.tool === "locus" || this.tool === "through" || this.tool === "p") {
+      const loc = locusCircle(this.outline, j);
+      if (loc?.c && Number.isFinite(loc.r) && loc.r < 1e4) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(122,158,150,0.55)";
+        ctx.setLineDash([5 / sc, 4 / sc]);
+        ctx.lineWidth = 1.2 / sc;
+        ctx.beginPath();
+        ctx.arc(loc.c.x, loc.c.y, loc.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      const Pm = this.outline._biarc?.Pm || jp.point;
+      ctx.fillStyle = "#6b3b9a";
+      disc(ctx, Pm[0], Pm[1], r * 1.3);
+    }
+
+    if (this.tool === "vertex") {
+      ctx.fillStyle = "#6b3b9a";
+      disc(ctx, jp.point[0], jp.point[1], r * 1.35);
+      const tick = 22 / sc;
+      const tx = jp.point[0] + Math.cos(jp.heading) * tick;
+      const ty = jp.point[1] + Math.sin(jp.heading) * tick;
+      ctx.strokeStyle = "#6b3b9a";
+      ctx.lineWidth = 1.6 / sc;
+      ctx.beginPath();
+      ctx.moveTo(jp.point[0], jp.point[1]);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.fillStyle = paper;
+      disc(ctx, tx, ty, r * 0.95);
+      ctx.strokeStyle = "#6b3b9a";
+      ctx.beginPath();
+      ctx.arc(tx, ty, r * 0.95, 0, Math.PI * 2);
       ctx.stroke();
     }
   }

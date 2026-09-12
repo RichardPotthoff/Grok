@@ -52,7 +52,7 @@ Now: drag writes `animate: false` back to the model; `viewer.spin()` sends `{cmd
 ## Editor behavior (current)
 
 - Duck loads with the **last** segment selected.
-- Tool strip on the path canvas: **Select / Add / Pan / Close**.
+- Left rail on the path canvas: **Select / Add / Pan · Arc / Thru / p / Locus / Vert · Close / Split / Del**.
 - Select: drag a handle to edit that segment; empty drag pans; pinch zooms.
 - Add: drag empty space (or the hollow +) appends an arc from the current end.
 - Pan: drag never edits.

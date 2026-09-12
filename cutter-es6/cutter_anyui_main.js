@@ -74,7 +74,7 @@ const compare = new Html({
 });
 
 const hint = new Html({
-  value: `<p class="hint">Path tools: Select / Add / Pan / Close. Ends rewrites first and last arcs only. standalone.html is the reference.</p>`,
+  value: `<p class="hint">Left rail: Select Add Pan · Arc Thru p Locus Vert. standalone.html is the reference.</p>`,
 });
 
 const toolbar = new HBox({

@@ -67,3 +67,6 @@ class CurveEditorWidget(anywidget.AnyWidget):
     def close_path(self, *, smooth: bool = True, mode: str = "ends") -> None:
         """Close the path. mode: ends | last-two | append | spread | corner."""
         self.send({"cmd": "close", "smooth": smooth, "mode": mode})
+
+    def split_segment(self) -> None:
+        self.send({"cmd": "split"})
