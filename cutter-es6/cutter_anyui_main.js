@@ -71,7 +71,7 @@ const compare = new Html({
 });
 
 const hint = new Html({
-  value: `<p class="hint">Sidebar: Pan Fit · Select Add Arc p Locus Vert. Select picks; edit tools drag. standalone.html is the reference.</p>`,
+  value: `<p class="hint">Sidebar: Pan Fit · Select Add Arc p Locus Move Tan. Select picks; Move / Tan lock the joint. standalone.html is the reference.</p>`,
 });
 
 const toolbar = new HBox({

@@ -28,9 +28,11 @@ import {
   arr,
 } from "./biarc.js";
 
-export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "p", "locus", "vertex"];
+export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "p", "locus", "move", "tan"];
+export const TOOL_ALIAS = { vertex: "move" };
 export const SPAN2 = new Set(["p", "locus"]);
-export const SPAN4 = new Set(["vertex"]);
+export const SPAN4 = new Set(["move", "tan"]);
+export const JOINT_LOCK = new Set(["p", "locus", "move", "tan"]);
 
 const HIT_PX = 26;
 const ADD_PX = 22;
@@ -85,7 +87,8 @@ export class CurveEditor {
   }
 
   setTool(name) {
-    const tool = EDITOR_TOOLS.includes(name) ? name : "select";
+    const raw = TOOL_ALIAS[name] || name;
+    const tool = EDITOR_TOOLS.includes(raw) ? raw : "select";
     if (this.tool === tool) {
       this._syncToolButtons();
       return this.tool;
@@ -298,7 +301,8 @@ export class CurveEditor {
         <button type="button" data-tool="p" title="Biarc family p">p</button>
         <input data-pval type="number" step="0.1" value="1" title="p" />
         <button type="button" data-tool="locus" title="Drag junction on locus">Locus</button>
-        <button type="button" data-tool="vertex" title="Move joint and tangent">Vert</button>
+        <button type="button" data-tool="move" title="Move joint, keep heading">Move</button>
+        <button type="button" data-tool="tan" title="Rotate heading, keep joint">Tan</button>
       </div>
       <div class="gap"></div>
       <div class="grp">
@@ -426,16 +430,15 @@ export class CurveEditor {
 
     let idx = this.editIdx;
     let append = false;
+    const lockJoint = JOINT_LOCK.has(this.tool);
 
     if (this.tool === "add" && (hitAdd || hitV < 0)) {
       this.outline.turtlePath.push([0, 0]);
       idx = this.outline.turtlePath.length - 1;
       append = true;
-    } else if (hitV > 0) {
-      idx = hitV - 1;
-    } else if (hitV === 0 && n > 0) {
-      idx = 0;
-    } else {
+    } else if (hitV >= 0) {
+      idx = hitV === 0 ? 0 : hitV - 1;
+    } else if (!lockJoint) {
       const hitSeg = hitSegment(samples, world, tol * 1.4);
       if (hitSeg >= 0) {
         idx = hitSeg;
@@ -443,11 +446,19 @@ export class CurveEditor {
         this._drag = { mode: "pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
         return;
       }
+    } else {
+      const hitSeg = hitSegment(samples, world, tol * 1.4);
+      if (hitSeg < 0) {
+        this._drag = { mode: "pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
+        return;
+      }
     }
 
-    this.editIdx = idx;
-    this.joint = hitV >= 0 ? hitV : idx + 1;
-    this.onSelect(idx);
+    if (!lockJoint || hitV >= 0 || append) {
+      this.editIdx = idx;
+      this.joint = hitV >= 0 ? hitV : idx + 1;
+      this.onSelect(idx);
+    }
 
     if (this.tool === "select") {
       this._drag = { mode: "maybe-pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
@@ -497,19 +508,19 @@ export class CurveEditor {
       this.redraw();
       return;
     }
-    if (this.tool === "vertex") {
+    if (SPAN4.has(this.tool)) {
       const jp = jointPose(this.outline, this.joint === n ? 0 : this.joint);
       const tick = STEM_PX / this.view.scale;
       const tx = jp.point[0] + Math.cos(jp.heading) * tick;
       const ty = jp.point[1] + Math.sin(jp.heading) * tick;
-      const hitT = Math.hypot(world[0] - tx, world[1] - ty) < tol * 1.3;
+      const tangent = this.tool === "tan";
       const q = quadIdx(this.joint, n);
       this._pL = q ? recoverP(this.outline, q[1]) : 1;
       this._pR = q ? recoverP(this.outline, q[3]) : 1;
-      const hx = hitT ? tx : jp.point[0];
-      const hy = hitT ? ty : jp.point[1];
+      const hx = tangent ? tx : jp.point[0];
+      const hy = tangent ? ty : jp.point[1];
       this._drag = {
-        mode: hitT ? "tangent" : "vertex",
+        mode: tangent ? "tangent" : "vertex",
         j: this.joint,
         P: jp.point.slice(),
         θ: jp.heading,
@@ -787,24 +798,27 @@ export class CurveEditor {
       }
     }
 
-    if (this.tool === "vertex") {
+    if (SPAN4.has(this.tool)) {
+      const tan = this.tool === "tan";
       ctx.fillStyle = "#6b3b9a";
-      disc(ctx, jp.point[0], jp.point[1], r * 1.35);
+      disc(ctx, jp.point[0], jp.point[1], r * (tan ? 1.1 : 1.35));
       const tick = STEM_PX / sc;
       const tx = jp.point[0] + Math.cos(jp.heading) * tick;
       const ty = jp.point[1] + Math.sin(jp.heading) * tick;
-      ctx.strokeStyle = "#6b3b9a";
-      ctx.lineWidth = 1.6 / sc;
+      ctx.strokeStyle = tan ? "#6b3b9a" : "rgba(107,59,154,0.45)";
+      ctx.lineWidth = (tan ? 1.6 : 1.1) / sc;
       ctx.beginPath();
       ctx.moveTo(jp.point[0], jp.point[1]);
       ctx.lineTo(tx, ty);
       ctx.stroke();
-      ctx.fillStyle = paper;
-      disc(ctx, tx, ty, r * 0.95);
-      ctx.strokeStyle = "#6b3b9a";
-      ctx.beginPath();
-      ctx.arc(tx, ty, r * 0.95, 0, Math.PI * 2);
-      ctx.stroke();
+      if (tan) {
+        ctx.fillStyle = paper;
+        disc(ctx, tx, ty, r * 0.95);
+        ctx.strokeStyle = "#6b3b9a";
+        ctx.beginPath();
+        ctx.arc(tx, ty, r * 0.95, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
 

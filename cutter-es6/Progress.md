@@ -1,89 +1,80 @@
 # Cookie cutter designer — progress
 
-Handoff notes so we can pick up here. Last updated 2026-09-12.
+Handoff for the next chat. Last updated 2026-09-13 (Move / Tan split).
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
-**Source of truth:** this folder (`cutter-es6/`), also `RichardPotthoff/Grok` on `main`. Not the Node/TanStack host.
+**Source of truth:** this folder (`cutter-es6/`), also `RichardPotthoff/Grok` on `main`. Test in modular `standalone.html`. IIFE `index*.html` is stale until regenerated.
 
-## What works now (tested)
+## What we achieved
 
-| Surface | Status |
-| --- | --- |
-| `standalone.html` | Reference app. Unchanged by the notebook work. |
-| `cutter_anyui.html` + `cutter_anyui_main.js` | Same editor, anyui chrome. |
-| `index.html` / `index_anyui.html` | IIFE deployables (Safari / Pages). |
-| `cutter_anyui.ipynb` on Carnets Plus | Working twin. Duck, Insert/Delete, Export, Fit, 3D follows path, **Spin restarts after a drag**. |
-| Pages modules | `https://richardpotthoff.github.io/Grok/cutter-es6/es6/*.js` serve as `application/javascript` with CORS `*`. Carnets `import()` keys: `default,render`. |
+### Close
 
-Carnets workflow: **reload from disk** after pulling the `.ipynb`; **restart kernel** after changing `cutter_widgets/*.py`. Pages `_esm` is cached ~10 min after a push.
+- `es6/close-path.js`: G1 close as a **menu**, not one button.
+- Default **Ends**: rewrite first + last arcs; middle `(s, Δθ)` unchanged. Same geometry as a wrap-around biarc.
+- Also: **Tail** (last two), **Cap** (append two), **Spread** (`snapTurtle`), **Corner** (G0 last arc).
 
-## Layout (do not merge these layers)
+### Biarc math
+
+- `es6/biarc.js` from `myrepo/BiArc.ipynb` (`compute_biarc`, `arc_from_chord`).
+- Family parameter `p` (Kurnosenko) or through-point `P`. Default new pairs: `p = 1`. Vertex keeps each pair’s `p` while the shared pose moves.
+- Tools are on-the-fly only. Commit is still `[s, Δθ]` + start pose. No extra path fields.
+- Wrap-around (last + first) rewrites `startPoint` / `startAngle`.
+- `p ≈ 0` and `p ≈ -1` are poles; editor nudges off them.
+- `P` in the notebook **is** a point on one of the two arcs. **Thru is still deferred.**
+
+### Editor chrome
+
+Sidebar **beside** the canvas (not an overlay):
+
+| View | Edit | Act | Header |
+| --- | --- | --- | --- |
+| Pan, Fit | Select, Add, Arc, p, Locus, Move, Tan | Close, Split, Ins, Del | Shape, Scale, Export, Kit |
+
+- **Select** picks only. Empty drag pans after slop.
+- **Add** is the only tool that shows the hollow `+` / appends.
+- **Arc / Locus / Move / Tan** edit after ~10 px slop, with grab offset so the handle sits beside the finger.
+- iOS: `user-select` / callout off, `maximum-scale=1`, canvas `touchstart` / `gesturestart` `preventDefault`.
+- Highlight: Arc = 1 segment, p / Locus = 2, Move / Tan = 4.
+- Split halves the selected arc (`s/2`, `Δθ/2`).
+- `setTool("vertex")` still aliases to **Move**.
+
+### Move + Tan (this thread)
+
+- One Vert handle was doing two jobs; the stroke was a bigger hit target than the joint, so a tap retargeted the four-arc span.
+- **Move** (`P`, keep `θ`) and **Tan** (heading, keep `P`) call the same `applyVertex`. Different handle only.
+- **JOINT_LOCK** (`p`, `locus`, `move`, `tan`): a stroke tap does **not** change `joint`. A vertex hit still retargets. Empty space pans.
+- Move draws a solid joint disc + faint heading tick (tick is not a grab). Tan draws the stem + hollow tick as the grab.
+
+### Packaging (leave alone)
+
+HTML apps, IIFE script, Carnets + Pages `_esm`, `cutter_widgets/`, Spin after drag — still as of 2026-08-26. Local `/files/` is a dead end. Do not merge `anyui/` into `es6/`.
+
+## Open interaction issues
+
+1. ~~Vert combines move and tangent.~~ Split into Move + Tan.
+2. ~~Stroke tap steals the joint in those tools.~~ JOINT_LOCK.
+3. **Thru** not in the rail. Next: bead *on* the pair; `compute_biarc(..., P=bead)` so the ink goes through the bead.
+4. Single-arc **Len vs Turn** lock still not built. Arc is still 2-DOF `fitArc` to the offset point.
+5. Insert still plants `[4, 0]`.
+6. IIFE not regenerated after these edits.
+
+## Next conversation — pick one
+
+1. **Thru bead** on the two-arc span (`P` = point on an arc, as in the notebook).
+2. **Arc Len / Turn** as separate tools (or radial vs tangential on the stem).
+3. Only then: regenerate IIFE, push anyui fixes back, Marimo on the Pi.
+
+Keep `standalone.html` as the reference.
+
+## Layout (do not merge)
 
 | Folder | Owns |
 | --- | --- |
-| `anyui/` | Copied general UI widgets (Box, HBox, VBox, Button, Dropdown, …). |
-| `es6/` | Turtle math, `CurveEditor`, `WebGLCutter`, `*-widget.js` (anywidget render), `*-cls.js` (anyui class). |
-| `cutter_widgets/` | Python twins of `es6/*-cls.js`. `_esm` → Pages widget URLs. |
+| `anyui/` | Copied general UI widgets |
+| `es6/` | Turtle math, `CurveEditor`, `WebGLCutter`, widgets |
+| `cutter_widgets/` | Python twins; `_esm` → Pages |
 
-Do **not** put layout chrome in `es6/` or turtle math in `anyui/`.
+Math files: `es6/close-path.js`, `es6/biarc.js`, `es6/path-utils.js`. UI: `es6/curve-editor.js`.
 
-## Notebook `_esm` lesson (keep this)
-
-anywidget `Path` / source string becomes a **blob URL**. Relative `import "./curve-editor.js"` does not resolve from a blob.
-
-Carnets `/files/` and `/api/contents/` see a **different root** from the kernel `cwd`. Local `http://localhost:8888/files/es6/…` is 404 even when Python can read the file. Do not chase that.
-
-Working pattern (same idea as anyui `box.py` + `static/box.js`):
-
-```text
-cutter_widgets/curve_editor.py   _esm = Pages …/curve-editor-widget.js
-es6/curve-editor-cls.js          import _esm from "./curve-editor-widget.js"
-```
-
-IIFE bundle remains the **offline / deploy** path, not the notebook default.
-
-## Spin (fixed 2026-08-26)
-
-Drag called `WebGLCutter.setAnimate(false)` without updating the widget `animate` trait. Setting `animate = True` again was a no-op.
-
-Now: drag writes `animate: false` back to the model; `viewer.spin()` sends `{cmd: "spin"}`; `setAnimate(true)` always starts a fresh RAF loop. HTML `WebGLCutterWidget.setAnimate` also forwards to `_view`.
-
-## Editor behavior (current)
-
-- Duck loads with the **last** segment selected.
-- Left rail on the path canvas: **Select / Add / Pan · Arc / Thru / p / Locus / Vert · Close / Split / Del**.
-- Select: drag a handle to edit that segment; empty drag pans; pinch zooms.
-- Add: drag empty space (or the hollow +) appends an arc from the current end.
-- Pan: drag never edits.
-- **Close** default (**Ends**) rewrites the first and last arcs as a G1 pair; the middle chain keeps its `(s, Δθ)`. Menu: Ends / Tail / Cap / Spread / Corner. Already-closed paths are left alone. Canvas shows gap dashed line, heading ticks, and a `gap · Δθ` badge.
-- Hollow **+** past the red end (or header **Insert**) still adds `[4, 0]` in Select.
-- **Delete** / Backspace = remove the highlighted row (or the last if none).
-- Table edits length/angle; 3D updates on change.
-- **Export JSON** = outline object.
-- Fit = `{cmd: "fit"}` to the canvas (view only).
-- Notebook: `editor.close_path()` sends `{cmd: "close"}`. Insert/Delete still mutate Python `turtlePath` (do not also send insert/delete messages).
-
-## Known nits
-
-- Insert still drops in a dummy `[4, 0]` straight segment.
-- Hitting the path body selects; it does not split a segment.
-- Start-handle move of `startPoint` / `startAngle` not exposed.
-- Append-two close is weak when the end heading already matches and the start is directly behind the turtle (adjust-two is the product path and works).
-- Notebook `_esm` needs network + a published Pages tree (not the file you are mid-edit).
-- IIFE HTML should be regenerated after `es6/` edits if you care about `index*.html` on Pages.
-
-## Sensible next steps
-
-Pick **one** thread per conversation. Suggested order for the drawing app (not packaging):
-
-1. **Start-point / first-tangent handle.** Move `startPoint` and `startAngle` without inventing extra primitives. Green start dot is visible; it does not drag yet.
-2. **Split-on-path and smarter Insert.** Tap the stroke to split an arc; stop inserting dummy `[4, 0]` as the only add gesture.
-3. **Offset that stays exact-arc.** Parallel curve as another `turtlePath`. Needed later for cutter wall / blade; keep it geometric, not mesh.
-4. **Regenerate IIFE** (`es6_to_iife_anyui.py`) so Pages `index_anyui.html` matches Close + tool strip.
-5. **Copy anyui fixes back** to `RichardPotthoff/anyui` (Button click, Box fill, Dropdown cleanup, `loadCSS` href). Separate repo, separate conversation.
-6. **Marimo twin** on the Pi, only after the editor feels like a drawing tool in HTML + Carnets.
-
-Leave alone unless asked: Node/TanStack host, merging `anyui/` into `es6/`, Pythonista static server, bundling `_esm` in the notebook.
-
-When you come back: this folder is source. Keep `standalone.html` as the reference until the anyui chrome is clearly better. Interaction and exact-arc operations first; packaging is done enough.
+Design notes in `artifacts/00-Overview.md` … `06-Open-Questions.md` (esp. `03-Interaction-Ideas.md`).
