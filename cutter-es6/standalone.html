@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -25,7 +25,9 @@
         --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font);
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+      input, textarea, select { -webkit-user-select: text; user-select: text; }
       button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
       button:disabled { opacity: 0.4; cursor: default; }
       #app {
@@ -56,6 +58,7 @@
       .panel { position: relative; min-height: 220px; }
       .panel + .panel { border-left: 1px solid var(--border); }
       canvas { width: 100%; height: 100%; display: block; }
+      .stage > .panel:first-child .label { left: 64px; }
       .label {
         position: absolute; top: 10px; left: 10px; z-index: 2;
         font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -91,13 +94,10 @@
         <label>Scale
           <input id="scale" type="number" min="1" max="40" step="0.5" value="11" />
         </label>
-        <button id="fit" type="button">Fit</button>
-        <button id="insert" type="button">Insert</button>
-        <button id="del" type="button">Delete</button>
         <button id="exportJson" type="button" class="primary">Export JSON</button>
         <button id="kit" type="button">Download kit</button>
         <span id="sw-status"></span>
-        <p class="hint">Left rail: Select Add Pan · Arc Thru p Locus Vert · Close Split Del. Thru / p / Locus edit two arcs; Vert edits four.</p>
+        <p class="hint">Sidebar: Pan Fit · Select Add Arc p Locus Vert · Close Split Ins Del. Select picks; Arc / Locus / Vert edit after a short drag.</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -126,7 +126,6 @@
 
       const shapeSel = document.getElementById("shape");
       const scaleIn = document.getElementById("scale");
-      const delBtn = document.getElementById("del");
       const rows = document.getElementById("rows");
       for (const name of OUTLINE_NAMES.filter((n) => n !== "Blade")) {
         const opt = document.createElement("option");
@@ -172,7 +171,6 @@
 
       function renderTable() {
         const selected = editor.getSelected();
-        delBtn.disabled = outline.turtlePath.length === 0;
         rows.innerHTML = "";
         outline.turtlePath.forEach(([len, ang], i) => {
           const tr = document.createElement("tr");
@@ -207,9 +205,6 @@
       scaleIn.addEventListener("change", () => {
         preview.setOutline(outline, { scale: Number(scaleIn.value) });
       });
-      document.getElementById("fit").onclick = () => editor.fit();
-      document.getElementById("insert").onclick = () => editor.insertSegment();
-      delBtn.onclick = () => editor.deleteSegment();
       document.getElementById("exportJson").onclick = () => {
         const blob = new Blob([serializeOutline(outline)], { type: "application/json" });
         const a = document.createElement("a");

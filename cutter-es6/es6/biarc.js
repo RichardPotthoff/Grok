@@ -86,6 +86,8 @@ export function computeBiarc(P0, T0, P1, T1, { p = null, P = null } = {}) {
     }
   }
   if (!Number.isFinite(p̂)) p̂ = 1e6;
+  if (Math.abs(p̂) < 1e-4) p̂ = p̂ < 0 ? -1e-4 : 1e-4;
+  if (Math.abs(p̂ + 1) < 1e-4) p̂ = p̂ < -1 ? -1.0001 : -0.9999;
   const xj = C((p̂ - 1) / (p̂ + 1));
   const Pm = mti(xj, a, b, c, d);
   let Tm = mul(conj(phj), dmti(xj, a, b, c, d));

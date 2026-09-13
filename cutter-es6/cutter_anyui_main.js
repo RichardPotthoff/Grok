@@ -62,9 +62,6 @@ const scale = new FloatText({
   layout: { flex: "0 0 auto", alignItems: "center", width: "9rem" },
 });
 
-const btnFit = new Button({ description: "Fit" });
-const btnInsert = new Button({ description: "Insert" });
-const btnDelete = new Button({ description: "Delete" });
 const btnExport = new Button({ description: "Export JSON", button_style: "primary" });
 const btnKit = new Button({ description: "Download kit" });
 const btnSpin = new Button({ description: "Spin" });
@@ -74,13 +71,13 @@ const compare = new Html({
 });
 
 const hint = new Html({
-  value: `<p class="hint">Left rail: Select Add Pan · Arc Thru p Locus Vert. standalone.html is the reference.</p>`,
+  value: `<p class="hint">Sidebar: Pan Fit · Select Add Arc p Locus Vert. Select picks; edit tools drag. standalone.html is the reference.</p>`,
 });
 
 const toolbar = new HBox({
   wrap: true,
   gap: "8px",
-  children: [title, shape, scale, btnFit, btnInsert, btnDelete, btnExport, btnKit, compare, hint],
+  children: [title, shape, scale, btnExport, btnKit, compare, hint],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -193,8 +190,6 @@ function pushFromEditor() {
   table.set("turtlePath", outline.turtlePath);
   table.set("selected_index", editor.getSelected());
   table.save_changes();
-  btnDelete.set("disabled", !outline.turtlePath.length);
-  btnDelete.save_changes();
 }
 
 function loadShape(name) {
@@ -242,9 +237,6 @@ scale.on("change:value", (value) => {
   viewer.setOutline(currentOutline(), { scale: Number(value) || 11 });
 });
 
-btnFit.onClick(() => editor.fit());
-btnInsert.onClick(() => editor.insertSegment());
-btnDelete.onClick(() => editor.deleteSegment());
 btnSpin.onClick(() => viewer.setAnimate(true));
 
 btnExport.onClick(async () => {

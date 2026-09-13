@@ -28,12 +28,14 @@ import {
   arr,
 } from "./biarc.js";
 
-export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "through", "p", "locus", "vertex"];
-export const SPAN2 = new Set(["through", "p", "locus"]);
+export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "p", "locus", "vertex"];
+export const SPAN2 = new Set(["p", "locus"]);
 export const SPAN4 = new Set(["vertex"]);
 
 const HIT_PX = 26;
 const ADD_PX = 22;
+const SLOP_PX = 10;
+const STEM_PX = 24;
 
 export class CurveEditor {
   constructor(canvas, opts = {}) {
@@ -64,6 +66,9 @@ export class CurveEditor {
     this._onWheel = this._onWheel.bind(this);
 
     canvas.style.touchAction = "none";
+    this._onTouchGuard = (ev) => ev.preventDefault();
+    canvas.addEventListener("touchstart", this._onTouchGuard, { passive: false });
+    canvas.addEventListener("gesturestart", this._onTouchGuard, { passive: false });
     canvas.addEventListener("pointerdown", this._onPtrDown);
     canvas.addEventListener("pointermove", this._onPtrMove);
     canvas.addEventListener("pointerup", this._onPtrUp);
@@ -219,8 +224,14 @@ export class CurveEditor {
     c.removeEventListener("pointerup", this._onPtrUp);
     c.removeEventListener("pointercancel", this._onPtrUp);
     c.removeEventListener("wheel", this._onWheel);
+    c.removeEventListener("touchstart", this._onTouchGuard);
+    c.removeEventListener("gesturestart", this._onTouchGuard);
     this._ro?.disconnect();
     if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._shell?.parentElement) {
+      this._shell.parentElement.insertBefore(c, this._shell);
+      this._shell.remove();
+    }
     this._tools?.remove();
     this._status?.remove();
   }
@@ -234,16 +245,21 @@ export class CurveEditor {
       const style = document.createElement("style");
       style.id = "curve-editor-tools-css";
       style.textContent = `
-        .curve-tools {
-          position: absolute; left: 6px; top: 28px; bottom: 8px; z-index: 3;
-          display: flex; flex-direction: column; gap: 3px;
-          width: 52px; padding: 4px; border-radius: 10px;
-          background: color-mix(in oklab, #1c1b18 82%, transparent);
-          border: 1px solid color-mix(in oklab, #ece7dc 16%, transparent);
-          backdrop-filter: blur(8px); overflow: auto;
+        .curve-shell {
+          display: flex; flex-direction: row; align-items: stretch;
+          width: 100%; height: 100%; min-height: 0;
         }
+        .curve-tools {
+          flex: 0 0 56px; display: flex; flex-direction: column; gap: 3px;
+          padding: 6px 4px; overflow: auto;
+          background: #1c1b18;
+          border-right: 1px solid color-mix(in oklab, #ece7dc 16%, transparent);
+          -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+        }
+        .curve-stage { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; }
+        .curve-stage canvas { width: 100%; height: 100%; display: block; }
         .curve-tools .grp { display: flex; flex-direction: column; gap: 3px; }
-        .curve-tools .gap { height: 6px; }
+        .curve-tools .gap { height: 8px; }
         .curve-tools button, .curve-tools select, .curve-tools input {
           font: 600 11px/1.1 system-ui, sans-serif;
           min-height: 32px; width: 100%;
@@ -257,7 +273,7 @@ export class CurveEditor {
         .curve-tools button.action { font-weight: 700; }
         .curve-tools input { text-align: center; }
         .curve-close-status {
-          position: absolute; left: 64px; top: 28px; z-index: 3;
+          position: absolute; left: 8px; top: 8px; z-index: 3;
           font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
           color: #6b3b32; background: color-mix(in oklab, #f3ead8 80%, transparent);
           border-radius: 6px; padding: 3px 7px; pointer-events: none;
@@ -271,14 +287,14 @@ export class CurveEditor {
     bar.className = "curve-tools";
     bar.innerHTML = `
       <div class="grp">
-        <button type="button" data-tool="select" title="Select">Select</button>
-        <button type="button" data-tool="add" title="Add arc">Add</button>
-        <button type="button" data-tool="pan" title="Pan">Pan</button>
+        <button type="button" data-tool="pan" title="Pan view">Pan</button>
+        <button type="button" data-action="fit" title="Fit path in view">Fit</button>
       </div>
       <div class="gap"></div>
       <div class="grp">
+        <button type="button" data-tool="select" title="Select only">Select</button>
+        <button type="button" data-tool="add" title="Add arc">Add</button>
         <button type="button" data-tool="arc" title="Edit one arc">Arc</button>
-        <button type="button" data-tool="through" title="Biarc through a point">Thru</button>
         <button type="button" data-tool="p" title="Biarc family p">p</button>
         <input data-pval type="number" step="0.1" value="1" title="p" />
         <button type="button" data-tool="locus" title="Drag junction on locus">Locus</button>
@@ -295,6 +311,7 @@ export class CurveEditor {
         </select>
         <button type="button" data-action="close" class="action" title="Close path">Close</button>
         <button type="button" data-action="split" title="Split selected arc">Split</button>
+        <button type="button" data-action="insert" title="Insert dummy arc">Ins</button>
         <button type="button" data-action="del" title="Delete selected arc">Del</button>
       </div>
     `;
@@ -305,7 +322,9 @@ export class CurveEditor {
       if (btn.dataset.tool) this.setTool(btn.dataset.tool);
       if (btn.dataset.action === "close") this.closePath({ mode: this.closeMode });
       if (btn.dataset.action === "split") this.splitSegment();
+      if (btn.dataset.action === "insert") this.insertSegment();
       if (btn.dataset.action === "del") this.deleteSegment();
+      if (btn.dataset.action === "fit") this.fit();
     });
     const modeSel = bar.querySelector("[data-close-mode]");
     if (modeSel) {
@@ -325,12 +344,20 @@ export class CurveEditor {
         }
       });
     }
-    parent.appendChild(bar);
+    const shell = document.createElement("div");
+    shell.className = "curve-shell";
+    const stage = document.createElement("div");
+    stage.className = "curve-stage";
+    parent.insertBefore(shell, this.canvas);
+    shell.appendChild(bar);
+    shell.appendChild(stage);
+    stage.appendChild(this.canvas);
+    this._shell = shell;
     this._tools = bar;
 
     const status = document.createElement("div");
     status.className = "curve-close-status";
-    parent.appendChild(status);
+    stage.appendChild(status);
     this._status = status;
     this._syncToolButtons();
   }
@@ -393,18 +420,14 @@ export class CurveEditor {
     const vertices = vertexList(samples, this.outline);
     const tol = HIT_PX / this.view.scale;
     const addPt = addHandlePoint(samples, ADD_PX / this.view.scale);
-    const hitAdd = addPt && Math.hypot(addPt[0] - world[0], addPt[1] - world[1]) < tol;
+    const hitAdd = this.tool === "add" && addPt && Math.hypot(addPt[0] - world[0], addPt[1] - world[1]) < tol;
     const hitV = hitVertex(vertices, world, tol);
     const n = this.outline.turtlePath.length;
 
     let idx = this.editIdx;
     let append = false;
 
-    if (this.tool === "add" && !hitV && !hitAdd) {
-      this.outline.turtlePath.push([0, 0]);
-      idx = this.outline.turtlePath.length - 1;
-      append = true;
-    } else if (hitAdd) {
+    if (this.tool === "add" && (hitAdd || hitV < 0)) {
       this.outline.turtlePath.push([0, 0]);
       idx = this.outline.turtlePath.length - 1;
       append = true;
@@ -424,37 +447,10 @@ export class CurveEditor {
 
     this.editIdx = idx;
     this.joint = hitV >= 0 ? hitV : idx + 1;
-    const startState = stateBefore(this.outline, idx);
+    this.onSelect(idx);
 
-    if (this.tool === "through") {
-      this._drag = { mode: "through", j: this.joint };
-      this.outline = applyBiarc(this.outline, this.joint, { P: xy(world) });
-      this.onSelect(idx);
-      this.redraw();
-      return;
-    }
-    if (this.tool === "locus") {
-      this._drag = { mode: "locus", j: this.joint, loc: locusCircle(this.outline, this.joint) };
-      this.onSelect(idx);
-      this.redraw();
-      return;
-    }
-    if (this.tool === "vertex") {
-      const jp = jointPose(this.outline, this.joint === n ? 0 : this.joint);
-      const tick = 22 / this.view.scale;
-      const tx = jp.point[0] + Math.cos(jp.heading) * tick;
-      const ty = jp.point[1] + Math.sin(jp.heading) * tick;
-      const hitT = Math.hypot(world[0] - tx, world[1] - ty) < tol * 1.2;
-      const q = quadIdx(this.joint, n);
-      this._pL = q ? recoverP(this.outline, q[1]) : 1;
-      this._pR = q ? recoverP(this.outline, q[3]) : 1;
-      this._drag = {
-        mode: hitT ? "tangent" : "vertex",
-        j: this.joint,
-        P: jp.point.slice(),
-        θ: jp.heading,
-      };
-      this.onSelect(idx);
+    if (this.tool === "select") {
+      this._drag = { mode: "maybe-pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
       this.redraw();
       return;
     }
@@ -462,19 +458,72 @@ export class CurveEditor {
       this.pVal = recoverP(this.outline, this.joint);
       const pIn = this._tools?.querySelector("[data-pval]");
       if (pIn) pIn.value = String(roundN(this.pVal, 3));
-      this.onSelect(idx);
+      this._drag = { mode: "maybe-pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
       this.redraw();
       return;
     }
 
-    this._drag = {
-      mode: "edit",
-      idx,
-      append,
-      start: startState.point,
-      heading: startState.heading,
-    };
-    this.onSelect(idx);
+    const startState = stateBefore(this.outline, idx);
+    const endPt = vertices[idx + 1] || vertices[vertices.length - 1];
+    if (this.tool === "arc" || this.tool === "add") {
+      this._drag = {
+        mode: "edit",
+        idx,
+        append,
+        start: startState.point,
+        heading: startState.heading,
+        ox: endPt[0] - world[0],
+        oy: endPt[1] - world[1],
+        sx: e.clientX,
+        sy: e.clientY,
+        armed: false,
+      };
+      this.redraw();
+      return;
+    }
+    if (this.tool === "locus") {
+      const loc = locusCircle(this.outline, this.joint);
+      const Pm = loc?.Pm ? arr(loc.Pm) : jointPose(this.outline, this.joint === n ? 0 : this.joint).point;
+      this._drag = {
+        mode: "locus",
+        j: this.joint,
+        loc,
+        ox: Pm[0] - world[0],
+        oy: Pm[1] - world[1],
+        sx: e.clientX,
+        sy: e.clientY,
+        armed: false,
+      };
+      this.redraw();
+      return;
+    }
+    if (this.tool === "vertex") {
+      const jp = jointPose(this.outline, this.joint === n ? 0 : this.joint);
+      const tick = STEM_PX / this.view.scale;
+      const tx = jp.point[0] + Math.cos(jp.heading) * tick;
+      const ty = jp.point[1] + Math.sin(jp.heading) * tick;
+      const hitT = Math.hypot(world[0] - tx, world[1] - ty) < tol * 1.3;
+      const q = quadIdx(this.joint, n);
+      this._pL = q ? recoverP(this.outline, q[1]) : 1;
+      this._pR = q ? recoverP(this.outline, q[3]) : 1;
+      const hx = hitT ? tx : jp.point[0];
+      const hy = hitT ? ty : jp.point[1];
+      this._drag = {
+        mode: hitT ? "tangent" : "vertex",
+        j: this.joint,
+        P: jp.point.slice(),
+        θ: jp.heading,
+        ox: hx - world[0],
+        oy: hy - world[1],
+        sx: e.clientX,
+        sy: e.clientY,
+        armed: false,
+      };
+      this.redraw();
+      return;
+    }
+
+    this._drag = { mode: "maybe-pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
     this.redraw();
   }
 
@@ -503,12 +552,21 @@ export class CurveEditor {
       return;
     }
 
-    const world = this.worldFromEvent(e);
-    if (this._drag.mode === "through") {
-      this.outline = applyBiarc(this.outline, this._drag.j, { P: xy(world) });
-      this.redraw();
+    if (this._drag.mode === "maybe-pan") {
+      const d = Math.hypot(e.clientX - this._drag.x, e.clientY - this._drag.y);
+      if (d < SLOP_PX) return;
+      this._drag = { mode: "pan", x: this._drag.x, y: this._drag.y, cx: this._drag.cx, cy: this._drag.cy };
       return;
     }
+
+    if (this._drag.armed === false) {
+      const d = Math.hypot(e.clientX - this._drag.sx, e.clientY - this._drag.sy);
+      if (d < SLOP_PX) return;
+      this._drag.armed = true;
+    }
+
+    const raw = this.worldFromEvent(e);
+    const world = [raw[0] + (this._drag.ox || 0), raw[1] + (this._drag.oy || 0)];
     if (this._drag.mode === "locus") {
       const loc = this._drag.loc;
       let P = xy(world);
@@ -530,6 +588,7 @@ export class CurveEditor {
       this.redraw();
       return;
     }
+    if (this._drag.mode !== "edit") return;
     const { len, ang } = fitArc(this._drag.start, this._drag.heading, world);
     const idx = this._drag.idx;
     if (idx >= 0) {
@@ -541,17 +600,19 @@ export class CurveEditor {
   _onPtrUp(e) {
     this._pointers.delete(e.pointerId);
     if (this._pointers.size < 2) this._pinch = null;
-    if (this._drag?.mode && this._drag.mode !== "pan") {
+    const mode = this._drag?.mode;
+    const edited = mode && mode !== "pan" && mode !== "maybe-pan" && this._drag.armed !== false;
+    if (mode === "edit" && this._drag.append) {
       const segs = this.outline.turtlePath;
       const idx = this._drag.idx;
       const last = segs[idx];
-      if (this._drag.append && last && Math.abs(last[0]) < 1e-3 && Math.abs(last[1]) < 1e-3) {
+      if (last && Math.abs(last[0]) < 1e-3 && Math.abs(last[1]) < 1e-3) {
         segs.splice(idx, 1);
         this.editIdx = segs.length ? segs.length - 1 : -1;
         this.onSelect(this.editIdx);
       }
-      this.onChange(this.getOutline());
     }
+    if (edited) this.onChange(this.getOutline());
     this._drag = null;
     this.redraw();
   }
@@ -656,7 +717,7 @@ export class CurveEditor {
 
     const end = vertices[vertices.length - 1];
     const tail = samples[samples.length - 1];
-    if (end && tail && this.tool !== "pan") {
+    if (end && tail && this.tool === "add") {
       const add = addHandlePoint(samples, ADD_PX / this.view.scale);
       ctx.strokeStyle = "#a33b2b";
       ctx.lineWidth = 1.4 / this.view.scale;
@@ -686,7 +747,7 @@ export class CurveEditor {
     const jp = jointPose(this.outline, j === n ? 0 : j);
     const sc = this.view.scale;
 
-    if (this.tool === "locus" || this.tool === "through" || this.tool === "p") {
+    if (this.tool === "locus" || this.tool === "p") {
       const loc = locusCircle(this.outline, j);
       if (loc?.c && Number.isFinite(loc.r) && loc.r < 1e4) {
         ctx.save();
@@ -700,13 +761,36 @@ export class CurveEditor {
       }
       const Pm = this.outline._biarc?.Pm || jp.point;
       ctx.fillStyle = "#6b3b9a";
-      disc(ctx, Pm[0], Pm[1], r * 1.3);
+      disc(ctx, Pm[0], Pm[1], r * 1.05);
+      if (this.tool === "locus") {
+        let hx = Pm[0];
+        let hy = Pm[1] + STEM_PX / sc;
+        if (loc?.c) {
+          const vx = Pm[0] - loc.c.x;
+          const vy = Pm[1] - loc.c.y;
+          const L = Math.hypot(vx, vy) || 1;
+          hx = Pm[0] + (vx / L) * (STEM_PX / sc);
+          hy = Pm[1] + (vy / L) * (STEM_PX / sc);
+        }
+        ctx.strokeStyle = "#6b3b9a";
+        ctx.lineWidth = 1.4 / sc;
+        ctx.beginPath();
+        ctx.moveTo(Pm[0], Pm[1]);
+        ctx.lineTo(hx, hy);
+        ctx.stroke();
+        ctx.fillStyle = paper;
+        disc(ctx, hx, hy, r * 1.15);
+        ctx.strokeStyle = "#6b3b9a";
+        ctx.beginPath();
+        ctx.arc(hx, hy, r * 1.15, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     if (this.tool === "vertex") {
       ctx.fillStyle = "#6b3b9a";
       disc(ctx, jp.point[0], jp.point[1], r * 1.35);
-      const tick = 22 / sc;
+      const tick = STEM_PX / sc;
       const tx = jp.point[0] + Math.cos(jp.heading) * tick;
       const ty = jp.point[1] + Math.sin(jp.heading) * tick;
       ctx.strokeStyle = "#6b3b9a";
