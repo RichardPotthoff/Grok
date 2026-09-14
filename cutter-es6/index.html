@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" name="viewport"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="yes" name="mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
@@ -14,7 +14,8 @@
 <link href="./favicon.svg" rel="icon" type="image/svg+xml"/>
 <title>Cookie Cutter</title>
 <style>:root{--bg:#12110f;--surface:#1c1b18;--fg:#ece7dc;--muted:#9a9488;--primary:#7a9e96;--paper:#f3ead8;--ink:#2a241c;--border:color-mix(in oklab,#ece7dc 12%,transparent);--font:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;}*{box-sizing:border-box;}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:var(--font);}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:var(--font);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;}
+input,textarea,select{-webkit-user-select:text;user-select:text;}
 button:not(:disabled),[role="button"]:not(:disabled){cursor:pointer;}
 button:disabled{opacity:0.4;cursor:default;}
 #app{height:100%;display:grid;grid-template-rows:auto 1fr auto;min-height:100dvh;}
@@ -24,8 +25,19 @@ header select,header input,header button{background:var(--bg);color:var(--fg);bo
 header button.primary{background:var(--primary);color:#12110f;border-color:transparent;font-weight:600;}.hint{width:100%;margin:0;font-size:12px;color:var(--muted);}
 #sw-status{margin-left:auto;font-size:12px;color:var(--muted);}.stage{display:grid;grid-template-columns:1fr 1fr;min-height:0;}
 @media(max-width:800px){.stage{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}}.panel{position:relative;min-height:220px;}.panel+.panel{border-left:1px solid var(--border);}
-canvas{width:100%;height:100%;display:block;}.label{position:absolute;top:10px;left:10px;z-index:2;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);pointer-events:none;}.spin{position:absolute;bottom:10px;left:10px;z-index:2;background:color-mix(in oklab,var(--bg) 80%,transparent);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-height:40px;font:inherit;}
-footer{border-top:1px solid var(--border);background:var(--surface);max-height:34vh;overflow:auto;padding:8px 12px 16px;}
+canvas{width:100%;height:100%;display:block;}.stage>.panel:first-child.label{left:64px;}.label{position:absolute;top:10px;left:10px;z-index:2;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);pointer-events:none;}.spin{position:absolute;bottom:10px;left:10px;z-index:2;background:color-mix(in oklab,var(--bg) 80%,transparent);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-height:40px;font:inherit;}
+footer{border-top:1px solid var(--border);background:var(--surface);max-height:34vh;padding:8px 12px 16px;display:grid;grid-template-columns:minmax(14rem,22rem) 1fr;gap:12px;min-height:0;}
+@media(max-width:700px){footer{grid-template-columns:1fr;}}.dock{min-height:0;overflow:auto;}.dock h2{margin:0 0 6px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+#log{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);white-space:pre-wrap;}
+#log.row{padding:2px 0;border-bottom:1px solid var(--border);}
+#log.row.undo{color:#c4a574;}
+#log.row.reject{color:#c47a6a;}
+#log.row.edit{color:var(--fg);}
+#log.row.live{color:#7a9e96;}
+#log.row.err{color:#e07070;}
+#log.row.warn{color:#c4a574;}
+#updateApp{display:none;}
+#updateApp.show{display:inline-block;background:var(--primary);color:#12110f;border-color:transparent;font-weight:600;}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px;}
 th{text-align:left;color:var(--muted);font-weight:500;padding:4px 6px;}
 td{padding:2px 6px;}
@@ -43,13 +55,12 @@ tr.sel td{background:color-mix(in oklab,var(--primary) 18%,transparent);}
 <label>Scale
           <input id="scale" max="40" min="1" step="0.5" type="number" value="11"/>
 </label>
-<button id="fit" type="button">Fit</button>
-<button id="insert" type="button">Insert</button>
-<button id="del" type="button">Delete</button>
 <button class="primary" id="exportJson" type="button">Export JSON</button>
+<button id="undo" type="button">Undo</button>
 <button id="kit" type="button">Download kit</button>
+<button id="updateApp" type="button">Update app</button>
 <span id="sw-status"></span>
-<p class="hint">Drag a handle to edit · hollow + adds a segment · Delete removes the highlighted row · iPad: Safari → Share → Add to Home Screen, then try airplane mode</p>
+<p class="hint">Update app reloads a new GitHub Pages build. Log last line tracks the live drag. Plain split to 4 arcs: Move/Tan now pick the short sqrt branch.</p>
 </header>
 <div class="stage">
 <div class="panel">
@@ -63,1147 +74,343 @@ tr.sel td{background:color-mix(in oklab,var(--primary) 18%,transparent);}
 </div>
 </div>
 <footer>
+<div class="dock">
+<h2>Arcs</h2>
 <table>
 <thead><tr><th>#</th><th>Length</th><th>Angle (deg)</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
+</div>
+<div class="dock">
+<h2>Log</h2>
+<div id="log"></div>
+</div>
 </footer>
 </div>
-<script type="text/javascript">
-(function(global) {
-/** Turtle-path math — same API as Notebooks/anywidget turtle-graphics.js */
-function  TurtlePathLengthArea(TurtlePath, arcStartAngle = 0) {
-  let totalLength = 0;
-  let totalArea = 0;
-  let firstMoment = [0, 0];
-  let arcStartPoint = [0, 0];
-  let arcEndAngle = 0;
-  for (let [arcLength, arcAngle] of TurtlePath) {
-    const halfArcAngle = arcAngle / 2;
-    const chordAngle = arcStartAngle + halfArcAngle;
-    const cosChordAngle = Math.cos(chordAngle);
-    const sinChordAngle = Math.sin(chordAngle);
-
-    totalLength += arcLength;
-    let chordLength;
-    if (arcAngle !== 0) {
-      if (arcLength !== 0) {
-        const radius = arcLength / arcAngle;
-        const sinHalfArcAngle = Math.sin(halfArcAngle);
-        chordLength = radius * sinHalfArcAngle * 2;
-        const arcSegmentArea = 0.5 * radius ** 2 * (arcAngle - Math.sin(arcAngle));
-        const y_a = (2 / 3) * (radius * sinHalfArcAngle) ** 3;
-        totalArea += arcSegmentArea;
-        firstMoment[0] +=
-          arcSegmentArea * (arcStartPoint[0] - radius * Math.sin(arcStartAngle)) +
-          y_a * sinChordAngle;
-        firstMoment[1] +=
-          arcSegmentArea * (arcStartPoint[1] + radius * Math.cos(arcStartAngle)) -
-          y_a * cosChordAngle;
-      } else {
-        chordLength = 0;
-      }
-    } else {
-      chordLength = arcLength;
-    }
-
-    const arcEndPoint = [
-      arcStartPoint[0] + chordLength * cosChordAngle,
-      arcStartPoint[1] + chordLength * sinChordAngle,
-    ];
-    arcEndAngle = arcStartAngle + arcAngle;
-
-    const triangleArea =
-      (arcStartPoint[0] * arcEndPoint[1] - arcEndPoint[0] * arcStartPoint[1]) / 2;
-    totalArea += triangleArea;
-    firstMoment[0] += (triangleArea * (arcStartPoint[0] + arcEndPoint[0])) / 3;
-    firstMoment[1] += (triangleArea * (arcStartPoint[1] + arcEndPoint[1])) / 3;
-
-    arcStartPoint = arcEndPoint;
-    arcStartAngle = arcEndAngle;
-  }
-
-  const centroid = [firstMoment[0] / totalArea, firstMoment[1] / totalArea];
-  return [totalLength, totalArea, arcStartPoint, arcEndAngle, centroid];
-}
-
-/**
- * Walk a turtle path of [length, angleRadians] segments.
- * Yields { point:[x,y], angle:[cos,sin], length, segmentIndex }.
- *
- * Angle here is a heading as [cos, sin] — same as the original module.
- */
-function*  Segments2Complex({
-  p0_a0_segs = [
-    [
-      [0, 0],
-      [1, 0],
-    ],
-    [],
-  ],
-  scale = 1.0,
-  tol = 0.05,
-  offs = 0,
-  loops = 1,
-  return_start = false,
-} = {}) {
-  const [p0, a0] = p0_a0_segs[0];
-  const Segs = p0_a0_segs[1];
-  let a = a0.slice();
-  let p = p0.slice();
-  p[0] = p[0] - a[0] * offs;
-  p[1] = p[1] - a[1] * offs;
-  let L = 0;
-
-  if (return_start) {
-    yield { point: p.slice(), angle: a.slice(), length: L, segmentIndex: -1 };
-  }
-
-  let loopcount = 0;
-  while (loops === null || loops === Infinity || loopcount < loops) {
-    loopcount++;
-    for (let X = 0; X < Segs.length; X++) {
-      let [l, da] = Segs[X];
-      l *= scale;
-      if (da !== 0) {
-        let r = l / da;
-        r += offs;
-        let n;
-        let v;
-        if (r !== 0) {
-          l = r * da;
-          const dl = 2 * Math.sqrt(2 * Math.abs(r) * tol);
-          n = Math.max(
-            Math.ceil((6 * Math.abs(da)) / (2 * Math.PI)),
-            Math.floor(l / dl) + 1,
-          );
-          const dda2 = [Math.cos((0.5 * da) / n), Math.sin((0.5 * da) / n)];
-          v = [2 * r * dda2[1] * dda2[0], 2 * r * dda2[1] * dda2[1]];
-          v = [v[0] * a[0] - v[1] * a[1], v[0] * a[1] + v[1] * a[0]];
-        } else {
-          n = 1;
-          v = [0, 0];
+<script type="text/javascript">(function(global){function TurtlePathLengthArea(TurtlePath,arcStartAngle=0){let totalLength=0;let totalArea=0;let firstMoment=[0,0];let arcStartPoint=[0,0];let arcEndAngle=0;for(let[arcLength,arcAngle] of TurtlePath){const halfArcAngle=arcAngle/2;const chordAngle=arcStartAngle+halfArcAngle;const cosChordAngle=Math.cos(chordAngle);const sinChordAngle=Math.sin(chordAngle);totalLength+=arcLength;let chordLength;if(arcAngle !==0){if(arcLength !==0){const radius=arcLength/arcAngle;const sinHalfArcAngle=Math.sin(halfArcAngle);chordLength=radius*sinHalfArcAngle*2;const arcSegmentArea=0.5*radius**2*(arcAngle-Math.sin(arcAngle));const y_a=(2/3)*(radius*sinHalfArcAngle)**3;totalArea+=arcSegmentArea;firstMoment[0]+=arcSegmentArea*(arcStartPoint[0]-radius*Math.sin(arcStartAngle))+y_a*sinChordAngle;firstMoment[1]+=arcSegmentArea*(arcStartPoint[1]+radius*Math.cos(arcStartAngle))-y_a*cosChordAngle;} else{chordLength=0;}} else{chordLength=arcLength;}
+const arcEndPoint=[arcStartPoint[0]+chordLength*cosChordAngle,arcStartPoint[1]+chordLength*sinChordAngle,];arcEndAngle=arcStartAngle+arcAngle;const triangleArea=(arcStartPoint[0]*arcEndPoint[1]-arcEndPoint[0]*arcStartPoint[1])/2;totalArea+=triangleArea;firstMoment[0]+=(triangleArea*(arcStartPoint[0]+arcEndPoint[0]))/3;firstMoment[1]+=(triangleArea*(arcStartPoint[1]+arcEndPoint[1]))/3;arcStartPoint=arcEndPoint;arcStartAngle=arcEndAngle;}
+const centroid=[firstMoment[0]/totalArea,firstMoment[1]/totalArea];return[totalLength,totalArea,arcStartPoint,arcEndAngle,centroid];}
+function*Segments2Complex({p0_a0_segs=[[[0,0],[1,0],],[],],scale=1.0,tol=0.05,offs=0,loops=1,return_start=false,}={}){const[p0,a0]=p0_a0_segs[0];const Segs=p0_a0_segs[1];let a=a0.slice();let p=p0.slice();p[0]=p[0]-a[0]*offs;p[1]=p[1]-a[1]*offs;let L=0;if(return_start){yield{point:p.slice(),angle:a.slice(),length:L,segmentIndex:-1};}
+let loopcount=0;while(loops===null||loops===Infinity||loopcount<loops){loopcount++;for(let X=0;X<Segs.length;X++){let[l,da]=Segs[X];l*=scale;if(da !==0){let r=l/da;r+=offs;let n;let v;if(r !==0){l=r*da;const dl=2*Math.sqrt(2*Math.abs(r)*tol);n=Math.max(Math.ceil((6*Math.abs(da))/(2*Math.PI)),Math.floor(l/dl)+1,);const dda2=[Math.cos((0.5*da)/n),Math.sin((0.5*da)/n)];v=[2*r*dda2[1]*dda2[0],2*r*dda2[1]*dda2[1]];v=[v[0]*a[0]-v[1]*a[1],v[0]*a[1]+v[1]*a[0]];} else{n=1;v=[0,0];}
+const dda=[Math.cos(da/n),Math.sin(da/n)];for(let i=0;i<n;i++){L+=l/n;p[0]+=v[0];p[1]+=v[1];a=[a[0]*dda[0]-a[1]*dda[1],a[0]*dda[1]+a[1]*dda[0]];yield{point:p.slice(),angle:a.slice(),length:L,segmentIndex:X};v=[v[0]*dda[0]-v[1]*dda[1],v[0]*dda[1]+v[1]*dda[0]];}} else{L+=l;p[0]+=l*a[0];p[1]+=l*a[1];yield{point:p.slice(),angle:a.slice(),length:L,segmentIndex:X};}}
+if(loops===1) break;}}
+function plot_segments(ctx,{p0=[0,0],a0=[1,0],segs=[],scale=1.0,tol=0.05,offs=0,loops=1,return_start=true,}={},){const gen=Segments2Complex({p0_a0_segs:[[p0,a0],segs,],scale,tol,offs:0,loops,return_start,});ctx.beginPath();const first=gen.next();if(first.done) return;const{point,angle}=first.value;const[cos_ang,sin_ang]=angle;ctx.moveTo(point[0]-offs*sin_ang,point[1]+offs*cos_ang);for(const step of gen){const[c,s]=step.angle;ctx.lineTo(step.point[0]-offs*s,step.point[1]+offs*c);}
+ctx.stroke();}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["turtle-graphics.js"]={TurtlePathLengthArea,Segments2Complex,plot_segments};})(window);(function(global){let{Segments2Complex,TurtlePathLengthArea}=modules["turtle-graphics.js"];const DEG=Math.PI/180;function headingFromDeg(deg){const r=deg*DEG;return[Math.cos(r),Math.sin(r)];}
+function segsToRadians(turtlePath){return turtlePath.map(([l,a])=>[Number(l),Number(a)*DEG]);}
+function walkPath(outline,{scale=1,tol=0.05,returnStart=true}={}){const startPoint=outline.startPoint||[0,0];const startAngle=outline.startAngle??0;const a0=headingFromDeg(startAngle);const p0=[startPoint[0]*scale,startPoint[1]*scale];const segs=segsToRadians(outline.turtlePath||[]);return Array.from(Segments2Complex({p0_a0_segs:[[p0,a0],segs],scale,tol,loops:1,return_start:returnStart,}),);}
+function outlineToEpath(outline,{scale=1,tol=0.05}={}){return walkPath(outline,{scale,tol,returnStart:false}).map(({point,angle})=>[point,angle,]);}
+function pathStats(outline,{scale=1}={}){const segs=segsToRadians(outline.turtlePath||[]).map(([l,a])=>[l*scale,a]);const startAngle=(outline.startAngle??0)*DEG;const[length,area,end,endAngle,centroid]=TurtlePathLengthArea(segs,startAngle);const start=outline.startPoint||[0,0];const dx=end[0]-start[0]*scale;const dy=end[1]-start[1]*scale;const gap=Math.hypot(dx,dy);return{length,area,end,endAngle,centroid,gap,closed:gap<0.35*scale};}
+function boundsOf(points){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){if(p[0]<minX) minX=p[0];if(p[1]<minY) minY=p[1];if(p[0]>maxX) maxX=p[0];if(p[1]>maxY) maxY=p[1];}
+if(!isFinite(minX)) return{minX:-1,minY:-1,maxX:1,maxY:1,cx:0,cy:0,w:2,h:2};return{minX,minY,maxX,maxY,cx:(minX+maxX)/2,cy:(minY+maxY)/2,w:Math.max(maxX-minX,1e-6),h:Math.max(maxY-minY,1e-6),};}
+function centerEpath(epath){const b=boundsOf(epath.map(([p])=>p));return epath.map(([p,a])=>[[p[0]-b.cx,p[1]-b.cy],a]);}
+function fitArc(start,headingRad,end){const dx=end[0]-start[0];const dy=end[1]-start[1];const chord=Math.hypot(dx,dy);if(chord<1e-8) return{len:0,ang:0};const chordHdg=Math.atan2(dy,dx);let half=chordHdg-headingRad;while(half>Math.PI) half-=2*Math.PI;while(half<-Math.PI) half+=2*Math.PI;const ang=2*half;let len;if(Math.abs(ang)<1e-6){len=chord;} else{len=(ang*chord)/(2*Math.sin(ang/2));}
+return{len,ang:ang/DEG};}
+function serializeOutline(outline){return JSON.stringify({name:outline.name||"Custom",startPoint:outline.startPoint||[0,0],startAngle:outline.startAngle??0,turtlePath:outline.turtlePath,},null,2,);}
+function parseOutline(text){const t=text.trim();if(t.startsWith("{")||t.startsWith("[")){const data=JSON.parse(t);if(Array.isArray(data)){return{name:"Custom",startPoint:[0,0],startAngle:0,turtlePath:data};}
+const path=data.turtlePath||data.segs||data.segments;if(!path) throw new Error("JSON has no turtlePath");return{name:data.name||"Custom",startPoint:data.startPoint||[0,0],startAngle:data.startAngle??0,turtlePath:path.map((s)=>Array.isArray(s)?[Number(s[0]),Number(s[1])]:[Number(s.len),Number(s.ang)],),};}
+const turtlePath=[];for(const line of t.split(/\r?\n/)){const clean=line.replace(/[\[\]]/g,"").trim();if(!clean) continue;const parts=clean.split(/[,\s]+/).map(Number).filter((n)=>!Number.isNaN(n));for(let i=0;i+1<parts.length;i+=2){turtlePath.push([parts[i],parts[i+1]]);}}
+if(!turtlePath.length) throw new Error("No segments found");return{name:"Custom",startPoint:[0,0],startAngle:0,turtlePath};}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["path-utils.js"]={DEG,headingFromDeg,segsToRadians,walkPath,outlineToEpath,pathStats,boundsOf,centerEpath,fitArc,serializeOutline,parseOutline};})(window);(function(global){let{DEG,fitArc}=modules["path-utils.js"];const G0_GAP=0.02;const G1_HEADING_RAD=(0.35*Math.PI)/180;function wrapPi(a){const t=a+Math.PI;return t-2*Math.PI*Math.floor(t/(2*Math.PI))-Math.PI;}
+function sinc(x){return Math.abs(x)<1e-12?1:Math.sin(x)/x;}
+function stepArc(point,heading,len,ang){const half=ang/2;const chord=Number(len)*sinc(half);const ch=heading+half;return{point:[point[0]+chord*Math.cos(ch),point[1]+chord*Math.sin(ch)],heading:heading+ang,};}
+function walkExact(outline){let p=(outline.startPoint||[0,0]).slice();let h=(outline.startAngle??0)*DEG;const poses=[{point:p.slice(),heading:h,i:-1}];const segs=outline.turtlePath||[];for(let i=0;i<segs.length;i++){const[len,angDeg]=segs[i];const next=stepArc(p,h,Number(len),Number(angDeg)*DEG);p=next.point;h=next.heading;poses.push({point:p.slice(),heading:h,i});}
+return poses;}
+function poseBefore(outline,idx){const n=(outline.turtlePath||[]).length;const i=Math.max(0,Math.min(idx,n));const prefix={...outline,turtlePath:(outline.turtlePath||[]).slice(0,i),};const poses=walkExact(prefix);return poses[poses.length-1];}
+function closureInfo(outline){const poses=walkExact(outline);const start=poses[0];const end=poses[poses.length-1];const dx=end.point[0]-start.point[0];const dy=end.point[1]-start.point[1];const gap=Math.hypot(dx,dy);const dHeading=wrapPi(end.heading-start.heading);const g0=gap<=G0_GAP;const g1=g0&&Math.abs(dHeading)<=G1_HEADING_RAD;return{startPoint:start.point,startHeading:start.heading,endPoint:end.point,endHeading:end.heading,gap,dHeading,dHeadingDeg:dHeading/DEG,g0,g1,n:(outline.turtlePath||[]).length,};}
+function lengthsForTurns(A,alpha,B,d0,d1){const u0s=sinc(d0/2);const u1s=sinc(d1/2);const a0=alpha+d0/2;const a1=alpha+d0+d1/2;const u0x=u0s*Math.cos(a0);const u0y=u0s*Math.sin(a0);const u1x=u1s*Math.cos(a1);const u1y=u1s*Math.sin(a1);const det=u0x*u1y-u0y*u1x;if(!Number.isFinite(det)||Math.abs(det)<1e-14) return null;const dx=B[0]-A[0];const dy=B[1]-A[1];const L0=(dx*u1y-dy*u1x)/det;const L1=(u0x*dy-u0y*dx)/det;if(!Number.isFinite(L0)||!Number.isFinite(L1)) return null;return[L0,L1];}
+function scoreBiarc(L0,d0,L1,d1,hint){const big=Math.abs(L0)+Math.abs(L1);if(big>1e6) return Infinity;let s=0;if(hint){const[hL0,hD0,hL1,hD1]=hint;s+=(L0-hL0)**2+(L1-hL1)**2;s+=4*(d0-hD0)**2+4*(d1-hD1)**2;} else{s+=Math.abs(L0)+Math.abs(L1);s+=0.35*(Math.abs(d0)+Math.abs(d1));}
+if(L0<0) s+=2.5*Math.abs(L0);if(L1<0) s+=2.5*Math.abs(L1);return s;}
+function consider(candidates,L0,d0,L1,d1,hint,extra=0){if(![L0,d0,L1,d1].every(Number.isFinite)) return;if(Math.abs(L0)+Math.abs(L1)>1e6) return;candidates.push({segs:[L0,d0,L1,d1],score:scoreBiarc(L0,d0,L1,d1,hint)+extra,});}
+function headingErrForL0(A,alpha,B,beta,L0,d0){const mid=stepArc(A,alpha,L0,d0);const second=fitArc(mid.point,mid.heading,B);const d1=second.ang*DEG;return{err:wrapPi(mid.heading+d1-beta),L1:second.len,d1,mid,};}
+function solveL0ForTurn(A,alpha,B,beta,d0,hint){const gap=Math.hypot(B[0]-A[0],B[1]-A[1]);const span=Math.max(gap*4,hint?Math.abs(hint[0])*3:1,2);let bestL=hint?hint[0]:span/4;let best=headingErrForL0(A,alpha,B,beta,bestL,d0);for(let i=0;i<=40;i++){const L0=-span+(2*span*i)/40;const cur=headingErrForL0(A,alpha,B,beta,L0,d0);if(Math.abs(cur.err)<Math.abs(best.err)){best=cur;bestL=L0;}}
+for(let n=0;n<8;n++){const h=Math.max(1e-4,Math.abs(bestL)*1e-4);const f0=headingErrForL0(A,alpha,B,beta,bestL,d0).err;const fp=headingErrForL0(A,alpha,B,beta,bestL+h,d0).err;const deriv=(fp-f0)/h;if(Math.abs(deriv)<1e-10) break;bestL-=f0/deriv;if(!Number.isFinite(bestL)||Math.abs(bestL)>span*8) break;}
+best=headingErrForL0(A,alpha,B,beta,bestL,d0);return{L0:bestL,...best};}
+function leftNormal(heading){return[-Math.sin(heading),Math.cos(heading)];}
+function signedAngle(ux,uy,vx,vy){return wrapPi(Math.atan2(vy,vx)-Math.atan2(uy,ux));}
+function scanRadiusFamily(A,alpha,B,beta,hint,candidates){const n0=leftNormal(alpha);const n1=leftNormal(beta);const V=[B[0]-A[0],B[1]-A[1]];const gap=Math.hypot(V[0],V[1]);const scale=Math.max(gap,0.5);const radii=[];const addR=(r)=>{if(!Number.isFinite(r)||Math.abs(r)<1e-6) return;if(radii.some((x)=>Math.abs(x-r)<1e-4)) return;radii.push(r);};if(hint){if(Math.abs(hint[1])>1e-8) addR(hint[0]/hint[1]);if(Math.abs(hint[3])>1e-8) addR(hint[2]/hint[3]);}
+for(let i=1;i<=16;i++){addR((i/4)*scale);addR((-i/4)*scale);}
+for(const r0 of radii){const Wx=V[0]+r0*n0[0];const Wy=V[1]+r0*n0[1];const n1w=Wx*n1[0]+Wy*n1[1];const w2=Wx*Wx+Wy*Wy;for(const kind of[-1,1]){const denom=2*(kind*r0-n1w);if(Math.abs(denom)<1e-12) continue;const r1=(r0*r0-w2)/denom;if(!Number.isFinite(r1)||Math.abs(r1)<1e-6) continue;const C0=[A[0]+r0*n0[0],A[1]+r0*n0[1]];const C1=[B[0]+r1*n1[0],B[1]+r1*n1[1]];const d=Math.hypot(C1[0]-C0[0],C1[1]-C0[1]);const want=Math.abs(r0-kind*r1);if(Math.abs(d-want)>1e-3*Math.max(1,d)) continue;if(d<1e-10) continue;const dir=[(C1[0]-C0[0])/d,(C1[1]-C0[1])/d];for(const s of[1,-1]){const J=[C0[0]+s*Math.abs(r0)*dir[0],C0[1]+s*Math.abs(r0)*dir[1]];const d0=signedAngle(A[0]-C0[0],A[1]-C0[1],J[0]-C0[0],J[1]-C0[1]);const d1=signedAngle(J[0]-C1[0],J[1]-C1[1],B[0]-C1[0],B[1]-C1[1]);let a0=d0;let a1=d1;if(r0<0&&a0>1e-8) a0-=2*Math.PI;if(r0>0&&a0<-1e-8) a0+=2*Math.PI;if(r1<0&&a1>1e-8) a1-=2*Math.PI;if(r1>0&&a1<-1e-8) a1+=2*Math.PI;consider(candidates,r0*a0,a0,r1*a1,a1,hint,0);}}}}
+function scanFitArcFamily(A,alpha,B,beta,hint,candidates){const d0s=[];const addD0=(v)=>{if(d0s.some((x)=>Math.abs(x-v)<1e-4)) return;d0s.push(v);};if(hint){for(let i=-16;i<=16;i++) addD0(hint[1]+i*0.1);}
+for(let i=-18;i<=18;i++){if(i===0) continue;addD0((i*Math.PI)/9);}
+for(const d0 of d0s){const sol=solveL0ForTurn(A,alpha,B,beta,d0,hint);if(Math.abs(sol.err)>0.015) continue;consider(candidates,sol.L0,d0,sol.L1,sol.d1,hint,Math.abs(sol.err)*8);}}
+function fitBiarc(A,alpha,B,beta,hint){const Omega=wrapPi(beta-alpha);const totals=[];const addTotal=(t)=>{if(!totals.some((x)=>Math.abs(x-t)<1e-9)) totals.push(t);};if(hint){const hintTurn=hint[1]+hint[3];const kHint=Math.round((hintTurn-Omega)/(2*Math.PI));addTotal(Omega+2*Math.PI*kHint);}
+for(const k of[0,1,-1,2,-2]) addTotal(Omega+2*Math.PI*k);const candidates=[];const push=(d0,total)=>{const d1=total-d0;const lens=lengthsForTurns(A,alpha,B,d0,d1);if(!lens) return;consider(candidates,lens[0],d0,lens[1],d1,hint,0.15*Math.abs(total));};for(const total of totals){if(hint){const center=hint[1];for(let i=-48;i<=48;i++) push(center+i*0.04,total);for(let k=-2;k<=2;k++) push(center+k*Math.PI,total);} else{for(let i=-60;i<=60;i++){if(i===0) continue;push(i*0.05,total);}
+push(total/2,total);}}
+scanRadiusFamily(A,alpha,B,beta,hint,candidates);scanFitArcFamily(A,alpha,B,beta,hint,candidates);const verified=[];for(const c of candidates){const[L0,d0,L1,d1]=c.segs;const mid=stepArc(A,alpha,L0,d0);const end=stepArc(mid.point,mid.heading,L1,d1);const g=Math.hypot(end.point[0]-B[0],end.point[1]-B[1]);const h=Math.abs(wrapPi(end.heading-beta));if(g>G0_GAP||h>G1_HEADING_RAD) continue;verified.push({...c,score:c.score+g*20+h*40});}
+if(!verified.length) return null;verified.sort((a,b)=>a.score-b.score);const best=verified[0].segs;return{segsRad:best,segsDeg:[[roundN(best[0],5),roundN(best[1]/DEG,4)],[roundN(best[2],5),roundN(best[3]/DEG,4)],],};}
+function chainNet(segsDeg){let p=[0,0];let h=0;for(const[len,angDeg] of segsDeg){const next=stepArc(p,h,Number(len),Number(angDeg)*DEG);p=next.point;h=next.heading;}
+return{disp:p,turn:h};}
+function lengthsForEndArcs(theta0,net,d0,dL){const th1=theta0+d0;const th2=th1+net.turn;const u0s=sinc(d0/2);const uLs=sinc(dL/2);const a0=theta0+d0/2;const aL=th2+dL/2;const u0x=u0s*Math.cos(a0);const u0y=u0s*Math.sin(a0);const uLx=uLs*Math.cos(aL);const uLy=uLs*Math.sin(aL);const det=u0x*uLy-u0y*uLx;if(!Number.isFinite(det)||Math.abs(det)<1e-14) return null;const mx=net.disp[0]*Math.cos(th1)-net.disp[1]*Math.sin(th1);const my=net.disp[0]*Math.sin(th1)+net.disp[1]*Math.cos(th1);const rx=-mx;const ry=-my;const s0=(rx*uLy-ry*uLx)/det;const sL=(u0x*ry-u0y*rx)/det;if(!Number.isFinite(s0)||!Number.isFinite(sL)) return null;return[s0,sL];}
+function fitEndArcs(theta0,net,hint){const Omega=wrapPi(-(net.turn));const totals=[];const addTotal=(t)=>{if(!totals.some((x)=>Math.abs(x-t)<1e-9)) totals.push(t);};if(hint){const hintTurn=hint[1]+hint[3];addTotal(hintTurn);const kHint=Math.round((hintTurn-Omega)/(2*Math.PI));addTotal(Omega+2*Math.PI*kHint);}
+for(const k of[0,1,-1,2,-2]) addTotal(Omega+2*Math.PI*k);const candidates=[];const push=(d0,total)=>{const dL=total-d0;const lens=lengthsForEndArcs(theta0,net,d0,dL);if(!lens) return;consider(candidates,lens[0],d0,lens[1],dL,hint,0.12*Math.abs(total));};for(const total of totals){if(hint){const center=hint[1];for(let i=-48;i<=48;i++) push(center+i*0.04,total);for(let k=-2;k<=2;k++) push(center+k*Math.PI,total);} else{for(let i=-60;i<=60;i++){if(i===0) continue;push(i*0.05,total);}
+push(total/2,total);}}
+const verified=[];for(const c of candidates){const[s0,d0,sL,dL]=c.segs;const first=stepArc([0,0],theta0,s0,d0);const midX=net.disp[0]*Math.cos(first.heading)-net.disp[1]*Math.sin(first.heading);const midY=net.disp[0]*Math.sin(first.heading)+net.disp[1]*Math.cos(first.heading);const p2=[first.point[0]+midX,first.point[1]+midY];const th2=first.heading+net.turn;const end=stepArc(p2,th2,sL,dL);const g=Math.hypot(end.point[0],end.point[1]);const h=Math.abs(wrapPi(end.heading-theta0));if(g>G0_GAP||h>G1_HEADING_RAD) continue;verified.push({...c,score:c.score+g*20+h*40});}
+if(!verified.length) return null;verified.sort((a,b)=>a.score-b.score);const best=verified[0].segs;return{segsRad:best,segsDeg:[[roundN(best[0],5),roundN(best[1]/DEG,4)],[roundN(best[2],5),roundN(best[3]/DEG,4)],],};}
+function closeG0(outline){const segs=(outline.turtlePath||[]).map((s)=>[Number(s[0]),Number(s[1])]);if(!segs.length) return cloneOutline(outline);const start=poseBefore(outline,0);const pre=poseBefore(outline,segs.length-1);const fitted=fitArc(pre.point,pre.heading,start.point);segs[segs.length-1]=[roundN(fitted.len,5),roundN(fitted.ang,4)];return{...cloneOutline(outline),turtlePath:segs};}
+function closeEnds(outline){const src=cloneOutline(outline);if(closureInfo(src).g1) return src;const segs=src.turtlePath.map((s)=>[Number(s[0]),Number(s[1])]);if(segs.length<2) return closeG1(src,{mode:"append"});const start=poseBefore(src,0);const net=chainNet(segs.slice(1,-1));const a=segs[0];const b=segs[segs.length-1];const hint=[a[0],a[1]*DEG,b[0],b[1]*DEG];const fitted=fitEndArcs(start.heading,net,hint);if(!fitted) return src;segs[0]=fitted.segsDeg[0];segs[segs.length-1]=fitted.segsDeg[1];return{...src,turtlePath:segs};}
+function closeG1(outline,{mode="adjust"}={}){const src=cloneOutline(outline);const info=closureInfo(src);if(info.g1) return src;const segs=src.turtlePath.map((s)=>[Number(s[0]),Number(s[1])]);const target=poseBefore(src,0);if(mode==="append"||segs.length<2){if(!segs.length) return src;const end=poseBefore(src,segs.length);const fitted=fitBiarc(end.point,end.heading,target.point,target.heading,null);if(!fitted) return src;return{...src,turtlePath:segs.concat(fitted.segsDeg)};}
+const pre=poseBefore(src,segs.length-2);const a=segs[segs.length-2];const b=segs[segs.length-1];const hint=[a[0],a[1]*DEG,b[0],b[1]*DEG];const fitted=fitBiarc(pre.point,pre.heading,target.point,target.heading,hint);if(!fitted) return src;segs[segs.length-2]=fitted.segsDeg[0];segs[segs.length-1]=fitted.segsDeg[1];return{...src,turtlePath:segs};}
+function solveIll(AT_A,ATb,lam){const n=ATb.length;const M=AT_A.map((row,i)=>row.map((v,j)=>v+(i===j?lam:0)));const x=ATb.slice();for(let k=0;k<n;k++){let piv=k;for(let i=k+1;i<n;i++) if(Math.abs(M[i][k])>Math.abs(M[piv][k])) piv=i;if(Math.abs(M[piv][k])<1e-14) return null;if(piv !==k){[M[k],M[piv]]=[M[piv],M[k]];[x[k],x[piv]]=[x[piv],x[k]];}
+const diag=M[k][k];for(let j=k;j<n;j++) M[k][j]/=diag;x[k]/=diag;for(let i=0;i<n;i++){if(i===k) continue;const f=M[i][k];for(let j=k;j<n;j++) M[i][j]-=f*M[k][j];x[i]-=f*x[k];}}
+return x;}
+function closeSpread(outline,{keepTotalLength=true}={}){const src=cloneOutline(outline);if(closureInfo(src).g1) return src;const segs=src.turtlePath.map((s)=>[Number(s[0]),Number(s[1])*DEG]);if(segs.length<2) return src;const start=poseBefore(src,0);const bendable=[];const stretchable=[];for(let i=0;i<segs.length;i++){if(Math.abs(segs[i][1])>1e-12) bendable.push(i);if(Math.abs(segs[i][0])>1e-12) stretchable.push(i);}
+if(!bendable.length||stretchable.length<2) return src;const angSum=segs.reduce((s,seg)=>s+seg[1],0);const mismatch=wrapPi(angSum-start.heading+start.heading);const headErr=wrapPi(angSum);const share=headErr/bendable.length;for(const i of bendable) segs[i][1]-=share;const n=segs.length;const headings=new Array(n+1);headings[0]=start.heading;for(let i=0;i<n;i++) headings[i+1]=headings[i]+segs[i][1];const vi=segs.map((seg,i)=>{const chord=seg[0]*sinc(seg[1]/2);const h=headings[i]+seg[1]/2;return[chord*Math.cos(h),chord*Math.sin(h)];});let px=0;let py=0;for(const v of vi){px+=v[0];py+=v[1];}
+const bx=px-0;const by=py-0;const m=stretchable.length;const cols=keepTotalLength?m:m;const rows=keepTotalLength?3:2;const A=Array.from({length:rows},()=>Array(m).fill(0));const b=keepTotalLength?[bx,by,0]:[bx,by];let origLen=0;stretchable.forEach((si,j)=>{A[0][j]=vi[si][0];A[1][j]=vi[si][1];origLen+=segs[si][0];if(keepTotalLength) A[2][j]=segs[si][0];});const ATA=Array.from({length:m},()=>Array(m).fill(0));const ATb=Array(m).fill(0);for(let i=0;i<m;i++){for(let j=0;j<m;j++){let s=0;for(let r=0;r<rows;r++) s+=A[r][i]*A[r][j];ATA[i][j]=s;}
+let t=0;for(let r=0;r<rows;r++) t+=A[r][i]*b[r];ATb[i]=t;}
+const a=solveIll(ATA,ATb,1e-6);if(!a) return src;stretchable.forEach((si,j)=>{segs[si][0]*=1-a[j];});return{...src,turtlePath:segs.map(([len,ang])=>[roundN(len,5),roundN(ang/DEG,4)]),};}
+const CLOSE_MODES=["ends","last-two","append","spread","corner"];function closePath(outline,opts={}){const n=(outline.turtlePath||[]).length;if(n<=0) return cloneOutline(outline);const mode=opts.mode||"ends";if(opts.smooth===false||opts.g1===false||mode==="corner") return closeG0(outline);if(mode==="append") return closeG1(outline,{mode:"append"});if(mode==="last-two"||mode==="adjust"||mode==="tail") return closeG1(outline,{mode:"adjust"});if(mode==="spread"||mode==="snap") return closeSpread(outline,opts);return closeEnds(outline);}
+function cloneOutline(o={}){return{name:o.name||"Custom",startPoint:(o.startPoint||[0,0]).slice(),startAngle:o.startAngle??0,turtlePath:(o.turtlePath||[]).map((s)=>[Number(s[0]),Number(s[1])]),};}
+function roundN(v,n){const f=10**n;return Math.round(v*f)/f;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["close-path.js"]={G0_GAP,G1_HEADING_RAD,wrapPi,sinc,stepArc,walkExact,poseBefore,closureInfo,lengthsForTurns,fitBiarc,chainNet,lengthsForEndArcs,fitEndArcs,closeG0,closeEnds,closeG1,closeSpread,CLOSE_MODES,closePath};})(window);(function(global){let{DEG}=modules["path-utils.js"];let{poseBefore,stepArc,wrapPi}=modules["close-path.js"];const τ=Math.PI*2;const inf=Infinity;const C=(x,y=0)=>({x,y});const add=(a,b)=>C(a.x+b.x,a.y+b.y);const sub=(a,b)=>C(a.x-b.x,a.y-b.y);const mul=(a,b)=>C(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);const div=(a,b)=>{const d=b.x*b.x+b.y*b.y;return C((a.x*b.x+a.y*b.y)/d,(a.y*b.x-a.x*b.y)/d);};const conj=(a)=>C(a.x,-a.y);const abs=(a)=>Math.hypot(a.x,a.y);const arg=(a)=>Math.atan2(a.y,a.x);const fromPolar=(r,θ)=>C(r*Math.cos(θ),r*Math.sin(θ));const unit=(a)=>{const r=abs(a);return r<1e-16?C(1,0):C(a.x/r,a.y/r);};const isInf=(a)=>!Number.isFinite(a.x)||!Number.isFinite(a.y);function mt(z,a,b,c,d){const den=add(mul(c,z),d);if(abs(den)<1e-16) return C(inf,inf);return div(add(mul(a,z),b),den);}
+function mti(z,a,b,c,d){return mt(z,C(-d.x,-d.y),b,c,C(-a.x,-a.y));}
+function dmt(z,a,b,c,d){const den=add(mul(c,z),d);const det=sub(mul(a,d),mul(b,c));if(abs(den)<1e-16) return C(inf,inf);return div(det,mul(den,den));}
+function dmti(z,a,b,c,d){return dmt(z,C(-d.x,-d.y),b,c,C(-a.x,-a.y));}
+function mm(A,B){const[a,b,c,d]=A;const[e,f,g,h]=B;return[add(mul(a,e),mul(b,g)),add(mul(a,f),mul(b,h)),add(mul(c,e),mul(d,g)),add(mul(c,f),mul(d,h))];}
+function arcFromChord(P0,T0,P1){const ch=sub(P1,P0);const Lch=abs(ch);if(Lch<1e-12) return{s:0,Δθ:0};const ph=unit(div(ch,T0));const α=arg(ph);if(Math.PI-Math.abs(α)<1e-6) return{s:-Lch,Δθ:0};const s=Math.abs(ph.y)<1e-16?Lch:Lch*(α/ph.y);return{s,Δθ:2*α};}
+function sqrtC(z,branch=0){const r=abs(z);const θ=arg(z)/2+branch*Math.PI;return fromPolar(Math.sqrt(r),θ);}
+function scorePair(a0,a1,hint){if(hint){const d0=hint.d0??0;const d1=hint.d1??0;const s0=hint.s0??0;const s1=hint.s1??0;return(a0.Δθ-d0)**2+(a1.Δθ-d1)**2+0.04*((a0.s-s0)**2+(a1.s-s1)**2);}
+return Math.abs(a0.Δθ)+Math.abs(a1.Δθ)+0.02*(Math.abs(a0.s)+Math.abs(a1.s));}
+function computeBiarcBranch(P0,T0,P1,T1,{p=null,P=null}={},branch=0){const m=[C(2),C(-(P0.x+P1.x),-(P0.y+P1.y)),C(0),sub(P1,P0)];const phl=unit(sqrtC(mul(T1,conj(T0)),branch));const ml=[add(phl,C(1)),sub(phl,C(1)),sub(phl,C(1)),add(phl,C(1))];const mn=mm(ml,m);const[a,b,c,d]=mn;const phj=mul(T0,dmt(P0,a,b,c,d));let p̂=p==null?1:p;if(P){const pn=mt(P,a,b,c,d);if(pn.y>0){const w=div(add(pn,C(1)),add(C(-pn.x,-pn.y),C(1)));p̂=w.x+(Math.abs(phj.y)<1e-14?0:(w.y/phj.y)*phj.x);} else{const w=div(sub(pn,C(1)),add(pn,C(1)));const u=w.x+(Math.abs(phj.y)<1e-14?0:(w.y/phj.y)*phj.x);p̂=Math.abs(u)<1e-14?inf:-1/u;}}
+if(!Number.isFinite(p̂)) p̂=1e6;if(Math.abs(p̂)<1e-4) p̂=p̂<0?-1e-4:1e-4;if(Math.abs(p̂+1)<1e-4) p̂=p̂<-1?-1.0001:-0.9999;const xj=C((p̂-1)/(p̂+1));const Pm=mti(xj,a,b,c,d);let Tm=mul(conj(phj),dmti(xj,a,b,c,d));Tm=unit(Tm);let Tl=dmti(xj,a,b,c,d);Tl=unit(Tl);const Popp=abs(xj)<1e-16?C(inf,inf):mti(C(-1/xj.x,0),a,b,c,d);return{Pm,Tm,Tl,Popp,p:p̂,branch};}
+function computeBiarc(P0,T0,P1,T1,opts={}){const{hint=null}=opts;let best=null;let bestScore=Infinity;for(const br of[0,1]){let cand;try{cand=computeBiarcBranch(P0,T0,P1,T1,opts,br);} catch(_){continue;}
+if(!cand||isInf(cand.Pm)||abs(cand.Tm)<1e-12) continue;const a0=arcFromChord(P0,T0,cand.Pm);const a1=arcFromChord(cand.Pm,cand.Tm,P1);if(![a0.s,a0.Δθ,a1.s,a1.Δθ].every(Number.isFinite)) continue;const score=scorePair(a0,a1,hint);if(score<bestScore){best={...cand,a0,a1};bestScore=score;}}
+return best||computeBiarcBranch(P0,T0,P1,T1,opts,0);}
+function xy(p){return C(p[0],p[1]);}
+function arr(z){return[z.x,z.y];}
+function Tθ(θ){return fromPolar(1,θ);}
+function pairIdx(j,n){if(n<2) return null;if(j===0||j===n) return[n-1,0];return[j-1,j];}
+function quadIdx(j,n){if(n<4) return null;const i=j===n?0:((j%n)+n)%n;const m=(k)=>((k%n)+n)%n;return[m(i-2),m(i-1),i,m(i+1)];}
+function poseToCT(pose){return{P:xy(pose.point),T:Tθ(pose.heading),θ:pose.heading};}
+function writePair(src,i0,i1,a0,a1){const segs=src.turtlePath.map((s)=>[s[0],s[1]]);segs[i0]=[round5(a0.s),round4(a0.Δθ/DEG)];segs[i1]=[round5(a1.s),round4(a1.Δθ/DEG)];const out={...src,turtlePath:segs};if(i1===0){const pre=poseBefore(src,i0);const end=stepArc(pre.point,pre.heading,a0.s,a0.Δθ);out.startPoint=end.point.slice();out.startAngle=wrapPi(end.heading)/DEG;}
+return out;}
+function applyBiarc(outline,j,opts={}){const n=(outline.turtlePath||[]).length;const idx=pairIdx(j,n);if(!idx) return outline;const[i0,i1]=idx;const A=poseToCT(poseBefore(outline,i0));const B=poseToCT(poseBefore(outline,i1+1));const segs=outline.turtlePath;const hint={s0:Number(segs[i0][0]),d0:Number(segs[i0][1])*DEG,s1:Number(segs[i1][0]),d1:Number(segs[i1][1])*DEG,};const{Pm,Tm,p}=computeBiarc(A.P,A.T,B.P,B.T,{...opts,hint});if(isInf(Pm)||abs(Tm)<1e-12) return outline;const a0=arcFromChord(A.P,A.T,Pm);const a1=arcFromChord(Pm,Tm,B.P);const next=writePair(outline,i0,i1,a0,a1);next._biarc={p,Pm:arr(Pm),Tm:arr(Tm),j,i0,i1};return next;}
+function applyVertex(outline,j,P,θ,pL,pR){const n=(outline.turtlePath||[]).length;const q=quadIdx(j,n);if(!q) return outline;const[a,b,c,d]=q;const T=Tθ(θ);const Pm=xy(P);const A=poseToCT(poseBefore(outline,a));const endI=d+1>n?n:d+1;const B=poseToCT(poseBefore(outline,endI));const segs=outline.turtlePath;const hintL={s0:Number(segs[a][0]),d0:Number(segs[a][1])*DEG,s1:Number(segs[b][0]),d1:Number(segs[b][1])*DEG,};const hintR={s0:Number(segs[c][0]),d0:Number(segs[c][1])*DEG,s1:Number(segs[d][0]),d1:Number(segs[d][1])*DEG,};const left=computeBiarc(A.P,A.T,Pm,T,{p:pL??1,hint:hintL});const right=computeBiarc(Pm,T,B.P,B.T,{p:pR??1,hint:hintR});if(isInf(left.Pm)||isInf(right.Pm)||abs(left.Tm)<1e-12||abs(right.Tm)<1e-12){return outline;}
+const a0=arcFromChord(A.P,A.T,left.Pm);const a1=arcFromChord(left.Pm,left.Tm,Pm);const b0=arcFromChord(Pm,T,right.Pm);const b1=arcFromChord(right.Pm,right.Tm,B.P);let out=writePair(outline,a,b,a0,a1);out=writePair(out,c,d,b0,b1);if(j===0||j===n){out.startPoint=P.slice();out.startAngle=θ/DEG;}
+out._biarc={pL:left.p,pR:right.p,P,θ,j};return out;}
+function spanLength(outline,idx){const segs=outline.turtlePath||[];let s=0;for(const i of idx||[]){if(segs[i]) s+=Math.abs(Number(segs[i][0]));}
+return s;}
+function saneP(p){if(!Number.isFinite(p)||Math.abs(p)>1e5) return 1;if(Math.abs(p)<2e-3||Math.abs(p+1)<2e-3) return 1;return p;}
+function spanCollapsed(before,after,idx){if(!after?.turtlePath) return true;const segs=after.turtlePath;const prev=before?.turtlePath||[];for(const i of idx||[]){const row=segs[i];if(!row||!Number.isFinite(row[0])||!Number.isFinite(row[1])) return true;const d1=Number(row[1])*DEG;const d0=prev[i]?Number(prev[i][1])*DEG:0;if(Math.abs(d1)>Math.PI*1.4&&Math.abs(d0)<Math.PI*0.85) return true;}
+const L0=spanLength(before,idx);const L1=spanLength(after,idx);if(L0>1e-4&&L1<L0*0.08) return true;if(L1>Math.max(L0,1)*3.5) return true;return false;}
+function applyVertexStable(outline,j,P,θ,pL,pR){const n=(outline.turtlePath||[]).length;const q=quadIdx(j,n);if(!q) return outline;const aKeep=saneP(pL??1);const bKeep=saneP(pR??1);const tries=[[aKeep,bKeep],[1,bKeep],[aKeep,1],[1,1],];let best=outline;let bestD=Infinity;for(const[a,b] of tries){const next=applyVertex(outline,j,P,θ,a,b);if(next===outline||spanCollapsed(outline,next,q)) continue;const jp=jointPose(next,j===n?0:j);const dP=Math.hypot(jp.point[0]-P[0],jp.point[1]-P[1]);const L0=Math.max(spanLength(outline,q),1e-6);const L1=spanLength(next,q);const d=dP+0.25*Math.abs(L1-L0);if(d<bestD){best=next;bestD=d;}}
+return best;}
+function cloneOutline(o={}){return{name:o.name||"Custom",startPoint:(o.startPoint||[0,0]).slice(),startAngle:o.startAngle??0,turtlePath:(o.turtlePath||[]).map((s)=>[Number(s[0]),Number(s[1])]),};}
+function extractSpan(outline,indices){const n=(outline.turtlePath||[]).length;if(!indices?.length||!n) return null;const start=poseBefore(outline,indices[0]);const last=indices[indices.length-1];const end=poseBefore(outline,last+1>n?n:last+1);return{name:"span",startPoint:start.point.slice(),startAngle:start.heading/DEG,turtlePath:indices.map((i)=>{const s=outline.turtlePath[i];return[Number(s[0]),Number(s[1])];}),indices:indices.slice(),endPoint:end.point.slice(),endAngle:end.heading/DEG,};}
+function commitSpan(parent,snippet){if(!snippet?.indices) return parent;const out=cloneOutline(parent);snippet.indices.forEach((pi,k)=>{const row=snippet.turtlePath[k];if(row) out.turtlePath[pi]=[Number(row[0]),Number(row[1])];});const slot0=snippet.indices.indexOf(0);if(slot0===0){out.startPoint=snippet.startPoint.slice();out.startAngle=snippet.startAngle;} else if(slot0>0){const pre={startPoint:snippet.startPoint.slice(),startAngle:snippet.startAngle,turtlePath:snippet.turtlePath.slice(0,slot0),};const pose=poseBefore(pre,slot0);out.startPoint=pose.point.slice();out.startAngle=wrapPi(pose.heading)/DEG;}
+if(snippet._biarc) out._biarc=snippet._biarc;return out;}
+function jointPose(outline,j){const n=(outline.turtlePath||[]).length;if(j<=0||j>=n) return poseBefore(outline,0);return poseBefore(outline,j);}
+function recoverP(outline,j){const n=(outline.turtlePath||[]).length;const idx=pairIdx(j,n);if(!idx) return 1;const[i0,i1]=idx;const A=poseToCT(poseBefore(outline,i0));const B=poseToCT(poseBefore(outline,i1+1));const Pm=xy(jointPose(outline,j===n?0:j).point);const segs=outline.turtlePath;const hint={s0:Number(segs[i0][0]),d0:Number(segs[i0][1])*DEG,s1:Number(segs[i1][0]),d1:Number(segs[i1][1])*DEG,};const{p}=computeBiarc(A.P,A.T,B.P,B.T,{P:Pm,hint});return p;}
+function pairPoses(outline,j){const n=(outline.turtlePath||[]).length;const idx=pairIdx(j,n);if(!idx) return null;const[i0,i1]=idx;return{i0,i1,A:poseToCT(poseBefore(outline,i0)),B:poseToCT(poseBefore(outline,i1+1)),J:poseToCT(jointPose(outline,j===n?0:j)),};}
+function locusCircle(outline,j){const pr=pairPoses(outline,j);if(!pr) return null;const{Pm,Tl,Popp}=computeBiarc(pr.A.P,pr.A.T,pr.B.P,pr.B.T,{p:1});if(isInf(Popp)) return{c:null,r:inf,Pm,Popp,Tl,...pr};const nrm=C(-Tl.y,Tl.x);const v=sub(Pm,Popp);const vn=v.x*nrm.x+v.y*nrm.y;if(Math.abs(vn)<1e-12) return{c:null,r:inf,Pm,Popp,Tl,...pr};const ρ=-(v.x*v.x+v.y*v.y)/(2*vn);return{c:add(Pm,C(nrm.x*ρ,nrm.y*ρ)),r:Math.abs(ρ),Pm,Popp,Tl,...pr};}
+function projectToCircle(c,r,P){const v=sub(P,c);const L=abs(v);if(L<1e-12) return add(c,C(r,0));return add(c,C((v.x/L)*r,(v.y/L)*r));}
+function splitSeg(outline,i){const segs=(outline.turtlePath||[]).map((s)=>[Number(s[0]),Number(s[1])]);if(i<0||i>=segs.length) return outline;const[s,Δ]=segs[i];segs.splice(i,1,[s/2,Δ/2],[s/2,Δ/2]);return{...outline,turtlePath:segs};}
+function round5(v){return Math.round(v*1e5)/1e5;}
+function round4(v){return Math.round(v*1e4)/1e4;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["biarc.js"]={arcFromChord,computeBiarc,xy,arr,Tθ,pairIdx,quadIdx,applyBiarc,applyVertex,spanLength,saneP,spanCollapsed,applyVertexStable,cloneOutline,extractSpan,commitSpan,jointPose,recoverP,pairPoses,locusCircle,projectToCircle,splitSeg};})(window);(function(global){let{walkPath,boundsOf,fitArc,DEG}=modules["path-utils.js"];let{closePath,closureInfo,CLOSE_MODES}=modules["close-path.js"];let{applyBiarc,applyVertexStable,recoverP,splitSeg,pairIdx,quadIdx,jointPose,locusCircle,projectToCircle,extractSpan,commitSpan,cloneOutline,spanCollapsed,arr,xy,}=modules["biarc.js"];const EDITOR_TOOLS=["select","add","pan","arc","p","locus","move","tan"];const TOOL_ALIAS={vertex:"move"};const SPAN2=new Set(["p","locus"]);const SPAN4=new Set(["move","tan"]);const JOINT_LOCK=new Set(["p","locus","move","tan"]);const HIT_PX=26;const ADD_PX=22;const SLOP_PX=10;const STEM_PX=24;class CurveEditor{constructor(canvas,opts={}){this.canvas=canvas;this.ctx=canvas.getContext("2d");this.onChange=opts.onChange||(()=>{});this.onSelect=opts.onSelect||(()=>{});this.outline=normalizeOutline(opts.outline);const n=this.outline.turtlePath.length;this.editIdx=opts.editIdx??(n?n-1:-1);this.view={cx:0,cy:0,scale:12};this._drag=null;this._pointers=new Map();this._pinch=null;this._raf=0;this._ro=null;this._moved=false;this.tool=opts.tool||"select";this.onTool=opts.onTool||(()=>{});this.closeMode=CLOSE_MODES.includes(opts.closeMode)?opts.closeMode:"ends";const n0=this.outline.turtlePath.length;this.joint=n0;this.pVal=1;this._base=null;this._span=null;this.onLog=opts.onLog||(()=>{});this._hist=[{t:Date.now(),kind:"load",summary:"load",outline:this.getOutline()}];this._histAt=0;this._notes=[];this._onPtrDown=this._onPtrDown.bind(this);this._onPtrMove=this._onPtrMove.bind(this);this._onPtrUp=this._onPtrUp.bind(this);this._onWheel=this._onWheel.bind(this);canvas.style.touchAction="none";this._onTouchGuard=(ev)=>ev.preventDefault();canvas.addEventListener("touchstart",this._onTouchGuard,{passive:false});canvas.addEventListener("gesturestart",this._onTouchGuard,{passive:false});canvas.addEventListener("pointerdown",this._onPtrDown);canvas.addEventListener("pointermove",this._onPtrMove);canvas.addEventListener("pointerup",this._onPtrUp);canvas.addEventListener("pointercancel",this._onPtrUp);canvas.addEventListener("wheel",this._onWheel,{passive:false});if(typeof ResizeObserver !=="undefined"){this._ro=new ResizeObserver(()=>this.redraw());this._ro.observe(canvas);}
+this._mountTools();this.fit();this.redraw();}
+setTool(name){const raw=TOOL_ALIAS[name]||name;const tool=EDITOR_TOOLS.includes(raw)?raw:"select";if(this.tool===tool){this._syncToolButtons();return this.tool;}
+this.tool=tool;this._syncToolButtons();this.onTool(this.tool);this.redraw();return this.tool;}
+getTool(){return this.tool;}
+setCloseMode(mode){const next=CLOSE_MODES.includes(mode)?mode:"ends";this.closeMode=next;const sel=this._tools?.querySelector("[data-close-mode]");if(sel) sel.value=next;return this.closeMode;}
+splitSegment(at){const n=this.outline.turtlePath.length;const i=at==null?(this.editIdx>=0?this.editIdx:n-1):at;const next=splitSeg(this.outline,i);this.outline=next;this.editIdx=i;this.joint=i+1;this.redraw();this.onSelect(this.editIdx);this._commit("split");return this.editIdx;}
+closePath(opts={}){const mode=opts.mode||this.closeMode||"ends";const next=closePath(this.outline,{smooth:opts.smooth !==false,mode});this.outline=next;const n=this.outline.turtlePath.length;this.editIdx=n?n-1:-1;this.redraw();this.onSelect(this.editIdx);this._commit(`close ${mode}`);return closureInfo(this.outline);}
+closureInfo(){return closureInfo(this.outline);}
+setOutline(outline,{fit=false,keepSelection=true,commit=false}={}){this.outline=normalizeOutline(outline);const n=this.outline.turtlePath.length;if(!keepSelection||this.editIdx>=n) this.editIdx=n?n-1:-1;if(fit) this.fit();this.redraw();if(commit) this._commit(typeof commit==="string"?commit:"set",{reset:commit==="load"});}
+setSelected(idx){const n=this.outline.turtlePath.length;this.editIdx=n===0?-1:Math.max(-1,Math.min(idx,n-1));if(this.editIdx>=0) this.joint=this.editIdx+1;this.redraw();this.onSelect(this.editIdx);}
+span(){const n=this.outline.turtlePath.length;if(n<=0||this.editIdx<0) return[];if(SPAN4.has(this.tool)) return quadIdx(this.joint,n)||[this.editIdx];if(SPAN2.has(this.tool)) return pairIdx(this.joint,n)||[this.editIdx];return[this.editIdx];}
+getSelected(){return this.editIdx;}
+getOutline(){return{name:this.outline.name,startPoint:this.outline.startPoint.slice(),startAngle:this.outline.startAngle,turtlePath:this.outline.turtlePath.map(([l,a])=>[l,a]),};}
+getLog(){return this._notes.slice();}
+noteFromHost(kind,summary,extra={}){return this._note(kind,summary,extra);}
+canUndo(){return this._histAt>0;}
+undo(){if(!this.canUndo()) return false;const last=this._hist[this._histAt];this._histAt-=1;this.outline=normalizeOutline(this._hist[this._histAt].outline);this._note("undo",last?.summary||"edit",{replay:this._histAt});this.redraw();this.onSelect(this.editIdx);this.onChange(this.getOutline());return true;}
+_note(kind,summary,extra={}){const row={t:Date.now(),kind,summary,tool:this.tool,joint:this.joint,extra,};const last=this._notes[this._notes.length-1];if(last?.kind==="live"&&(kind==="live"||kind==="edit"||kind==="reject")){this._notes[this._notes.length-1]=row;} else{this._notes.push(row);}
+if(this._notes.length>250) this._notes.shift();this.onLog(this.getLog());return row;}
+_describeChange(before,after){if(!before||!after) return this.tool;const bits=[`${this.tool} j=${this.joint}`];const sp0=before.startPoint||[0,0];const sp1=after.startPoint||[0,0];if(Math.hypot(sp1[0]-sp0[0],sp1[1]-sp0[1])>1e-4||Math.abs((after.startAngle??0)-(before.startAngle??0))>1e-3){bits.push(`start (${fmtN(sp1[0], 2)},${fmtN(sp1[1], 2)}) θ=${fmtN(after.startAngle, 1)}°`);}
+const a=before.turtlePath||[];const b=after.turtlePath||[];const n=Math.max(a.length,b.length);for(let i=0;i<n;i++){const u=a[i];const v=b[i];if(!u&&v){bits.push(`#${i + 1} +[${fmtN(v[0], 2)},${fmtN(v[1], 1)}]`);continue;}
+if(u&&!v){bits.push(`#${i + 1} del`);continue;}
+if(!u||!v) continue;if(Math.abs(u[0]-v[0])<1e-4&&Math.abs(u[1]-v[1])<1e-3) continue;bits.push(`#${i + 1} s ${fmtN(u[0], 2)}→${fmtN(v[0], 2)}  Δθ ${fmtN(u[1], 1)}→${fmtN(v[1], 1)}`);}
+const bi=after._biarc;if(bi?.pR !=null) bits.push(`pL ${fmtP(bi.pL)} pR ${fmtP(bi.pR)}`);else if(bi?.p !=null) bits.push(`p ${fmtP(bi.p)}`);return bits.join(" · ");}
+_commit(summary,{reset=false,extra={}}={}){const outline=this.getOutline();if(reset){this._hist=[{t:Date.now(),kind:"load",summary,outline}];this._histAt=0;} else{this._hist=this._hist.slice(0,this._histAt+1);this._hist.push({t:Date.now(),kind:"edit",summary,outline});this._histAt=this._hist.length-1;}
+this._note(reset?"load":"edit",summary,extra);this.onChange(outline);}
+_spanIdx(){const n=this.outline.turtlePath.length;if(SPAN4.has(this.tool)) return quadIdx(this.joint,n);if(SPAN2.has(this.tool)) return pairIdx(this.joint,n);return null;}
+_beginSpan(){const idx=this._spanIdx();if(!idx){this._base=null;this._span=null;return null;}
+this._base=cloneOutline(this.outline);this._span=extractSpan(this._base,idx);this._span0=this.getOutline();this._liveSummary="";return this._span;}
+_previewSpan(nextSpan){if(!this._base||!nextSpan) return false;if(spanCollapsed(this._span||this._base,nextSpan,nextSpan.indices.map((_,i)=>i))){this._note("reject","collapsed span",{p:nextSpan._biarc?.p??nextSpan._biarc?.pL,pR:nextSpan._biarc?.pR,});return false;}
+this._span=nextSpan;this.outline=commitSpan(this._base,this._span);this._liveSummary=this._describeChange(this._span0||this._base,this.outline);this._note("live",this._liveSummary,{p:nextSpan._biarc?.p??nextSpan._biarc?.pL,pR:nextSpan._biarc?.pR,});return true;}
+_endSpan(didEdit){const summary=this._liveSummary||this.tool;this._base=null;this._span=null;this._span0=null;this._liveSummary="";if(didEdit) this._commit(summary);}
+insertSegment(at){const n=this.outline.turtlePath.length;const i=at==null?(this.editIdx>=0?this.editIdx+1:n):at;const clamped=Math.max(0,Math.min(i,n));this.outline.turtlePath.splice(clamped,0,[4,0]);this.editIdx=clamped;this.redraw();this.onSelect(this.editIdx);this._commit("insert");return this.editIdx;}
+deleteSegment(at){const n=this.outline.turtlePath.length;if(!n) return-1;const i=at==null?(this.editIdx>=0?this.editIdx:n-1):at;if(i<0||i>=n) return this.editIdx;this.outline.turtlePath.splice(i,1);const m=this.outline.turtlePath.length;this.editIdx=m?Math.min(i,m-1):-1;this.redraw();this.onSelect(this.editIdx);this._commit("delete");return this.editIdx;}
+fit(){const samples=walkPath(this.outline,{scale:1,tol:0.08,returnStart:true});const pts=samples.map((s)=>s.point);if(!pts.length) pts.push([0,0]);const b=boundsOf(pts);const rect=this.canvas.getBoundingClientRect();const w=Math.max(rect.width,40);const h=Math.max(rect.height,40);const pad=0.78;this.view.cx=b.cx;this.view.cy=b.cy;this.view.scale=Math.min((w*pad)/b.w,(h*pad)/b.h);this.view.scale=Math.max(4,Math.min(this.view.scale,80));this.redraw();}
+destroy(){const c=this.canvas;c.removeEventListener("pointerdown",this._onPtrDown);c.removeEventListener("pointermove",this._onPtrMove);c.removeEventListener("pointerup",this._onPtrUp);c.removeEventListener("pointercancel",this._onPtrUp);c.removeEventListener("wheel",this._onWheel);c.removeEventListener("touchstart",this._onTouchGuard);c.removeEventListener("gesturestart",this._onTouchGuard);this._ro?.disconnect();if(this._raf) cancelAnimationFrame(this._raf);if(this._shell?.parentElement){this._shell.parentElement.insertBefore(c,this._shell);this._shell.remove();}
+this._tools?.remove();this._status?.remove();}
+_mountTools(){const parent=this.canvas.parentElement;if(!parent||this._tools) return;if(getComputedStyle(parent).position==="static") parent.style.position="relative";if(!document.getElementById("curve-editor-tools-css")){const style=document.createElement("style");style.id="curve-editor-tools-css";style.textContent=`
+        .curve-shell {
+          display: flex; flex-direction: row; align-items: stretch;
+          width: 100%; height: 100%; min-height: 0;
         }
-        const dda = [Math.cos(da / n), Math.sin(da / n)];
-        for (let i = 0; i < n; i++) {
-          L += l / n;
-          p[0] += v[0];
-          p[1] += v[1];
-          a = [a[0] * dda[0] - a[1] * dda[1], a[0] * dda[1] + a[1] * dda[0]];
-          yield { point: p.slice(), angle: a.slice(), length: L, segmentIndex: X };
-          v = [v[0] * dda[0] - v[1] * dda[1], v[0] * dda[1] + v[1] * dda[0]];
+        .curve-tools {
+          flex: 0 0 56px; display: flex; flex-direction: column; gap: 3px;
+          padding: 6px 4px; overflow: auto;
+          background: #1c1b18;
+          border-right: 1px solid color-mix(in oklab, #ece7dc 16%, transparent);
+          -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
         }
-      } else {
-        L += l;
-        p[0] += l * a[0];
-        p[1] += l * a[1];
-        yield { point: p.slice(), angle: a.slice(), length: L, segmentIndex: X };
-      }
-    }
-    if (loops === 1) break;
-  }
-}
-function  plot_segments(
-  ctx,
-  {
-    p0 = [0, 0],
-    a0 = [1, 0],
-    segs = [],
-    scale = 1.0,
-    tol = 0.05,
-    offs = 0,
-    loops = 1,
-    return_start = true,
-  } = {},
-) {
-  const gen = Segments2Complex({
-    p0_a0_segs: [
-      [p0, a0],
-      segs,
-    ],
-    scale,
-    tol,
-    offs: 0,
-    loops,
-    return_start,
-  });
-  ctx.beginPath();
-  const first = gen.next();
-  if (first.done) return;
-  const { point, angle } = first.value;
-  const [cos_ang, sin_ang] = angle;
-  ctx.moveTo(point[0] - offs * sin_ang, point[1] + offs * cos_ang);
-  for (const step of gen) {
-    const [c, s] = step.angle;
-    ctx.lineTo(step.point[0] - offs * s, step.point[1] + offs * c);
-  }
-  ctx.stroke();
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["turtle-graphics.js"] = {TurtlePathLengthArea,Segments2Complex,plot_segments} ;
-})(window);
-(function(global) {
-/** Convert turtle outlines to polylines / epaths for the 2D editor and WebGL. */
-let { Segments2Complex, TurtlePathLengthArea } = modules["turtle-graphics.js"];
-const  DEG= Math.PI / 180;
-function  headingFromDeg(deg) {
-  const r = deg * DEG;
-  return [Math.cos(r), Math.sin(r)];
-}
-
-/** Degrees in, radians out — what Segments2Complex wants. */
-function  segsToRadians(turtlePath) {
-  return turtlePath.map(([l, a]) => [Number(l), Number(a) * DEG]);
-}
-function  walkPath(outline, { scale = 1, tol = 0.05, returnStart = true } = {}) {
-  const startPoint = outline.startPoint || [0, 0];
-  const startAngle = outline.startAngle ?? 0;
-  const a0 = headingFromDeg(startAngle);
-  const p0 = [startPoint[0] * scale, startPoint[1] * scale];
-  const segs = segsToRadians(outline.turtlePath || []);
-  return Array.from(
-    Segments2Complex({
-      p0_a0_segs: [[p0, a0], segs],
-      scale,
-      tol,
-      loops: 1,
-      return_start: returnStart,
-    }),
-  );
-}
-
-/** [point, heading] pairs for extrude(). */
-function  outlineToEpath(outline, { scale = 1, tol = 0.05 } = {}) {
-  return walkPath(outline, { scale, tol, returnStart: false }).map(({ point, angle }) => [
-    point,
-    angle,
-  ]);
-}
-function  pathStats(outline, { scale = 1 } = {}) {
-  const segs = segsToRadians(outline.turtlePath || []).map(([l, a]) => [l * scale, a]);
-  const startAngle = (outline.startAngle ?? 0) * DEG;
-  const [length, area, end, endAngle, centroid] = TurtlePathLengthArea(segs, startAngle);
-  const start = outline.startPoint || [0, 0];
-  const dx = end[0] - start[0] * scale;
-  const dy = end[1] - start[1] * scale;
-  const gap = Math.hypot(dx, dy);
-  return { length, area, end, endAngle, centroid, gap, closed: gap < 0.35 * scale };
-}
-function  boundsOf(points) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p[0] < minX) minX = p[0];
-    if (p[1] < minY) minY = p[1];
-    if (p[0] > maxX) maxX = p[0];
-    if (p[1] > maxY) maxY = p[1];
-  }
-  if (!isFinite(minX)) return { minX: -1, minY: -1, maxX: 1, maxY: 1, cx: 0, cy: 0, w: 2, h: 2 };
-  return {
-    minX, minY, maxX, maxY,
-    cx: (minX + maxX) / 2,
-    cy: (minY + maxY) / 2,
-    w: Math.max(maxX - minX, 1e-6),
-    h: Math.max(maxY - minY, 1e-6),
-  };
-}
-function  centerEpath(epath) {
-  const b = boundsOf(epath.map(([p]) => p));
-  return epath.map(([p, a]) => [[p[0] - b.cx, p[1] - b.cy], a]);
-}
-
-/**
- * Inverse of a turtle arc: given start, heading (radians), and a target end
- * point, return { len, angDeg } matching the notebook convention.
- */
-function  fitArc(start, headingRad, end) {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const chord = Math.hypot(dx, dy);
-  if (chord < 1e-8) return { len: 0, ang: 0 };
-  const chordHdg = Math.atan2(dy, dx);
-  let half = chordHdg - headingRad;
-  while (half > Math.PI) half -= 2 * Math.PI;
-  while (half < -Math.PI) half += 2 * Math.PI;
-  const ang = 2 * half;
-  let len;
-  if (Math.abs(ang) < 1e-6) {
-    len = chord;
-  } else {
-    len = (ang * chord) / (2 * Math.sin(ang / 2));
-  }
-  return { len, ang: ang / DEG };
-}
-function  serializeOutline(outline) {
-  return JSON.stringify(
-    {
-      name: outline.name || "Custom",
-      startPoint: outline.startPoint || [0, 0],
-      startAngle: outline.startAngle ?? 0,
-      turtlePath: outline.turtlePath,
-    },
-    null,
-    2,
-  );
-}
-function  parseOutline(text) {
-  const t = text.trim();
-  if (t.startsWith("{") || t.startsWith("[")) {
-    const data = JSON.parse(t);
-    if (Array.isArray(data)) {
-      return { name: "Custom", startPoint: [0, 0], startAngle: 0, turtlePath: data };
-    }
-    const path = data.turtlePath || data.segs || data.segments;
-    if (!path) throw new Error("JSON has no turtlePath");
-    return {
-      name: data.name || "Custom",
-      startPoint: data.startPoint || [0, 0],
-      startAngle: data.startAngle ?? 0,
-      turtlePath: path.map((s) =>
-        Array.isArray(s) ? [Number(s[0]), Number(s[1])] : [Number(s.len), Number(s.ang)],
-      ),
-    };
-  }
-  const turtlePath = [];
-  for (const line of t.split(/\r?\n/)) {
-    const clean = line.replace(/[\[\]]/g, "").trim();
-    if (!clean) continue;
-    const parts = clean.split(/[,\s]+/).map(Number).filter((n) => !Number.isNaN(n));
-    for (let i = 0; i + 1 < parts.length; i += 2) {
-      turtlePath.push([parts[i], parts[i + 1]]);
-    }
-  }
-  if (!turtlePath.length) throw new Error("No segments found");
-  return { name: "Custom", startPoint: [0, 0], startAngle: 0, turtlePath };
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["path-utils.js"] = {DEG,headingFromDeg,segsToRadians,walkPath,outlineToEpath,pathStats,boundsOf,centerEpath,fitArc,serializeOutline,parseOutline} ;
-})(window);
-(function(global) {
-/**
- * Touch-first turtle path editor.
- * Coordinates are math (y-up). Canvas is flipped at draw time.
- *
- *   const ed = new CurveEditor(canvas, { outline, onChange, onSelect });
- *   ed.setOutline(outline);
- *   ed.insertSegment();
- *   ed.deleteSegment();
- *   ed.destroy();
- *
- * Drag a handle to edit that segment. Drag the red end-dot to append.
- * Insert / Delete are methods — the HTML chrome just calls them.
- */
-let { walkPath, boundsOf, fitArc, DEG } = modules["path-utils.js"];
-
-const HIT_PX = 26;
-const ADD_PX = 22;
-class  CurveEditor{
-  constructor(canvas, opts = {}) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.onChange = opts.onChange || (() => {});
-    this.onSelect = opts.onSelect || (() => {});
-    this.outline = normalizeOutline(opts.outline);
-    const n = this.outline.turtlePath.length;
-    this.editIdx = opts.editIdx ?? (n ? n - 1 : -1);
-    this.view = { cx: 0, cy: 0, scale: 12 };
-    this._drag = null;
-    this._pointers = new Map();
-    this._pinch = null;
-    this._raf = 0;
-    this._ro = null;
-    this._moved = false;
-
-    this._onPtrDown = this._onPtrDown.bind(this);
-    this._onPtrMove = this._onPtrMove.bind(this);
-    this._onPtrUp = this._onPtrUp.bind(this);
-    this._onWheel = this._onWheel.bind(this);
-
-    canvas.style.touchAction = "none";
-    canvas.addEventListener("pointerdown", this._onPtrDown);
-    canvas.addEventListener("pointermove", this._onPtrMove);
-    canvas.addEventListener("pointerup", this._onPtrUp);
-    canvas.addEventListener("pointercancel", this._onPtrUp);
-    canvas.addEventListener("wheel", this._onWheel, { passive: false });
-
-    if (typeof ResizeObserver !== "undefined") {
-      this._ro = new ResizeObserver(() => this.redraw());
-      this._ro.observe(canvas);
-    }
-    this.fit();
-    this.redraw();
-  }
-
-  setOutline(outline, { fit = false, keepSelection = true } = {}) {
-    this.outline = normalizeOutline(outline);
-    const n = this.outline.turtlePath.length;
-    if (!keepSelection || this.editIdx >= n) this.editIdx = n ? n - 1 : -1;
-    if (fit) this.fit();
-    this.redraw();
-  }
-
-  setSelected(idx) {
-    const n = this.outline.turtlePath.length;
-    this.editIdx = n === 0 ? -1 : Math.max(-1, Math.min(idx, n - 1));
-    this.redraw();
-    this.onSelect(this.editIdx);
-  }
-
-  getSelected() {
-    return this.editIdx;
-  }
-
-  getOutline() {
-    return {
-      name: this.outline.name,
-      startPoint: this.outline.startPoint.slice(),
-      startAngle: this.outline.startAngle,
-      turtlePath: this.outline.turtlePath.map(([l, a]) => [l, a]),
-    };
-  }
-
-  insertSegment(at) {
-    const n = this.outline.turtlePath.length;
-    const i = at == null ? (this.editIdx >= 0 ? this.editIdx + 1 : n) : at;
-    const clamped = Math.max(0, Math.min(i, n));
-    this.outline.turtlePath.splice(clamped, 0, [4, 0]);
-    this.editIdx = clamped;
-    this.redraw();
-    this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
-    return this.editIdx;
-  }
-
-  deleteSegment(at) {
-    const n = this.outline.turtlePath.length;
-    if (!n) return -1;
-    const i = at == null ? (this.editIdx >= 0 ? this.editIdx : n - 1) : at;
-    if (i < 0 || i >= n) return this.editIdx;
-    this.outline.turtlePath.splice(i, 1);
-    const m = this.outline.turtlePath.length;
-    this.editIdx = m ? Math.min(i, m - 1) : -1;
-    this.redraw();
-    this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
-    return this.editIdx;
-  }
-
-  fit() {
-    const samples = walkPath(this.outline, { scale: 1, tol: 0.08, returnStart: true });
-    const pts = samples.map((s) => s.point);
-    if (!pts.length) pts.push([0, 0]);
-    const b = boundsOf(pts);
-    const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(rect.width, 40);
-    const h = Math.max(rect.height, 40);
-    const pad = 0.78;
-    this.view.cx = b.cx;
-    this.view.cy = b.cy;
-    this.view.scale = Math.min((w * pad) / b.w, (h * pad) / b.h);
-    this.view.scale = Math.max(4, Math.min(this.view.scale, 80));
-    this.redraw();
-  }
-
-  destroy() {
-    const c = this.canvas;
-    c.removeEventListener("pointerdown", this._onPtrDown);
-    c.removeEventListener("pointermove", this._onPtrMove);
-    c.removeEventListener("pointerup", this._onPtrUp);
-    c.removeEventListener("pointercancel", this._onPtrUp);
-    c.removeEventListener("wheel", this._onWheel);
-    this._ro?.disconnect();
-    if (this._raf) cancelAnimationFrame(this._raf);
-  }
-
-  worldFromEvent(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left - rect.width / 2;
-    const sy = e.clientY - rect.top - rect.height / 2;
-    return [
-      this.view.cx + sx / this.view.scale,
-      this.view.cy - sy / this.view.scale,
-    ];
-  }
-
-  _onPtrDown(e) {
-    this.canvas.setPointerCapture(e.pointerId);
-    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    this._moved = false;
-
-    if (this._pointers.size === 2) {
-      const pts = [...this._pointers.values()];
-      this._pinch = {
-        dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
-        scale: this.view.scale,
-      };
-      this._drag = null;
-      return;
-    }
-
-    if (e.button === 1 || e.shiftKey || e.altKey) {
-      this._drag = { mode: "pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
-      return;
-    }
-
-    const world = this.worldFromEvent(e);
-    const samples = walkPath(this.outline, { scale: 1, tol: 0.04, returnStart: true });
-    const vertices = vertexList(samples, this.outline);
-    const tol = HIT_PX / this.view.scale;
-    const addPt = addHandlePoint(samples, ADD_PX / this.view.scale);
-    const hitAdd = addPt && Math.hypot(addPt[0] - world[0], addPt[1] - world[1]) < tol;
-    const hitV = hitVertex(vertices, world, tol);
-    const n = this.outline.turtlePath.length;
-
-    let idx = this.editIdx;
-    let append = false;
-
-    if (hitAdd) {
-      this.outline.turtlePath.push([0, 0]);
-      idx = this.outline.turtlePath.length - 1;
-      append = true;
-    } else if (hitV > 0) {
-      idx = hitV - 1;
-    } else if (hitV === 0 && n > 0) {
-      idx = 0;
-    } else {
-      const hitSeg = hitSegment(samples, world, tol * 1.4);
-      if (hitSeg >= 0) {
-        idx = hitSeg;
-      } else {
-        this._drag = { mode: "pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
-        return;
-      }
-    }
-
-    this.editIdx = idx;
-    const startState = stateBefore(this.outline, idx);
-    this._drag = {
-      mode: "edit",
-      idx,
-      append,
-      start: startState.point,
-      heading: startState.heading,
-    };
-    this.onSelect(idx);
-    this.redraw();
-  }
-
-  _onPtrMove(e) {
-    if (this._pointers.has(e.pointerId)) {
-      this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    }
-
-    if (this._pointers.size >= 2 && this._pinch) {
-      const pts = [...this._pointers.values()];
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      this.view.scale = Math.max(2, Math.min(120, this._pinch.scale * (dist / Math.max(this._pinch.dist, 1))));
-      this.redraw();
-      return;
-    }
-
-    if (!this._drag) return;
-    this._moved = true;
-
-    if (this._drag.mode === "pan") {
-      const dx = e.clientX - this._drag.x;
-      const dy = e.clientY - this._drag.y;
-      this.view.cx = this._drag.cx - dx / this.view.scale;
-      this.view.cy = this._drag.cy + dy / this.view.scale;
-      this.redraw();
-      return;
-    }
-
-    const world = this.worldFromEvent(e);
-    const { len, ang } = fitArc(this._drag.start, this._drag.heading, world);
-    const idx = this._drag.idx;
-    if (idx >= 0) {
-      this.outline.turtlePath[idx] = [roundN(len, 4), roundN(ang, 3)];
-    }
-    this.redraw();
-  }
-
-  _onPtrUp(e) {
-    this._pointers.delete(e.pointerId);
-    if (this._pointers.size < 2) this._pinch = null;
-    if (this._drag?.mode === "edit") {
-      const segs = this.outline.turtlePath;
-      const idx = this._drag.idx;
-      const last = segs[idx];
-      if (this._drag.append && last && Math.abs(last[0]) < 1e-3 && Math.abs(last[1]) < 1e-3) {
-        segs.splice(idx, 1);
-        this.editIdx = segs.length ? segs.length - 1 : -1;
-        this.onSelect(this.editIdx);
-      }
-      this.onChange(this.getOutline());
-    }
-    this._drag = null;
-    this.redraw();
-  }
-
-  _onWheel(e) {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-    this.view.scale = Math.max(2, Math.min(120, this.view.scale * factor));
-    this.redraw();
-  }
-
-  redraw() {
-    if (this._raf) return;
-    this._raf = requestAnimationFrame(() => {
-      this._raf = 0;
-      this._paint();
-    });
-  }
-
-  _size() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width * dpr));
-    const h = Math.max(1, Math.round(rect.height * dpr));
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
-    return { w, h, dpr };
-  }
-
-  _paint() {
-    const { ctx } = this;
-    const { w, h, dpr } = this._size();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-
-    const paper = getCss("--color-paper", "#f3ead8");
-    const ink = getCss("--color-ink", "#2a241c");
-    const accent = getCss("--color-primary", "#7a9e96");
-
-    ctx.fillStyle = paper;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.setTransform(
-      this.view.scale * dpr,
-      0,
-      0,
-      -this.view.scale * dpr,
-      w / 2 - this.view.cx * this.view.scale * dpr,
-      h / 2 + this.view.cy * this.view.scale * dpr,
-    );
-
-    this._drawGrid(ctx);
-    const samples = walkPath(this.outline, { scale: 1, tol: 0.03, returnStart: true });
-    if (!samples.length) return;
-
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 1.6 / this.view.scale;
-    ctx.beginPath();
-    ctx.moveTo(samples[0].point[0], samples[0].point[1]);
-    for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].point[0], samples[i].point[1]);
-    ctx.stroke();
-
-    if (this.editIdx >= 0) {
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 3.4 / this.view.scale;
-      ctx.beginPath();
-      let pen = false;
-      let prev = samples[0].point;
-      for (const s of samples) {
-        if (s.segmentIndex === this.editIdx) {
-          if (!pen) {
-            ctx.moveTo(prev[0], prev[1]);
-            pen = true;
-          }
-          ctx.lineTo(s.point[0], s.point[1]);
-        } else if (pen) {
-          break;
+        .curve-stage { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; }
+        .curve-stage canvas { width: 100%; height: 100%; display: block; }
+        .curve-tools .grp { display: flex; flex-direction: column; gap: 3px; }
+        .curve-tools .gap { height: 8px; }
+        .curve-tools button, .curve-tools select, .curve-tools input {
+          font: 600 11px/1.1 system-ui, sans-serif;
+          min-height: 32px; width: 100%;
+          padding: 4px 2px; border-radius: 7px;
+          border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
+          background: #12110f; color: #ece7dc;
         }
-        prev = s.point;
-      }
-      ctx.stroke();
-    }
-
-    const vertices = vertexList(samples, this.outline);
-    const r = 4.2 / this.view.scale;
-    vertices.forEach((p, i) => {
-      const last = i === vertices.length - 1;
-      const sel = i === this.editIdx + 1;
-      ctx.fillStyle = i === 0 ? "#2f7a4a" : last ? "#a33b2b" : sel ? accent : ink;
-      disc(ctx, p[0], p[1], sel || last || i === 0 ? r * 1.25 : r);
-    });
-
-    const end = vertices[vertices.length - 1];
-    const tail = samples[samples.length - 1];
-    if (end && tail) {
-      const add = addHandlePoint(samples, ADD_PX / this.view.scale);
-      ctx.strokeStyle = "#a33b2b";
-      ctx.lineWidth = 1.4 / this.view.scale;
-      ctx.beginPath();
-      ctx.moveTo(end[0], end[1]);
-      ctx.lineTo(add[0], add[1]);
-      ctx.stroke();
-      ctx.fillStyle = paper;
-      disc(ctx, add[0], add[1], r * 1.15);
-      ctx.strokeStyle = "#a33b2b";
-      ctx.beginPath();
-      ctx.arc(add[0], add[1], r * 1.15, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(add[0] - r * 0.7, add[1]);
-      ctx.lineTo(add[0] + r * 0.7, add[1]);
-      ctx.moveTo(add[0], add[1] - r * 0.7);
-      ctx.lineTo(add[0], add[1] + r * 0.7);
-      ctx.stroke();
-    }
-  }
-
-  _drawGrid(ctx) {
-    const step = niceStep(48 / this.view.scale);
-    const rect = this.canvas.getBoundingClientRect();
-    const halfW = rect.width / (2 * this.view.scale);
-    const halfH = rect.height / (2 * this.view.scale);
-    const x0 = this.view.cx - halfW;
-    const x1 = this.view.cx + halfW;
-    const y0 = this.view.cy - halfH;
-    const y1 = this.view.cy + halfH;
-    ctx.strokeStyle = "rgba(42,36,28,0.08)";
-    ctx.lineWidth = 1 / this.view.scale;
-    ctx.beginPath();
-    for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) {
-      ctx.moveTo(x, y0);
-      ctx.lineTo(x, y1);
-    }
-    for (let y = Math.floor(y0 / step) * step; y <= y1; y += step) {
-      ctx.moveTo(x0, y);
-      ctx.lineTo(x1, y);
-    }
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(42,36,28,0.22)";
-    ctx.beginPath();
-    ctx.moveTo(x0, 0);
-    ctx.lineTo(x1, 0);
-    ctx.moveTo(0, y0);
-    ctx.lineTo(0, y1);
-    ctx.stroke();
-  }
-}
-
-function normalizeOutline(o = {}) {
-  return {
-    name: o.name || "Custom",
-    startPoint: (o.startPoint || [0, 0]).slice(),
-    startAngle: o.startAngle ?? 0,
-    turtlePath: (o.turtlePath || []).map((s) => [Number(s[0]), Number(s[1])]),
-  };
-}
-
-function stateBefore(outline, idx) {
-  const prefix = {
-    ...outline,
-    turtlePath: outline.turtlePath.slice(0, Math.max(0, idx)),
-  };
-  const samples = walkPath(prefix, { scale: 1, tol: 0.05, returnStart: true });
-  const last = samples[samples.length - 1];
-  const heading = last
-    ? Math.atan2(last.angle[1], last.angle[0])
-    : (outline.startAngle ?? 0) * DEG;
-  return { point: last ? last.point : outline.startPoint || [0, 0], heading };
-}
-
-function vertexList(samples, outline) {
-  if (!samples.length) return [outline.startPoint || [0, 0]];
-  const lastOf = new Map();
-  for (const s of samples) lastOf.set(s.segmentIndex, s.point);
-  const verts = [samples[0].point];
-  const keys = [...lastOf.keys()].filter((k) => k >= 0).sort((a, b) => a - b);
-  for (const k of keys) verts.push(lastOf.get(k));
-  return verts;
-}
-
-function addHandlePoint(samples, dist) {
-  const last = samples[samples.length - 1];
-  if (!last) return [0, 0];
-  return [last.point[0] + last.angle[0] * dist, last.point[1] + last.angle[1] * dist];
-}
-
-function hitVertex(vertices, world, tol) {
-  let best = -1;
-  let bestD = tol;
-  vertices.forEach((p, i) => {
-    const d = Math.hypot(p[0] - world[0], p[1] - world[1]);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  });
-  return best;
-}
-
-function hitSegment(samples, world, tol) {
-  let best = -1;
-  let bestD = tol;
-  for (let i = 1; i < samples.length; i++) {
-    const a = samples[i - 1].point;
-    const b = samples[i].point;
-    const d = distToSeg(world, a, b);
-    const idx = samples[i].segmentIndex;
-    if (idx >= 0 && d < bestD) {
-      bestD = d;
-      best = idx;
-    }
-  }
-  return best;
-}
-
-function distToSeg(p, a, b) {
-  const vx = b[0] - a[0];
-  const vy = b[1] - a[1];
-  const l2 = vx * vx + vy * vy;
-  if (l2 < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]);
-  let t = ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p[0] - (a[0] + t * vx), p[1] - (a[1] + t * vy));
-}
-
-function disc(ctx, x, y, r) {
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function niceStep(raw) {
-  const p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-6))));
-  const n = raw / p;
-  if (n < 2) return 2 * p;
-  if (n < 5) return 5 * p;
-  return 10 * p;
-}
-
-function roundN(v, n) {
-  const f = 10 ** n;
-  return Math.round(v * f) / f;
-}
-
-function getCss(name, fallback) {
-  if (typeof getComputedStyle === "undefined" || typeof document === "undefined") return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["curve-editor.js"] = {CurveEditor} ;
-})(window);
-(function(global) {
-// geometry.js — cube, circle, extrude (same algorithm as Notebooks/anywidget)
-function  cube(dx = 1, dy, dz) {
-  const numVertices = 24;
-  const stride = 6 * 4;
-  const X = 0.5 * dx;
-  const Y = dy == null ? X : dy;
-  const Z = dz == null ? X : dz;
-  const vertices = new Float32Array([
-    X, -Y, -Z, 1, 0, 0, X, Y, -Z, 1, 0, 0, X, Y, Z, 1, 0, 0, X, -Y, Z, 1, 0, 0,
-    -X, Y, Z, -1, 0, 0, -X, Y, -Z, -1, 0, 0, -X, -Y, -Z, -1, 0, 0, -X, -Y, Z, -1, 0, 0,
-    -X, Y, -Z, 0, 1, 0, -X, Y, Z, 0, 1, 0, X, Y, Z, 0, 1, 0, X, Y, -Z, 0, 1, 0,
-    X, -Y, Z, 0, -1, 0, -X, -Y, Z, 0, -1, 0, -X, -Y, -Z, 0, -1, 0, X, -Y, -Z, 0, -1, 0,
-    -X, -Y, Z, 0, 0, 1, X, -Y, Z, 0, 0, 1, X, Y, Z, 0, 0, 1, -X, Y, Z, 0, 0, 1,
-    X, Y, -Z, 0, 0, -1, X, -Y, -Z, 0, 0, -1, -X, -Y, -Z, 0, 0, -1, -X, Y, -Z, 0, 0, -1,
-  ]);
-  const indices = new Int16Array([
-    0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 8, 9, 10, 10, 11, 8,
-    12, 13, 14, 14, 15, 12, 16, 17, 18, 18, 19, 16, 20, 21, 22, 22, 23, 20,
-  ]);
-  return { indices, vertices, stride, numVertices };
-}
-function  circle(r, n) {
-  const epath = [];
-  for (let i = 0; i < n; i++) {
-    const theta = (i * 2 * Math.PI) / n;
-    const s = Math.sin(theta);
-    const c = Math.cos(theta);
-    epath[i] = [
-      [r * c, r * s],
-      [-s, c],
-    ];
-  }
-  return epath;
-}
-function  extrude(epath, shape) {
-  const m = epath.length;
-  const n = shape.length;
-  const numVertices = m * n;
-  const vertices = new Float32Array(numVertices * 6);
-  const stride = 6 * 4;
-  const indices = new Uint16Array(numVertices * 6);
-  for (let j = 0; j < m; j++) {
-    const [[x_p, y_p], [ms_p, c_p]] = epath[j];
-    for (let i = 0; i < n; i++) {
-      const [[x_s, y_s], [ms_s, c_s]] = shape[i];
-      const k = j * n + i;
-      vertices[k * 6 + 0] = x_p + x_s * c_p;
-      vertices[k * 6 + 1] = y_p - x_s * ms_p;
-      vertices[k * 6 + 2] = y_s;
-      vertices[k * 6 + 3] = c_s * c_p;
-      vertices[k * 6 + 4] = -c_s * ms_p;
-      vertices[k * 6 + 5] = -ms_s;
-      indices[k * 6 + 0] = j * n + i;
-      indices[k * 6 + 1] = ((j + 1) % m) * n + ((i + 1) % n);
-      indices[k * 6 + 2] = j * n + ((i + 1) % n);
-      indices[k * 6 + 3] = j * n + i;
-      indices[k * 6 + 4] = ((j + 1) % m) * n + i;
-      indices[k * 6 + 5] = ((j + 1) % m) * n + ((i + 1) % n);
-    }
-  }
-  return { indices, vertices, stride, numVertices };
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["geometry.js"] = {cube,circle,extrude} ;
-})(window);
-(function(global) {
-/** Cookie-cutter outlines. turtlePath is [length, angleDegrees]. */
-const  cookiecutters= {
-  outlines: {
-    Star: {
-      turtlePath: [
-        [2, -58], [8, 0], [3.2, 130], [8, 0],
-        [2, -58], [8, 0], [3.2, 130], [8, 0],
-        [2, -58], [8, 0], [3.2, 130], [8, 0],
-        [2, -58], [8, 0], [3.2, 130], [8, 0],
-        [2, -58], [8, 0], [3.2, 130], [8, 0],
-      ],
-    },
-    Plain: {
-      startPoint: [10, 0],
-      startAngle: 90,
-      turtlePath: [[62.83185, 360]],
-    },
-    Scalloped: {
-      turtlePath: [
-        [1, -110], [2, 150], [1, -110], [2, 150],
-        [1, -110], [2, 150], [1, -110], [2, 150],
-        [1, -110], [2, 150], [1, -110], [2, 150],
-        [1, -110], [2, 150], [1, -110], [2, 150],
-        [1, -110], [2, 150],
-      ],
-    },
-    Heart: {
-      startAngle: 180,
-      turtlePath: [
-        [0.45, -45], [10, 180], [6.91, -10], [1.1, 110],
-        [6.91, -10], [10, 180], [0.45, -45],
-      ],
-    },
-    Duck: {
-      startAngle: 180,
-      turtlePath: [
-        [0.4, -10], [13.297, 25], [3, -80], [4, 160],
-        [22.913, 90], [15, 90], [5, -90], [5, 20],
-        [3, 170], [2, -20], [3, -90], [15, 220], [5, -125],
-      ],
-    },
-    Tree: {
-      startAngle: 180,
-      turtlePath: [
-        [0.75, 40], [3, 0], [1.5, 140], [0.6, 0], [1, -140],
-        [3, 0], [1.5, 140], [0.6, 0], [1, -140],
-        [3, 0], [1.5, 140], [0.6, 0], [1, -140],
-        [3, 0], [1.5, 140], [11.431, 0],
-        [1.5, 140], [3, 0], [1, -140], [0.6, 0],
-        [1.5, 140], [3, 0], [1, -140], [0.6, 0],
-        [1.5, 140], [3, 0], [1, -140], [0.6, 0],
-        [1.5, 140], [3, 0], [0.75, 40],
-      ],
-    },
-    Blade: {
-      startPoint: [-1.8, 0],
-      startAngle: 0,
-      turtlePath: [
-        [3.6, 0], [0, 45], [0.661522368915, 0], [3, 90], [2.5, 0],
-        [0, -43.5679], [10, 0], [0, 88.5679], [0.5, 0], [0, 88.5679],
-        [10, 0], [0, -43.5679], [2.5, 0], [3, 90], [0.661522368915, 0], [0, 45],
-      ],
-    },
-    L: {
-      turtlePath: [
-        [8, 0], [0, 90], [4, 0], [0, 90], [8, 0], [0, -180],
-        [8, 0], [0, 90], [4, 0], [0, 90], [8, 0], [0, 90],
-        [8, 0], [0, -90], [16, 0], [0, 90], [8, 0], [0, 90],
-        [4, 0], [0, 90], [8, 0], [0, -180], [8, 0], [0, 90],
-        [4, 0], [0, 90], [8, 0], [0, -180], [8, 0], [0, 90],
-        [4, 0], [0, 90], [8, 0], [0, -180], [8, 0], [0, 90],
-        [4, 0], [0, 90], [8, 0], [0, -180], [8, 0], [0, 90],
-        [4, 0], [0, 90], [16, 0], [0, -180], [16, 0], [0, 90],
-        [4, 0], [0, 90], [4, 0], [0, 90], [24, 0], [0, -180],
-        [24, 0], [0, 90], [4, 0], [0, 90], [8, 0], [0, -180],
-      ],
-    },
-    A: {
-      turtlePath: [
-        [0, 70], [0.4, 0], [0, -70], [0.41, 0], [0, 180], [0.41, 0],
-        [0, -110], [0.6, 0], [0, -140], [1, 0], [0, 70],
-      ],
-    },
-    B: {
-      turtlePath: [
-        [0, 90], [1, 0], [0, -90], [0.25, 0], [0.684, -180], [0.25, 0],
-        [0, 180], [0.25, 0], [0.896, -180], [0.25, 0], [0, 180],
-      ],
-    },
-  },
-};
-const  OUTLINE_NAMES= Object.keys(cookiecutters.outlines);
-function  getOutline(name) {
-  const o = cookiecutters.outlines[name];
-  if (!o) return null;
-  return {
-    name,
-    startPoint: o.startPoint ? o.startPoint.slice() : [0, 0],
-    startAngle: o.startAngle ?? 0,
-    turtlePath: o.turtlePath.map(([l, a]) => [l, a]),
-  };
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["cookiecutters.js"] = {cookiecutters,OUTLINE_NAMES,getOutline} ;
-})(window);
-(function(global) {
-// Column major matrix functions
-const {sin,cos,sqrt,tan,PI}=Math,
-       pi=PI;
-function  xRot(a){
-  const s=sin(a);
-  const c=cos(a);
-  return [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1];
-}
-function  yRot(a){
-  const s=sin(a);
-  const c=cos(a);
-  return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1];
-}
-function  zRot(a){
-  const s=sin(a);
-  const c=cos(a);
-  return [c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-}
-function  vRot([x,y,z],theta){
-  x??=0; y??=0; z??=0;
-  const length = sqrt(x*x + y*y + z*z);
-  if (length==0) {
-    if (theta===undefined){ 
-       return [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
-    }
-    else {
-       throw new Error("Rotation axis vector cannot be zero if a rotation angle is specified!");
-    }
-  }
-  if (theta===undefined) theta=length;
-  const c=cos(theta);
-  const c1=1-c;
-  const s=sin(theta);
-  x/=length;
-  y/=length;
-  z/=length;
-  return[c + c1*x**2, c1*x*y + s*z, c1*x*z - s*y, 0, c1*x*y - s*z, c + c1*y**2, c1*y*z + s*x, 0, c1*x*z + s*y, c1*y*z - s*x, c + c1*z**2, 0, 0, 0, 0, 1];
-}
-function  tLat([tx,ty,tz]){
-  tx??=0; ty??=0; tz??=0;
-  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
-}
-function  scal([sx, sy, sz]) {
-  sx??=1; sy??=1; sz??=1;
-  return [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1];
-}
-function  T(A){
-  return new Float32Array([A[0], A[4], A[8], A[12], A[1], A[5], A[9], A[13], A[2], A[6], A[10], A[14], A[3], A[7], A[11], A[15]]);
-}
-function  mMul(B,A){
-  const C=new Array(16);
-  let sum;
-  for (let i=0;i<4;++i)
-    for (let j=0;j<4;++j){
-      sum=0;
-      for (let k=0;k<4;++k)
-        sum+= B[i + 4*k] * A[4*j + k];
-      C[i + 4*j] = sum;
-    }
-  return C;
-}
-function  vMul(A,[x0,x1,x2,x3]){
-  x0??=0; x1??=0; x2??=0; x3??=0;
-  return new Float32Array([A[0]*x0+A[4]*x1+A[8]*x2+A[12]*x3, A[1]*x0+A[5]*x1+A[9]*x2+A[13]*x3, A[2]*x0+A[6]*x1+A[10]*x2+A[14]*x3, A[3]*x0+A[7]*x1+A[11]*x2+A[15]*x3]);
-}
-function   persp(fov, aspR, near, far) {
-  const f = tan(pi * 0.5 - 0.5 * fov);
-  const nfInv = 1.0 / (near - far);
-  return [f/aspR, 0, 0, 0, 0, f, 0, 0, 0, 0, nfInv*(far + near), -1, 0, 0, 2*far*near*nfInv, 0];
-}
-function  cMaj(A){return A;}
-function  rMaj(A){return T(A);}
-function  camMat([tx,ty,tz],azim,elev,d){
-  // The function camMat calculates the camera matrix (similar to lookAt, but with different input parameters)
-  // tx,ty,tz: target coordinates
-  // azim: azimuth angle in radians
-  // elev: elevation angle in radians
-  // d: distance of camera from target. 
-  tx??=0; ty??=0; tz??=0; d??=0;
-  const s=sin(azim),
-        c=cos(azim),
-        se=sin(elev),
-        ce=cos(elev);
-  return new Float32Array([-s, -c*se, c*ce, 0, c, -s*se, ce*s, 0, 0, ce, se, 0, -c*ty + s*tx, c*se*tx - ce*tz + s*se*ty, -c*ce*tx - ce*s*ty - d - se*tz, 1])
-};
-function  icamMat(t,C,d){
-  // The function icamMat calculates the inverse of the camera matrix for a given camera matrix
-  // t: target coordinates
-  // C: camera matrix
-  // d: distance of camera from target. 
-  d??=0;
-  return new Float32Array([C[0], C[4], C[8], 0, C[1], C[5], C[9], 0, C[2], C[6], C[10], 0, C[2]*d+t[0]??0, C[6]*d+t[1]??0, C[10]*d+t[2]??0, 1])
-};
-function  camPos(targ,camMat,d){
-  //camera position in world coordinates  // tx,ty,tz: target coordinates
-  // camMat: camera matrix
-  // d: distance of camera from target. 
-  const [tx,ty,tz]=targ;
-  const ex=camMat[2], ey=camMat[6], ez=camMat[10];
-  return [tx+ex*d,ty+ey*d,tz+ez*d,1];
-};
-
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["m4.js"] = {xRot,yRot,zRot,vRot,tLat,scal,T,mMul,vMul,persp,cMaj,rMaj,camMat,icamMat,camPos} ;
-})(window);
-(function(global) {
-/**
- * WebGL cookie-cutter preview: extrude(outline, fixed Blade).
- *
- *   const view = new WebGLCutter(canvas);
- *   view.setOutline(outline, { scale: 11 });
- *   view.setAnimate(true);
- *   view.destroy();
- */
-let { extrude } = modules["geometry.js"];
-let { getOutline } = modules["cookiecutters.js"];
-let { outlineToEpath, centerEpath, boundsOf } = modules["path-utils.js"];
-let M4 = modules["m4.js"];
-
-const DEG = Math.PI / 180;
-
-const vertexShaderSource = `
+        .curve-tools button[aria-pressed="true"] {
+          background: #7a9e96; color: #12110f; border-color: transparent;
+        }
+        .curve-tools button.action { font-weight: 700; }
+        .curve-tools input { text-align: center; }
+        .curve-close-status {
+          position: absolute; left: 8px; top: 8px; z-index: 3;
+          font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+          color: #6b3b32; background: color-mix(in oklab, #f3ead8 80%, transparent);
+          border-radius: 6px; padding: 3px 7px; pointer-events: none;
+        }
+        .curve-close-status.ok { color: #2f7a4a; }
+      `;document.head.appendChild(style);}
+const bar=document.createElement("div");bar.className="curve-tools";bar.innerHTML=`
+      <div class="grp">
+        <button type="button" data-tool="pan" title="Pan view">Pan</button>
+        <button type="button" data-action="fit" title="Fit path in view">Fit</button>
+      </div>
+      <div class="gap"></div>
+      <div class="grp">
+        <button type="button" data-tool="select" title="Select only">Select</button>
+        <button type="button" data-tool="add" title="Add arc">Add</button>
+        <button type="button" data-tool="arc" title="Edit one arc">Arc</button>
+        <button type="button" data-tool="p" title="Biarc family p">p</button>
+        <input data-pval type="number" step="0.1" value="1" title="p" />
+        <button type="button" data-tool="locus" title="Drag junction on locus">Locus</button>
+        <button type="button" data-tool="move" title="Move joint, keep heading">Move</button>
+        <button type="button" data-tool="tan" title="Rotate heading, keep joint">Tan</button>
+      </div>
+      <div class="gap"></div>
+      <div class="grp">
+        <select data-close-mode title="Close method">
+          <option value="ends">Ends</option>
+          <option value="last-two">Tail</option>
+          <option value="append">Cap</option>
+          <option value="spread">Sprd</option>
+          <option value="corner">Corn</option>
+        </select>
+        <button type="button" data-action="close" class="action" title="Close path">Close</button>
+        <button type="button" data-action="split" title="Split selected arc">Split</button>
+        <button type="button" data-action="insert" title="Insert dummy arc">Ins</button>
+        <button type="button" data-action="del" title="Delete selected arc">Del</button>
+        <button type="button" data-action="undo" title="Undo last committed edit">Undo</button>
+      </div>
+    `;bar.addEventListener("pointerdown",(e)=>e.stopPropagation());bar.addEventListener("click",(e)=>{const btn=e.target.closest("button");if(!btn) return;if(btn.dataset.tool) this.setTool(btn.dataset.tool);if(btn.dataset.action==="close") this.closePath({mode:this.closeMode});if(btn.dataset.action==="split") this.splitSegment();if(btn.dataset.action==="insert") this.insertSegment();if(btn.dataset.action==="del") this.deleteSegment();if(btn.dataset.action==="fit") this.fit();if(btn.dataset.action==="undo") this.undo();});const modeSel=bar.querySelector("[data-close-mode]");if(modeSel){modeSel.value=this.closeMode;modeSel.addEventListener("change",()=>this.setCloseMode(modeSel.value));}
+const pIn=bar.querySelector("[data-pval]");if(pIn){pIn.addEventListener("change",()=>{const v=Number(pIn.value);if(!Number.isFinite(v)) return;this.pVal=v;if(SPAN2.has(this.tool)||this.tool==="p"){this._beginSpan();const localJ=1;const next=applyBiarc(this._span||this.outline,localJ,{p:v});if(this._span) this._previewSpan(next);else this.outline=next;this._endSpan(true);this.redraw();}});}
+const shell=document.createElement("div");shell.className="curve-shell";const stage=document.createElement("div");stage.className="curve-stage";parent.insertBefore(shell,this.canvas);shell.appendChild(bar);shell.appendChild(stage);stage.appendChild(this.canvas);this._shell=shell;this._tools=bar;const status=document.createElement("div");status.className="curve-close-status";stage.appendChild(status);this._status=status;this._syncToolButtons();}
+_syncToolButtons(){if(!this._tools) return;this._tools.querySelectorAll("[data-tool]").forEach((btn)=>{btn.setAttribute("aria-pressed",btn.dataset.tool===this.tool?"true":"false");});}
+_syncStatus(info){if(!this._status) return;if(!info||info.n===0){this._status.textContent="";return;}
+const bi=this.outline._biarc;const pBit=bi?bi.pR !=null?` · pL ${fmtP(bi.pL)} pR ${fmtP(bi.pR)}`:` · p ${fmtP(bi.p)}`:"";if(info.g1){this._status.className="curve-close-status ok";this._status.textContent="closed · G1"+pBit;return;}
+this._status.className="curve-close-status";const gap=info.gap<0.001?info.gap.toExponential(2):info.gap.toFixed(3);this._status.textContent=`gap ${gap} · Δθ ${info.dHeadingDeg.toFixed(2)}°`+pBit;}
+worldFromEvent(e){const rect=this.canvas.getBoundingClientRect();const sx=e.clientX-rect.left-rect.width/2;const sy=e.clientY-rect.top-rect.height/2;return[this.view.cx+sx/this.view.scale,this.view.cy-sy/this.view.scale,];}
+_onPtrDown(e){this.canvas.setPointerCapture(e.pointerId);this._pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});this._moved=false;if(this._pointers.size===2){const pts=[...this._pointers.values()];this._pinch={dist:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),scale:this.view.scale,};this._drag=null;return;}
+if(e.button===1||e.shiftKey||e.altKey||this.tool==="pan"){this._drag={mode:"pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};return;}
+const world=this.worldFromEvent(e);const samples=walkPath(this.outline,{scale:1,tol:0.04,returnStart:true});const vertices=vertexList(samples,this.outline);const tol=HIT_PX/this.view.scale;const addPt=addHandlePoint(samples,ADD_PX/this.view.scale);const hitAdd=this.tool==="add"&&addPt&&Math.hypot(addPt[0]-world[0],addPt[1]-world[1])<tol;const hitV=hitVertex(vertices,world,tol);const n=this.outline.turtlePath.length;let idx=this.editIdx;let append=false;const lockJoint=JOINT_LOCK.has(this.tool);if(this.tool==="add"&&(hitAdd||hitV<0)){this.outline.turtlePath.push([0,0]);idx=this.outline.turtlePath.length-1;append=true;} else if(hitV>=0){idx=hitV===0?0:hitV-1;} else if(!lockJoint){const hitSeg=hitSegment(samples,world,tol*1.4);if(hitSeg>=0){idx=hitSeg;} else{this._drag={mode:"pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};return;}} else{const hitSeg=hitSegment(samples,world,tol*1.4);if(hitSeg<0){this._drag={mode:"pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};return;}}
+if(!lockJoint||hitV>=0||append){this.editIdx=idx;this.joint=hitV>=0?hitV:idx+1;this.onSelect(idx);}
+if(this.tool==="select"){this._drag={mode:"maybe-pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};this.redraw();return;}
+if(this.tool==="p"){this.pVal=recoverP(this.outline,this.joint);const pIn=this._tools?.querySelector("[data-pval]");if(pIn) pIn.value=String(roundN(this.pVal,3));this._drag={mode:"maybe-pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};this.redraw();return;}
+const startState=stateBefore(this.outline,idx);const endPt=vertices[idx+1]||vertices[vertices.length-1];if(this.tool==="arc"||this.tool==="add"){this._span0=this.getOutline();this._drag={mode:"edit",idx,append,start:startState.point,heading:startState.heading,ox:endPt[0]-world[0],oy:endPt[1]-world[1],sx:e.clientX,sy:e.clientY,armed:false,};this.redraw();return;}
+if(this.tool==="locus"){this._beginSpan();const loc=locusCircle(this.outline,this.joint);const Pm=loc?.Pm?arr(loc.Pm):jointPose(this.outline,this.joint===n?0:this.joint).point;this._drag={mode:"locus",j:this.joint,localJ:1,loc,ox:Pm[0]-world[0],oy:Pm[1]-world[1],sx:e.clientX,sy:e.clientY,armed:false,};this.redraw();return;}
+if(SPAN4.has(this.tool)){this._beginSpan();const jp=jointPose(this.outline,this.joint===n?0:this.joint);const tick=STEM_PX/this.view.scale;const tx=jp.point[0]+Math.cos(jp.heading)*tick;const ty=jp.point[1]+Math.sin(jp.heading)*tick;const tangent=this.tool==="tan";const q=quadIdx(this.joint,n);this._pL=q?recoverP(this.outline,q[1]):1;this._pR=q?recoverP(this.outline,q[3]):1;const hx=tangent?tx:jp.point[0];const hy=tangent?ty:jp.point[1];this._drag={mode:tangent?"tangent":"vertex",j:this.joint,localJ:2,P:jp.point.slice(),θ:jp.heading,ox:hx-world[0],oy:hy-world[1],sx:e.clientX,sy:e.clientY,armed:false,};this.redraw();return;}
+this._drag={mode:"maybe-pan",x:e.clientX,y:e.clientY,cx:this.view.cx,cy:this.view.cy};this.redraw();}
+_onPtrMove(e){if(this._pointers.has(e.pointerId)){this._pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});}
+if(this._pointers.size>=2&&this._pinch){const pts=[...this._pointers.values()];const dist=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);this.view.scale=Math.max(2,Math.min(120,this._pinch.scale*(dist/Math.max(this._pinch.dist,1))));this.redraw();return;}
+if(!this._drag) return;this._moved=true;if(this._drag.mode==="pan"){const dx=e.clientX-this._drag.x;const dy=e.clientY-this._drag.y;this.view.cx=this._drag.cx-dx/this.view.scale;this.view.cy=this._drag.cy+dy/this.view.scale;this.redraw();return;}
+if(this._drag.mode==="maybe-pan"){const d=Math.hypot(e.clientX-this._drag.x,e.clientY-this._drag.y);if(d<SLOP_PX) return;this._drag={mode:"pan",x:this._drag.x,y:this._drag.y,cx:this._drag.cx,cy:this._drag.cy};return;}
+if(this._drag.armed===false){const d=Math.hypot(e.clientX-this._drag.sx,e.clientY-this._drag.sy);if(d<SLOP_PX) return;this._drag.armed=true;}
+const raw=this.worldFromEvent(e);const world=[raw[0]+(this._drag.ox||0),raw[1]+(this._drag.oy||0)];try{if(this._drag.mode==="locus"){const loc=this._drag.loc;let P=xy(world);if(loc?.c&&Number.isFinite(loc.r)) P=projectToCircle(loc.c,loc.r,P);const src=this._span||this.outline;const j=this._span?this._drag.localJ:this._drag.j;const next=applyBiarc(src,j,{P});if(this._span) this._previewSpan(next);else this.outline=next;this.redraw();return;}
+if(this._drag.mode==="vertex"){this._drag.P=world.slice();const src=this._span||this.outline;const j=this._span?this._drag.localJ:this._drag.j;const next=applyVertexStable(src,j,this._drag.P,this._drag.θ,this._pL,this._pR);if(this._span) this._previewSpan(next);else this.outline=next;this.redraw();return;}
+if(this._drag.mode==="tangent"){const P=this._drag.P;this._drag.θ=Math.atan2(world[1]-P[1],world[0]-P[0]);const src=this._span||this.outline;const j=this._span?this._drag.localJ:this._drag.j;const next=applyVertexStable(src,j,P,this._drag.θ,this._pL,this._pR);if(this._span) this._previewSpan(next);else this.outline=next;this.redraw();return;}
+if(this._drag.mode !=="edit") return;const{len,ang}=fitArc(this._drag.start,this._drag.heading,world);const idx=this._drag.idx;if(idx>=0){this.outline.turtlePath[idx]=[roundN(len,4),roundN(ang,3)];this._liveSummary=this._describeChange(this._span0||this.outline,this.outline);this._note("live",this._liveSummary);}} catch(err){this._note("err",err?.message||String(err),{stack:err?.stack});}
+this.redraw();}
+_onPtrUp(e){this._pointers.delete(e.pointerId);if(this._pointers.size<2) this._pinch=null;const mode=this._drag?.mode;const edited=mode&&mode !=="pan"&&mode !=="maybe-pan"&&this._drag.armed !==false;if(mode==="edit"&&this._drag.append){const segs=this.outline.turtlePath;const idx=this._drag.idx;const last=segs[idx];if(last&&Math.abs(last[0])<1e-3&&Math.abs(last[1])<1e-3){segs.splice(idx,1);this.editIdx=segs.length?segs.length-1:-1;this.onSelect(this.editIdx);}}
+if(this._base) this._endSpan(!!edited);else if(edited) this._commit(this.tool==="add"?"add":this.tool);this._drag=null;this.redraw();}
+_onWheel(e){e.preventDefault();const factor=e.deltaY<0?1.08:1/1.08;this.view.scale=Math.max(2,Math.min(120,this.view.scale*factor));this.redraw();}
+redraw(){if(this._raf) return;this._raf=requestAnimationFrame(()=>{this._raf=0;this._paint();});}
+_size(){const dpr=Math.min(window.devicePixelRatio||1,2);const rect=this.canvas.getBoundingClientRect();const w=Math.max(1,Math.round(rect.width*dpr));const h=Math.max(1,Math.round(rect.height*dpr));if(this.canvas.width !==w||this.canvas.height !==h){this.canvas.width=w;this.canvas.height=h;}
+return{w,h,dpr};}
+_paint(){const{ctx}=this;const{w,h,dpr}=this._size();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,w,h);const paper=getCss("--color-paper","#f3ead8");const ink=getCss("--color-ink","#2a241c");const accent=getCss("--color-primary","#7a9e96");ctx.fillStyle=paper;ctx.fillRect(0,0,w,h);ctx.setTransform(this.view.scale*dpr,0,0,-this.view.scale*dpr,w/2-this.view.cx*this.view.scale*dpr,h/2+this.view.cy*this.view.scale*dpr,);this._drawGrid(ctx);const overlay=this._base&&this._span;const samples=walkPath(this.outline,{scale:1,tol:0.03,returnStart:true});if(!samples.length) return;ctx.lineJoin="round";ctx.lineCap="round";if(overlay){const frozen=walkPath(this._base,{scale:1,tol:0.03,returnStart:true});const hide=new Set(this._span.indices);ctx.strokeStyle="rgba(42,36,28,0.28)";ctx.lineWidth=1.4/this.view.scale;strokePath(ctx,frozen,(s)=>!hide.has(s.segmentIndex));const over=walkPath(this._span,{scale:1,tol:0.03,returnStart:true});ctx.strokeStyle="#6b3b9a";ctx.lineWidth=3.2/this.view.scale;strokePath(ctx,over,()=>true);} else{ctx.strokeStyle=ink;ctx.lineWidth=1.6/this.view.scale;strokePath(ctx,samples,()=>true);}
+const span=new Set(this.span());if(span.size&&!overlay){ctx.strokeStyle=accent;ctx.lineWidth=3.4/this.view.scale;ctx.beginPath();let pen=false;let prev=samples[0].point;for(const s of samples){if(span.has(s.segmentIndex)){if(!pen){ctx.moveTo(prev[0],prev[1]);pen=true;}
+ctx.lineTo(s.point[0],s.point[1]);} else{pen=false;}
+prev=s.point;}
+ctx.stroke();}
+const vertices=vertexList(samples,this.outline);const r=4.2/this.view.scale;vertices.forEach((p,i)=>{const last=i===vertices.length-1;const sel=i===this.editIdx+1;ctx.fillStyle=i===0?"#2f7a4a":last?"#a33b2b":sel?accent:ink;disc(ctx,p[0],p[1],sel||last||i===0?r*1.25:r);});const info=closureInfo(this.outline);this._syncStatus(info);this._drawClosure(ctx,info,paper);this._drawToolHandles(ctx,paper,r);const end=vertices[vertices.length-1];const tail=samples[samples.length-1];if(end&&tail&&this.tool==="add"){const add=addHandlePoint(samples,ADD_PX/this.view.scale);ctx.strokeStyle="#a33b2b";ctx.lineWidth=1.4/this.view.scale;ctx.beginPath();ctx.moveTo(end[0],end[1]);ctx.lineTo(add[0],add[1]);ctx.stroke();ctx.fillStyle=paper;disc(ctx,add[0],add[1],r*1.15);ctx.strokeStyle="#a33b2b";ctx.beginPath();ctx.arc(add[0],add[1],r*1.15,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(add[0]-r*0.7,add[1]);ctx.lineTo(add[0]+r*0.7,add[1]);ctx.moveTo(add[0],add[1]-r*0.7);ctx.lineTo(add[0],add[1]+r*0.7);ctx.stroke();}}
+_drawToolHandles(ctx,paper,r){const n=this.outline.turtlePath.length;if(n<2) return;const j=this.joint;const jp=jointPose(this.outline,j===n?0:j);const sc=this.view.scale;if(this.tool==="locus"||this.tool==="p"){const loc=locusCircle(this.outline,j);if(loc?.c&&Number.isFinite(loc.r)&&loc.r<1e4){ctx.save();ctx.strokeStyle="rgba(122,158,150,0.55)";ctx.setLineDash([5/sc,4/sc]);ctx.lineWidth=1.2/sc;ctx.beginPath();ctx.arc(loc.c.x,loc.c.y,loc.r,0,Math.PI*2);ctx.stroke();ctx.restore();}
+const Pm=this.outline._biarc?.Pm||jp.point;ctx.fillStyle="#6b3b9a";disc(ctx,Pm[0],Pm[1],r*1.05);if(this.tool==="locus"){let hx=Pm[0];let hy=Pm[1]+STEM_PX/sc;if(loc?.c){const vx=Pm[0]-loc.c.x;const vy=Pm[1]-loc.c.y;const L=Math.hypot(vx,vy)||1;hx=Pm[0]+(vx/L)*(STEM_PX/sc);hy=Pm[1]+(vy/L)*(STEM_PX/sc);}
+ctx.strokeStyle="#6b3b9a";ctx.lineWidth=1.4/sc;ctx.beginPath();ctx.moveTo(Pm[0],Pm[1]);ctx.lineTo(hx,hy);ctx.stroke();ctx.fillStyle=paper;disc(ctx,hx,hy,r*1.15);ctx.strokeStyle="#6b3b9a";ctx.beginPath();ctx.arc(hx,hy,r*1.15,0,Math.PI*2);ctx.stroke();}}
+if(SPAN4.has(this.tool)){const tan=this.tool==="tan";ctx.fillStyle="#6b3b9a";disc(ctx,jp.point[0],jp.point[1],r*(tan?1.1:1.35));const tick=STEM_PX/sc;const tx=jp.point[0]+Math.cos(jp.heading)*tick;const ty=jp.point[1]+Math.sin(jp.heading)*tick;ctx.strokeStyle=tan?"#6b3b9a":"rgba(107,59,154,0.45)";ctx.lineWidth=(tan?1.6:1.1)/sc;ctx.beginPath();ctx.moveTo(jp.point[0],jp.point[1]);ctx.lineTo(tx,ty);ctx.stroke();if(tan){ctx.fillStyle=paper;disc(ctx,tx,ty,r*0.95);ctx.strokeStyle="#6b3b9a";ctx.beginPath();ctx.arc(tx,ty,r*0.95,0,Math.PI*2);ctx.stroke();}}}
+_drawGrid(ctx){const step=niceStep(48/this.view.scale);const rect=this.canvas.getBoundingClientRect();const halfW=rect.width/(2*this.view.scale);const halfH=rect.height/(2*this.view.scale);const x0=this.view.cx-halfW;const x1=this.view.cx+halfW;const y0=this.view.cy-halfH;const y1=this.view.cy+halfH;ctx.strokeStyle="rgba(42,36,28,0.08)";ctx.lineWidth=1/this.view.scale;ctx.beginPath();for(let x=Math.floor(x0/step)*step;x<=x1;x+=step){ctx.moveTo(x,y0);ctx.lineTo(x,y1);}
+for(let y=Math.floor(y0/step)*step;y<=y1;y+=step){ctx.moveTo(x0,y);ctx.lineTo(x1,y);}
+ctx.stroke();ctx.strokeStyle="rgba(42,36,28,0.22)";ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(x1,0);ctx.moveTo(0,y0);ctx.lineTo(0,y1);ctx.stroke();}
+_drawClosure(ctx,info,paper){const a=info.startPoint;const b=info.endPoint;if(!a||!b) return;const tick=14/this.view.scale;ctx.lineWidth=1.3/this.view.scale;ctx.strokeStyle="#2f7a4a";headingTick(ctx,a,info.startHeading,tick);ctx.strokeStyle="#a33b2b";headingTick(ctx,b,info.endHeading,tick);if(info.g1) return;ctx.save();ctx.strokeStyle=info.g0?"rgba(122,158,150,0.85)":"rgba(163,59,43,0.85)";ctx.setLineDash([6/this.view.scale,5/this.view.scale]);ctx.lineWidth=1.5/this.view.scale;ctx.beginPath();ctx.moveTo(b[0],b[1]);ctx.lineTo(a[0],a[1]);ctx.stroke();ctx.restore();}}
+function strokePath(ctx,samples,keep){if(!samples.length) return;ctx.beginPath();let pen=false;let prev=samples[0].point;for(const s of samples){if(keep(s)){if(!pen){ctx.moveTo(prev[0],prev[1]);pen=true;}
+ctx.lineTo(s.point[0],s.point[1]);} else{pen=false;}
+prev=s.point;}
+ctx.stroke();}
+function fmtP(v){if(!Number.isFinite(v)) return "·";return Math.abs(v)>=100?v.toExponential(1):v.toFixed(2);}
+function fmtN(v,n){const x=Number(v);if(!Number.isFinite(x)) return "·";return x.toFixed(n);}
+function headingTick(ctx,p,heading,len){const c=Math.cos(heading);const s=Math.sin(heading);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0]+c*len,p[1]+s*len);ctx.stroke();}
+function normalizeOutline(o={}){return{name:o.name||"Custom",startPoint:(o.startPoint||[0,0]).slice(),startAngle:o.startAngle??0,turtlePath:(o.turtlePath||[]).map((s)=>[Number(s[0]),Number(s[1])]),};}
+function stateBefore(outline,idx){const prefix={...outline,turtlePath:outline.turtlePath.slice(0,Math.max(0,idx)),};const samples=walkPath(prefix,{scale:1,tol:0.05,returnStart:true});const last=samples[samples.length-1];const heading=last?Math.atan2(last.angle[1],last.angle[0]):(outline.startAngle??0)*DEG;return{point:last?last.point:outline.startPoint||[0,0],heading};}
+function vertexList(samples,outline){if(!samples.length) return[outline.startPoint||[0,0]];const lastOf=new Map();for(const s of samples) lastOf.set(s.segmentIndex,s.point);const verts=[samples[0].point];const keys=[...lastOf.keys()].filter((k)=>k>=0).sort((a,b)=>a-b);for(const k of keys) verts.push(lastOf.get(k));return verts;}
+function addHandlePoint(samples,dist){const last=samples[samples.length-1];if(!last) return[0,0];return[last.point[0]+last.angle[0]*dist,last.point[1]+last.angle[1]*dist];}
+function hitVertex(vertices,world,tol){let best=-1;let bestD=tol;vertices.forEach((p,i)=>{const d=Math.hypot(p[0]-world[0],p[1]-world[1]);if(d<bestD){bestD=d;best=i;}});return best;}
+function hitSegment(samples,world,tol){let best=-1;let bestD=tol;for(let i=1;i<samples.length;i++){const a=samples[i-1].point;const b=samples[i].point;const d=distToSeg(world,a,b);const idx=samples[i].segmentIndex;if(idx>=0&&d<bestD){bestD=d;best=idx;}}
+return best;}
+function distToSeg(p,a,b){const vx=b[0]-a[0];const vy=b[1]-a[1];const l2=vx*vx+vy*vy;if(l2<1e-12) return Math.hypot(p[0]-a[0],p[1]-a[1]);let t=((p[0]-a[0])*vx+(p[1]-a[1])*vy)/l2;t=Math.max(0,Math.min(1,t));return Math.hypot(p[0]-(a[0]+t*vx),p[1]-(a[1]+t*vy));}
+function disc(ctx,x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();}
+function niceStep(raw){const p=Math.pow(10,Math.floor(Math.log10(Math.max(raw,1e-6))));const n=raw/p;if(n<2) return 2*p;if(n<5) return 5*p;return 10*p;}
+function roundN(v,n){const f=10**n;return Math.round(v*f)/f;}
+function getCss(name,fallback){if(typeof getComputedStyle==="undefined"||typeof document==="undefined") return fallback;const v=getComputedStyle(document.documentElement).getPropertyValue(name).trim();return v||fallback;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["curve-editor.js"]={EDITOR_TOOLS,TOOL_ALIAS,SPAN2,SPAN4,JOINT_LOCK,CurveEditor};})(window);(function(global){function cube(dx=1,dy,dz){const numVertices=24;const stride=6*4;const X=0.5*dx;const Y=dy==null?X:dy;const Z=dz==null?X:dz;const vertices=new Float32Array([X,-Y,-Z,1,0,0,X,Y,-Z,1,0,0,X,Y,Z,1,0,0,X,-Y,Z,1,0,0,-X,Y,Z,-1,0,0,-X,Y,-Z,-1,0,0,-X,-Y,-Z,-1,0,0,-X,-Y,Z,-1,0,0,-X,Y,-Z,0,1,0,-X,Y,Z,0,1,0,X,Y,Z,0,1,0,X,Y,-Z,0,1,0,X,-Y,Z,0,-1,0,-X,-Y,Z,0,-1,0,-X,-Y,-Z,0,-1,0,X,-Y,-Z,0,-1,0,-X,-Y,Z,0,0,1,X,-Y,Z,0,0,1,X,Y,Z,0,0,1,-X,Y,Z,0,0,1,X,Y,-Z,0,0,-1,X,-Y,-Z,0,0,-1,-X,-Y,-Z,0,0,-1,-X,Y,-Z,0,0,-1,]);const indices=new Int16Array([0,1,2,2,3,0,4,5,6,6,7,4,8,9,10,10,11,8,12,13,14,14,15,12,16,17,18,18,19,16,20,21,22,22,23,20,]);return{indices,vertices,stride,numVertices};}
+function circle(r,n){const epath=[];for(let i=0;i<n;i++){const theta=(i*2*Math.PI)/n;const s=Math.sin(theta);const c=Math.cos(theta);epath[i]=[[r*c,r*s],[-s,c],];}
+return epath;}
+function extrude(epath,shape){const m=epath.length;const n=shape.length;const numVertices=m*n;const vertices=new Float32Array(numVertices*6);const stride=6*4;const indices=new Uint16Array(numVertices*6);for(let j=0;j<m;j++){const[[x_p,y_p],[ms_p,c_p]]=epath[j];for(let i=0;i<n;i++){const[[x_s,y_s],[ms_s,c_s]]=shape[i];const k=j*n+i;vertices[k*6+0]=x_p+x_s*c_p;vertices[k*6+1]=y_p-x_s*ms_p;vertices[k*6+2]=y_s;vertices[k*6+3]=c_s*c_p;vertices[k*6+4]=-c_s*ms_p;vertices[k*6+5]=-ms_s;indices[k*6+0]=j*n+i;indices[k*6+1]=((j+1)%m)*n+((i+1)%n);indices[k*6+2]=j*n+((i+1)%n);indices[k*6+3]=j*n+i;indices[k*6+4]=((j+1)%m)*n+i;indices[k*6+5]=((j+1)%m)*n+((i+1)%n);}}
+return{indices,vertices,stride,numVertices};}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["geometry.js"]={cube,circle,extrude};})(window);(function(global){const cookiecutters={outlines:{Star:{turtlePath:[[2,-58],[8,0],[3.2,130],[8,0],[2,-58],[8,0],[3.2,130],[8,0],[2,-58],[8,0],[3.2,130],[8,0],[2,-58],[8,0],[3.2,130],[8,0],[2,-58],[8,0],[3.2,130],[8,0],],},Plain:{startPoint:[10,0],startAngle:90,turtlePath:[[62.83185,360]],},Scalloped:{turtlePath:[[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],[1,-110],[2,150],],},Heart:{startAngle:180,turtlePath:[[0.45,-45],[10,180],[6.91,-10],[1.1,110],[6.91,-10],[10,180],[0.45,-45],],},Duck:{startAngle:180,turtlePath:[[0.4,-10],[13.297,25],[3,-80],[4,160],[22.913,90],[15,90],[5,-90],[5,20],[3,170],[2,-20],[3,-90],[15,220],[5,-125],],},Tree:{startAngle:180,turtlePath:[[0.75,40],[3,0],[1.5,140],[0.6,0],[1,-140],[3,0],[1.5,140],[0.6,0],[1,-140],[3,0],[1.5,140],[0.6,0],[1,-140],[3,0],[1.5,140],[11.431,0],[1.5,140],[3,0],[1,-140],[0.6,0],[1.5,140],[3,0],[1,-140],[0.6,0],[1.5,140],[3,0],[1,-140],[0.6,0],[1.5,140],[3,0],[0.75,40],],},Blade:{startPoint:[-1.8,0],startAngle:0,turtlePath:[[3.6,0],[0,45],[0.661522368915,0],[3,90],[2.5,0],[0,-43.5679],[10,0],[0,88.5679],[0.5,0],[0,88.5679],[10,0],[0,-43.5679],[2.5,0],[3,90],[0.661522368915,0],[0,45],],},L:{turtlePath:[[8,0],[0,90],[4,0],[0,90],[8,0],[0,-180],[8,0],[0,90],[4,0],[0,90],[8,0],[0,90],[8,0],[0,-90],[16,0],[0,90],[8,0],[0,90],[4,0],[0,90],[8,0],[0,-180],[8,0],[0,90],[4,0],[0,90],[8,0],[0,-180],[8,0],[0,90],[4,0],[0,90],[8,0],[0,-180],[8,0],[0,90],[4,0],[0,90],[8,0],[0,-180],[8,0],[0,90],[4,0],[0,90],[16,0],[0,-180],[16,0],[0,90],[4,0],[0,90],[4,0],[0,90],[24,0],[0,-180],[24,0],[0,90],[4,0],[0,90],[8,0],[0,-180],],},A:{turtlePath:[[0,70],[0.4,0],[0,-70],[0.41,0],[0,180],[0.41,0],[0,-110],[0.6,0],[0,-140],[1,0],[0,70],],},B:{turtlePath:[[0,90],[1,0],[0,-90],[0.25,0],[0.684,-180],[0.25,0],[0,180],[0.25,0],[0.896,-180],[0.25,0],[0,180],],},},};const OUTLINE_NAMES=Object.keys(cookiecutters.outlines);function getOutline(name){const o=cookiecutters.outlines[name];if(!o) return null;return{name,startPoint:o.startPoint?o.startPoint.slice():[0,0],startAngle:o.startAngle??0,turtlePath:o.turtlePath.map(([l,a])=>[l,a]),};}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["cookiecutters.js"]={cookiecutters,OUTLINE_NAMES,getOutline};})(window);(function(global){const{sin,cos,sqrt,tan,PI}=Math,pi=PI;function xRot(a){const s=sin(a);const c=cos(a);return[1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1];}
+function yRot(a){const s=sin(a);const c=cos(a);return[c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1];}
+function zRot(a){const s=sin(a);const c=cos(a);return[c,s,0,0,-s,c,0,0,0,0,1,0,0,0,0,1];}
+function vRot([x,y,z],theta){x??=0;y??=0;z??=0;const length=sqrt(x*x+y*y+z*z);if(length==0){if(theta===undefined){return[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];}
+else{throw new Error("Rotation axis vector cannot be zero if a rotation angle is specified!");}}
+if(theta===undefined) theta=length;const c=cos(theta);const c1=1-c;const s=sin(theta);x/=length;y/=length;z/=length;return[c+c1*x**2,c1*x*y+s*z,c1*x*z-s*y,0,c1*x*y-s*z,c+c1*y**2,c1*y*z+s*x,0,c1*x*z+s*y,c1*y*z-s*x,c+c1*z**2,0,0,0,0,1];}
+function tLat([tx,ty,tz]){tx??=0;ty??=0;tz??=0;return[1,0,0,0,0,1,0,0,0,0,1,0,tx,ty,tz,1];}
+function scal([sx,sy,sz]){sx??=1;sy??=1;sz??=1;return[sx,0,0,0,0,sy,0,0,0,0,sz,0,0,0,0,1];}
+function T(A){return new Float32Array([A[0],A[4],A[8],A[12],A[1],A[5],A[9],A[13],A[2],A[6],A[10],A[14],A[3],A[7],A[11],A[15]]);}
+function mMul(B,A){const C=new Array(16);let sum;for(let i=0;i<4;++i)
+for(let j=0;j<4;++j){sum=0;for(let k=0;k<4;++k)
+sum+=B[i+4*k]*A[4*j+k];C[i+4*j]=sum;}
+return C;}
+function vMul(A,[x0,x1,x2,x3]){x0??=0;x1??=0;x2??=0;x3??=0;return new Float32Array([A[0]*x0+A[4]*x1+A[8]*x2+A[12]*x3,A[1]*x0+A[5]*x1+A[9]*x2+A[13]*x3,A[2]*x0+A[6]*x1+A[10]*x2+A[14]*x3,A[3]*x0+A[7]*x1+A[11]*x2+A[15]*x3]);}
+function persp(fov,aspR,near,far){const f=tan(pi*0.5-0.5*fov);const nfInv=1.0/(near-far);return[f/aspR,0,0,0,0,f,0,0,0,0,nfInv*(far+near),-1,0,0,2*far*near*nfInv,0];}
+function cMaj(A){return A;}
+function rMaj(A){return T(A);}
+function camMat([tx,ty,tz],azim,elev,d){tx??=0;ty??=0;tz??=0;d??=0;const s=sin(azim),c=cos(azim),se=sin(elev),ce=cos(elev);return new Float32Array([-s,-c*se,c*ce,0,c,-s*se,ce*s,0,0,ce,se,0,-c*ty+s*tx,c*se*tx-ce*tz+s*se*ty,-c*ce*tx-ce*s*ty-d-se*tz,1])};function icamMat(t,C,d){d??=0;return new Float32Array([C[0],C[4],C[8],0,C[1],C[5],C[9],0,C[2],C[6],C[10],0,C[2]*d+t[0]??0,C[6]*d+t[1]??0,C[10]*d+t[2]??0,1])};function camPos(targ,camMat,d){const[tx,ty,tz]=targ;const ex=camMat[2],ey=camMat[6],ez=camMat[10];return[tx+ex*d,ty+ey*d,tz+ez*d,1];};if(!("modules" in global)){global["modules"]={}}
+global.modules["m4.js"]={xRot,yRot,zRot,vRot,tLat,scal,T,mMul,vMul,persp,cMaj,rMaj,camMat,icamMat,camPos};})(window);(function(global){let{extrude}=modules["geometry.js"];let{getOutline}=modules["cookiecutters.js"];let{outlineToEpath,centerEpath,boundsOf}=modules["path-utils.js"];let M4=modules["m4.js"];const DEG=Math.PI/180;const vertexShaderSource=`
 attribute vec4 a_position;
 attribute vec4 a_normal;
 uniform mat4 u_matrix;
@@ -1224,551 +431,52 @@ void main() {
   v_color.xyz += wzp*wzp * vec3(0.55, 0.70, 0.86);
   v_color.xyz += wzn*wzn * vec3(0.78, 0.72, 0.40);
 }
-`;
-
-const fragmentShaderSource = `
+`;const fragmentShaderSource=`
 precision mediump float;
 varying vec4 v_color;
 void main() { gl_FragColor = v_color; }
-`;
-class  WebGLCutter{
-  constructor(canvas, opts = {}) {
-    this.canvas = canvas;
-    this.gl = canvas.getContext("webgl", { antialias: true, alpha: false, preserveDrawingBuffer: true });
-    this.animate = opts.animate ?? true;
-    this.bladeScale = opts.bladeScale ?? 5;
-    this.outlineScale = opts.outlineScale ?? 11;
-    this.camera = {
-      fov: 30 * DEG,
-      target: [0, 0, 0],
-      azim: 30 * DEG,
-      elev: 40 * DEG,
-      dist: 400,
-    };
-    this.mesh = { vertices: new Float32Array(0), indices: new Uint16Array(0), stride: 24, numVertices: 0 };
-    this._raf = 0;
-    this._dragging = false;
-    this._prev = [0, 0];
-    this._pinchDist = 0;
-    this._listeners = [];
-
-    if (!this.gl) {
-      console.warn("WebGLCutter: WebGL not available");
-      return;
-    }
-
-    this._initGL();
-    this._bindInput();
-
-    if (opts.outline) this.setOutline(opts.outline, { scale: this.outlineScale });
-    this._loop();
-  }
-
-  setOutline(outline, { scale, bladeScale } = {}) {
-    if (scale != null) this.outlineScale = scale;
-    if (bladeScale != null) this.bladeScale = bladeScale;
-    if (!this.gl) return;
-    if (!outline?.turtlePath?.length) {
-      this.mesh = { vertices: new Float32Array(0), indices: new Uint16Array(0), stride: 24, numVertices: 0 };
-      this._upload();
-      return;
-    }
-    const epath = centerEpath(outlineToEpath(outline, { scale: this.outlineScale, tol: 0.08 }));
-    const blade = getOutline("Blade");
-    const spath = outlineToEpath(blade, { scale: this.bladeScale, tol: 0.05 });
-    this.mesh = extrude(epath, spath);
-    const b = boundsOf(epath.map(([p]) => p));
-    const zExt = boundsOf(spath.map(([p]) => p));
-    const span = Math.max(b.w, b.h, zExt.h, 40);
-    this.camera.dist = span * 2.6;
-    this.camera.target = [0, 0, 0];
-    this._upload();
-    if (!this.animate) this._draw();
-  }
-
-  setAnimate(on) {
-    const was = this.animate;
-    this.animate = !!on;
-    if (this.animate && !was) this._loop();
-  }
-
-  destroy() {
-    this.animate = false;
-    if (this._raf) cancelAnimationFrame(this._raf);
-    const c = this.canvas;
-    for (const [type, fn, opts] of this._listeners) {
-      c.removeEventListener(type, fn, opts);
-    }
-    this._ro?.disconnect();
-  }
-
-  _initGL() {
-    const gl = this.gl;
-    const vs = compile(gl, gl.VERTEX_SHADER, vertexShaderSource);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("WebGLCutter link", gl.getProgramInfoLog(program));
-    }
-    gl.useProgram(program);
-    this.program = program;
-    this.positionLoc = gl.getAttribLocation(program, "a_position");
-    this.normalLoc = gl.getAttribLocation(program, "a_normal");
-    this.matrixLoc = gl.getUniformLocation(program, "u_matrix");
-    this.vbo = gl.createBuffer();
-    this.ibo = gl.createBuffer();
-  }
-
-  _upload() {
-    const gl = this.gl;
-    if (!gl) return;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, this.mesh.vertices, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.mesh.indices, gl.STATIC_DRAW);
-  }
-
-  _bindInput() {
-    const c = this.canvas;
-    c.style.touchAction = "none";
-    const on = (type, fn, opts) => {
-      c.addEventListener(type, fn, opts);
-      this._listeners.push([type, fn, opts]);
-    };
-
-    on("pointerdown", (e) => {
-      if (e.pointerType === "touch" && e.isPrimary === false) return;
-      c.setPointerCapture(e.pointerId);
-      this._dragging = true;
-      this._prev = [e.clientX, e.clientY];
-      this.setAnimate(false);
-    });
-    on("pointermove", (e) => {
-      if (!this._dragging) return;
-      const dx = e.clientX - this._prev[0];
-      const dy = e.clientY - this._prev[1];
-      this.camera.azim = (this.camera.azim - dx * 0.008) % (Math.PI * 2);
-      this.camera.elev = Math.max(
-        -Math.PI / 2 + 0.05,
-        Math.min(Math.PI / 2 - 0.05, this.camera.elev + dy * 0.008),
-      );
-      this._prev = [e.clientX, e.clientY];
-      if (!this.animate) this._draw();
-    });
-    on("pointerup", () => {
-      this._dragging = false;
-    });
-    on("pointercancel", () => {
-      this._dragging = false;
-    });
-    on(
-      "wheel",
-      (e) => {
-        e.preventDefault();
-        this.camera.dist *= e.deltaY < 0 ? 0.92 : 1.08;
-        this.camera.dist = Math.max(40, Math.min(8000, this.camera.dist));
-        if (!this.animate) this._draw();
-      },
-      { passive: false },
-    );
-    on(
-      "touchmove",
-      (e) => {
-        if (e.touches.length === 2) {
-          e.preventDefault();
-          const d = Math.hypot(
-            e.touches[0].clientX - e.touches[1].clientX,
-            e.touches[0].clientY - e.touches[1].clientY,
-          );
-          if (this._pinchDist) {
-            this.camera.dist *= this._pinchDist / d;
-            this.camera.dist = Math.max(40, Math.min(8000, this.camera.dist));
-            if (!this.animate) this._draw();
-          }
-          this._pinchDist = d;
-        }
-      },
-      { passive: false },
-    );
-    on("touchend", () => {
-      this._pinchDist = 0;
-    });
-
-    if (typeof ResizeObserver !== "undefined") {
-      this._ro = new ResizeObserver(() => this._draw());
-      this._ro.observe(c);
-    }
-  }
-
-  _loop() {
-    const tick = () => {
-      if (!this.animate) return;
-      this.camera.azim = (this.camera.azim + 0.012) % (Math.PI * 2);
-      this._draw();
-      this._raf = requestAnimationFrame(tick);
-    };
-    this._raf = requestAnimationFrame(tick);
-  }
-
-  _draw() {
-    const gl = this.gl;
-    if (!gl) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width * dpr));
-    const h = Math.max(1, Math.round(rect.height * dpr));
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
-    gl.viewport(0, 0, w, h);
-    gl.clearColor(0.086, 0.082, 0.075, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    if (!this.mesh.indices.length) return;
-
-    gl.disable(gl.CULL_FACE);
-    gl.enable(gl.DEPTH_TEST);
-    gl.useProgram(this.program);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-    gl.enableVertexAttribArray(this.positionLoc);
-    gl.vertexAttribPointer(this.positionLoc, 3, gl.FLOAT, false, this.mesh.stride, 0);
-    gl.enableVertexAttribArray(this.normalLoc);
-    gl.vertexAttribPointer(this.normalLoc, 3, gl.FLOAT, false, this.mesh.stride, 12);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
-
-    const asp = Math.max(rect.width, 1) / Math.max(rect.height, 1);
-    const proj = M4.persp(this.camera.fov, asp, Math.max(1, this.camera.dist / 50), this.camera.dist * 4);
-    const view = M4.camMat(this.camera.target, this.camera.azim, this.camera.elev, this.camera.dist);
-    const vp = M4.mMul(proj, view);
-    gl.uniformMatrix4fv(this.matrixLoc, false, new Float32Array(vp));
-    gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_SHORT, 0);
-  }
-}
-
-function compile(gl, type, src) {
-  const sh = gl.createShader(type);
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error("WebGLCutter shader", gl.getShaderInfoLog(sh));
-  }
-  return sh;
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["webgl-cutter.js"] = {WebGLCutter} ;
-})(window);
-(function(global) {
-/**
- * Pack the cutter-es6 folder into a zip in the browser (STORE, no compression).
- * Works from standalone.html on GitHub Pages and in the Grok preview.
- */
-const  KIT_FILES= [
-  "standalone.html",
-  "cutter_anyui.html",
-  "cutter_anyui_main.js",
-  "cutter_anyui.css",
-  "cutter_anyui.ipynb",
-  "index.html",
-  "README.md",
-  "Progress.md",
-  "es6_html_to_iife_html.py",
-  "sw.js",
-  "manifest.json",
-  "icon-180.png",
-  "favicon.svg",
-  "es6/README.md",
-  "es6/turtle-graphics.js",
-  "es6/geometry.js",
-  "es6/m4.js",
-  "es6/cookiecutters.js",
-  "es6/path-utils.js",
-  "es6/curve-editor.js",
-  "es6/webgl-cutter.js",
-  "es6/curve-editor-widget.js",
-  "es6/webgl-cutter-widget.js",
-  "es6/curve-editor-cls.js",
-  "es6/webgl-cutter-cls.js",
-  "es6/path-table.js",
-  "es6/path-table-cls.js",
-  "es6/download-kit.js",
-  "anyui/index.js",
-  "anyui/anyui-model.js",
-  "anyui/anyui.css",
-  "anyui/box-cls.js",
-  "anyui/box.js",
-  "anyui/h-box-cls.js",
-  "anyui/v-box-cls.js",
-  "anyui/button-cls.js",
-  "anyui/button.js",
-  "anyui/dropdown-cls.js",
-  "anyui/dropdown.js",
-  "anyui/label-cls.js",
-  "anyui/label.js",
-  "anyui/html-cls.js",
-  "anyui/html.js",
-  "anyui/float-text-cls.js",
-  "anyui/float-text.js",
-];
-async function  downloadKit() {
-  const files = [];
-  for (const name of KIT_FILES) {
-    const res = await fetch("./" + name);
-    if (!res.ok) continue;
-    files.push({ name: "cutter-es6/" + name, data: new Uint8Array(await res.arrayBuffer()) });
-  }
-  if (!files.length) throw new Error("Could not collect kit files");
-  const zip = buildZip(files);
-  const blob = new Blob([zip], { type: "application/zip" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "cutter-es6.zip";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function buildZip(files) {
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-  for (const f of files) {
-    const name = utf8(f.name);
-    const crc = crc32(f.data);
-    const local = concat(
-      u32(0x04034b50),
-      u16(20),
-      u16(0x0800),
-      u16(0),
-      u16(0),
-      u16(0),
-      u32(crc),
-      u32(f.data.length),
-      u32(f.data.length),
-      u16(name.length),
-      u16(0),
-      name,
-      f.data,
-    );
-    locals.push(local);
-    centrals.push(
-      concat(
-        u32(0x02014b50),
-        u16(20),
-        u16(20),
-        u16(0x0800),
-        u16(0),
-        u16(0),
-        u16(0),
-        u32(crc),
-        u32(f.data.length),
-        u32(f.data.length),
-        u16(name.length),
-        u16(0),
-        u16(0),
-        u16(0),
-        u16(0),
-        u32(0),
-        u32(offset),
-        name,
-      ),
-    );
-    offset += local.length;
-  }
-  const central = concat(...centrals);
-  const end = concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(central.length), u32(offset), u16(0));
-  return concat(...locals, central, end);
-}
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(u8) {
-  let c = 0xffffffff;
-  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 255] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function utf8(s) {
-  return new TextEncoder().encode(s);
-}
-
-function u16(n) {
-  const b = new Uint8Array(2);
-  new DataView(b.buffer).setUint16(0, n, true);
-  return b;
-}
-
-function u32(n) {
-  const b = new Uint8Array(4);
-  new DataView(b.buffer).setUint32(0, n, true);
-  return b;
-}
-
-function concat(...parts) {
-  const len = parts.reduce((s, p) => s + p.length, 0);
-  const out = new Uint8Array(len);
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  return out;
-}
-
-if(!("modules" in global)){
- global["modules"]={}
-}
-global.modules["download-kit.js"] = {KIT_FILES,downloadKit} ;
-})(window);
-(function(global) {
-let { CurveEditor } = modules["curve-editor.js"];
-let { WebGLCutter } = modules["webgl-cutter.js"];
-let { getOutline, OUTLINE_NAMES } = modules["cookiecutters.js"];
-let { serializeOutline } = modules["path-utils.js"];
-let { downloadKit } = modules["download-kit.js"];
-
-      const shapeSel = document.getElementById("shape");
-      const scaleIn = document.getElementById("scale");
-      const delBtn = document.getElementById("del");
-      const rows = document.getElementById("rows");
-      for (const name of OUTLINE_NAMES.filter((n) => n !== "Blade")) {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        shapeSel.appendChild(opt);
-      }
-      const blank = document.createElement("option");
-      blank.value = "Blank";
-      blank.textContent = "Blank";
-      shapeSel.appendChild(blank);
-      shapeSel.value = "Duck";
-
-      let outline = getOutline("Duck");
-
-      const editor = new CurveEditor(document.getElementById("edit"), {
-        outline,
-        onChange(next) {
-          outline = next;
-          preview.setOutline(outline, { scale: Number(scaleIn.value) });
-          renderTable();
-        },
-        onSelect() {
-          renderTable();
-        },
-      });
-      const preview = new WebGLCutter(document.getElementById("view"), {
-        outline,
-        outlineScale: 11,
-        bladeScale: 5,
-        animate: true,
-      });
-
-      function load(name) {
-        outline =
-          name === "Blank"
-            ? { name: "Custom", startPoint: [0, 0], startAngle: 0, turtlePath: [] }
-            : getOutline(name);
-        editor.setOutline(outline, { fit: true, keepSelection: false });
-        preview.setOutline(outline, { scale: Number(scaleIn.value) });
-        renderTable();
-      }
-
-      function renderTable() {
-        const selected = editor.getSelected();
-        delBtn.disabled = outline.turtlePath.length === 0;
-        rows.innerHTML = "";
-        outline.turtlePath.forEach(([len, ang], i) => {
-          const tr = document.createElement("tr");
-          if (i === selected) tr.className = "sel";
-          tr.innerHTML = `<td>${i + 1}</td>
+`;class WebGLCutter{constructor(canvas,opts={}){this.canvas=canvas;this.gl=canvas.getContext("webgl",{antialias:true,alpha:false,preserveDrawingBuffer:true});this.animate=opts.animate??true;this.bladeScale=opts.bladeScale??5;this.outlineScale=opts.outlineScale??11;this.camera={fov:30*DEG,target:[0,0,0],azim:30*DEG,elev:40*DEG,dist:400,};this.mesh={vertices:new Float32Array(0),indices:new Uint16Array(0),stride:24,numVertices:0};this.onAnimate=opts.onAnimate||(()=>{});this._raf=0;this._dragging=false;this._prev=[0,0];this._pinchDist=0;this._listeners=[];if(!this.gl){console.warn("WebGLCutter: WebGL not available");return;}
+this._initGL();this._bindInput();if(opts.outline) this.setOutline(opts.outline,{scale:this.outlineScale});this._loop();}
+setOutline(outline,{scale,bladeScale}={}){if(scale !=null) this.outlineScale=scale;if(bladeScale !=null) this.bladeScale=bladeScale;if(!this.gl) return;if(!outline?.turtlePath?.length){this.mesh={vertices:new Float32Array(0),indices:new Uint16Array(0),stride:24,numVertices:0};this._upload();return;}
+const epath=centerEpath(outlineToEpath(outline,{scale:this.outlineScale,tol:0.08}));const blade=getOutline("Blade");const spath=outlineToEpath(blade,{scale:this.bladeScale,tol:0.05});this.mesh=extrude(epath,spath);const b=boundsOf(epath.map(([p])=>p));const zExt=boundsOf(spath.map(([p])=>p));const span=Math.max(b.w,b.h,zExt.h,40);this.camera.dist=span*2.6;this.camera.target=[0,0,0];this._upload();if(!this.animate) this._draw();}
+setAnimate(on){const next=!!on;const changed=next !==this.animate;this.animate=next;if(!next&&this._raf){cancelAnimationFrame(this._raf);this._raf=0;}
+if(next) this._loop();if(changed) this.onAnimate(next);}
+destroy(){this.animate=false;if(this._raf) cancelAnimationFrame(this._raf);const c=this.canvas;for(const[type,fn,opts] of this._listeners){c.removeEventListener(type,fn,opts);}
+this._ro?.disconnect();}
+_initGL(){const gl=this.gl;const vs=compile(gl,gl.VERTEX_SHADER,vertexShaderSource);const fs=compile(gl,gl.FRAGMENT_SHADER,fragmentShaderSource);const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS)){console.error("WebGLCutter link",gl.getProgramInfoLog(program));}
+gl.useProgram(program);this.program=program;this.positionLoc=gl.getAttribLocation(program,"a_position");this.normalLoc=gl.getAttribLocation(program,"a_normal");this.matrixLoc=gl.getUniformLocation(program,"u_matrix");this.vbo=gl.createBuffer();this.ibo=gl.createBuffer();}
+_upload(){const gl=this.gl;if(!gl) return;gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.mesh.vertices,gl.STATIC_DRAW);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,this.mesh.indices,gl.STATIC_DRAW);}
+_bindInput(){const c=this.canvas;c.style.touchAction="none";const on=(type,fn,opts)=>{c.addEventListener(type,fn,opts);this._listeners.push([type,fn,opts]);};on("pointerdown",(e)=>{if(e.pointerType==="touch"&&e.isPrimary===false) return;c.setPointerCapture(e.pointerId);this._dragging=true;this._prev=[e.clientX,e.clientY];this.setAnimate(false);});on("pointermove",(e)=>{if(!this._dragging) return;const dx=e.clientX-this._prev[0];const dy=e.clientY-this._prev[1];this.camera.azim=(this.camera.azim-dx*0.008)%(Math.PI*2);this.camera.elev=Math.max(-Math.PI/2+0.05,Math.min(Math.PI/2-0.05,this.camera.elev+dy*0.008),);this._prev=[e.clientX,e.clientY];if(!this.animate) this._draw();});on("pointerup",()=>{this._dragging=false;});on("pointercancel",()=>{this._dragging=false;});on("wheel",(e)=>{e.preventDefault();this.camera.dist*=e.deltaY<0?0.92:1.08;this.camera.dist=Math.max(40,Math.min(8000,this.camera.dist));if(!this.animate) this._draw();},{passive:false},);on("touchmove",(e)=>{if(e.touches.length===2){e.preventDefault();const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY,);if(this._pinchDist){this.camera.dist*=this._pinchDist/d;this.camera.dist=Math.max(40,Math.min(8000,this.camera.dist));if(!this.animate) this._draw();}
+this._pinchDist=d;}},{passive:false},);on("touchend",()=>{this._pinchDist=0;});if(typeof ResizeObserver !=="undefined"){this._ro=new ResizeObserver(()=>this._draw());this._ro.observe(c);}}
+_loop(){if(this._raf) cancelAnimationFrame(this._raf);const tick=()=>{if(!this.animate){this._raf=0;return;}
+this.camera.azim=(this.camera.azim+0.012)%(Math.PI*2);this._draw();this._raf=requestAnimationFrame(tick);};this._raf=requestAnimationFrame(tick);}
+_draw(){const gl=this.gl;if(!gl) return;const dpr=Math.min(window.devicePixelRatio||1,2);const rect=this.canvas.getBoundingClientRect();const w=Math.max(1,Math.round(rect.width*dpr));const h=Math.max(1,Math.round(rect.height*dpr));if(this.canvas.width !==w||this.canvas.height !==h){this.canvas.width=w;this.canvas.height=h;}
+gl.viewport(0,0,w,h);gl.clearColor(0.086,0.082,0.075,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);if(!this.mesh.indices.length) return;gl.disable(gl.CULL_FACE);gl.enable(gl.DEPTH_TEST);gl.useProgram(this.program);gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.enableVertexAttribArray(this.positionLoc);gl.vertexAttribPointer(this.positionLoc,3,gl.FLOAT,false,this.mesh.stride,0);gl.enableVertexAttribArray(this.normalLoc);gl.vertexAttribPointer(this.normalLoc,3,gl.FLOAT,false,this.mesh.stride,12);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);const asp=Math.max(rect.width,1)/Math.max(rect.height,1);const proj=M4.persp(this.camera.fov,asp,Math.max(1,this.camera.dist/50),this.camera.dist*4);const view=M4.camMat(this.camera.target,this.camera.azim,this.camera.elev,this.camera.dist);const vp=M4.mMul(proj,view);gl.uniformMatrix4fv(this.matrixLoc,false,new Float32Array(vp));gl.drawElements(gl.TRIANGLES,this.mesh.indices.length,gl.UNSIGNED_SHORT,0);}}
+function compile(gl,type,src){const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error("WebGLCutter shader",gl.getShaderInfoLog(sh));}
+return sh;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["webgl-cutter.js"]={WebGLCutter};})(window);(function(global){const KIT_FILES=["standalone.html","cutter_anyui.html","cutter_anyui_main.js","cutter_anyui.css","cutter_anyui.ipynb","index.html","README.md","Progress.md","es6_html_to_iife_html.py","sw.js","manifest.json","icon-180.png","favicon.svg","es6/README.md","es6/turtle-graphics.js","es6/geometry.js","es6/m4.js","es6/cookiecutters.js","es6/path-utils.js","es6/curve-editor.js","es6/webgl-cutter.js","es6/curve-editor-widget.js","es6/webgl-cutter-widget.js","es6/curve-editor-cls.js","es6/webgl-cutter-cls.js","es6/path-table.js","es6/path-table-cls.js","es6/download-kit.js","anyui/index.js","anyui/anyui-model.js","anyui/anyui.css","anyui/box-cls.js","anyui/box.js","anyui/h-box-cls.js","anyui/v-box-cls.js","anyui/button-cls.js","anyui/button.js","anyui/dropdown-cls.js","anyui/dropdown.js","anyui/label-cls.js","anyui/label.js","anyui/html-cls.js","anyui/html.js","anyui/float-text-cls.js","anyui/float-text.js",];async function downloadKit(){const files=[];for(const name of KIT_FILES){const res=await fetch("./"+name);if(!res.ok) continue;files.push({name:"cutter-es6/"+name,data:new Uint8Array(await res.arrayBuffer())});}
+if(!files.length) throw new Error("Could not collect kit files");const zip=buildZip(files);const blob=new Blob([zip],{type:"application/zip"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="cutter-es6.zip";a.click();URL.revokeObjectURL(a.href);}
+function buildZip(files){const locals=[];const centrals=[];let offset=0;for(const f of files){const name=utf8(f.name);const crc=crc32(f.data);const local=concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(f.data.length),u32(f.data.length),u16(name.length),u16(0),name,f.data,);locals.push(local);centrals.push(concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(f.data.length),u32(f.data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),name,),);offset+=local.length;}
+const central=concat(...centrals);const end=concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(central.length),u32(offset),u16(0));return concat(...locals,central,end);}
+const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++) c=c&1?0xedb88320 ^(c>>>1):c>>>1;t[n]=c>>>0;}
+return t;})();function crc32(u8){let c=0xffffffff;for(let i=0;i<u8.length;i++) c=CRC_TABLE[(c ^ u8[i])&255] ^(c>>>8);return(c ^ 0xffffffff)>>>0;}
+function utf8(s){return new TextEncoder().encode(s);}
+function u16(n){const b=new Uint8Array(2);new DataView(b.buffer).setUint16(0,n,true);return b;}
+function u32(n){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,true);return b;}
+function concat(...parts){const len=parts.reduce((s,p)=>s+p.length,0);const out=new Uint8Array(len);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}
+return out;}
+if(!("modules" in global)){global["modules"]={}}
+global.modules["download-kit.js"]={KIT_FILES,downloadKit};})(window);(function(global){let{CurveEditor}=modules["curve-editor.js"];let{WebGLCutter}=modules["webgl-cutter.js"];let{getOutline,OUTLINE_NAMES}=modules["cookiecutters.js"];let{serializeOutline}=modules["path-utils.js"];let{downloadKit}=modules["download-kit.js"];const shapeSel=document.getElementById("shape");const scaleIn=document.getElementById("scale");const rows=document.getElementById("rows");for(const name of OUTLINE_NAMES.filter((n)=>n !=="Blade")){const opt=document.createElement("option");opt.value=name;opt.textContent=name;shapeSel.appendChild(opt);}
+const blank=document.createElement("option");blank.value="Blank";blank.textContent="Blank";shapeSel.appendChild(blank);shapeSel.value="Duck";let outline=getOutline("Duck");const logEl=document.getElementById("log");function renderLog(rows){if(!logEl) return;const tail=(rows||[]).slice(-80);logEl.innerHTML=tail.map((r)=>{const text=r.summary||"";return `<div class="row ${r.kind}">${r.kind} · ${text}</div>`;}).join("");logEl.scrollTop=logEl.scrollHeight;}
+const origErr=console.error.bind(console);const origWarn=console.warn.bind(console);console.error=(...args)=>{origErr(...args);editor?.noteFromHost?.("err",args.map(String).join(" "));};console.warn=(...args)=>{origWarn(...args);editor?.noteFromHost?.("warn",args.map(String).join(" "));};window.addEventListener("error",(e)=>{editor?.noteFromHost?.("err",e.message||String(e.error||e));});window.addEventListener("unhandledrejection",(e)=>{editor?.noteFromHost?.("err",String(e.reason?.message||e.reason||e));});const editor=new CurveEditor(document.getElementById("edit"),{outline,onChange(next){outline=next;preview.setOutline(outline,{scale:Number(scaleIn.value)});renderTable();},onSelect(){renderTable();},onLog:renderLog,});renderLog(editor.getLog());const preview=new WebGLCutter(document.getElementById("view"),{outline,outlineScale:11,bladeScale:5,animate:true,});function load(name){outline=name==="Blank"?{name:"Custom",startPoint:[0,0],startAngle:0,turtlePath:[]}:getOutline(name);editor.setOutline(outline,{fit:true,keepSelection:false,commit:"load"});preview.setOutline(outline,{scale:Number(scaleIn.value)});renderTable();}
+function renderTable(){const selected=editor.getSelected();rows.innerHTML="";outline.turtlePath.forEach(([len,ang],i)=>{const tr=document.createElement("tr");if(i===selected) tr.className="sel";tr.innerHTML=`<td>${i + 1}</td>
             <td><input data-i="${i}" data-f="len" type="number" step="0.01" value="${len}" /></td>
-            <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}" /></td>`;
-          tr.addEventListener("click", (e) => {
-            if (e.target.tagName === "INPUT") return;
-            editor.setSelected(i);
-            renderTable();
-          });
-          rows.appendChild(tr);
-        });
-      }
-
-      rows.addEventListener("change", (e) => {
-        const t = e.target;
-        if (!(t instanceof HTMLInputElement)) return;
-        const i = Number(t.dataset.i);
-        const f = t.dataset.f;
-        const v = Number(t.value);
-        const next = outline.turtlePath.map((s) => s.slice());
-        next[i][f === "len" ? 0 : 1] = v;
-        outline = { ...outline, turtlePath: next };
-        editor.setOutline(outline);
-        editor.setSelected(i);
-        preview.setOutline(outline, { scale: Number(scaleIn.value) });
-      });
-
-      shapeSel.addEventListener("change", () => load(shapeSel.value));
-      scaleIn.addEventListener("change", () => {
-        preview.setOutline(outline, { scale: Number(scaleIn.value) });
-      });
-      document.getElementById("fit").onclick = () => editor.fit();
-      document.getElementById("insert").onclick = () => editor.insertSegment();
-      delBtn.onclick = () => editor.deleteSegment();
-      document.getElementById("exportJson").onclick = () => {
-        const blob = new Blob([serializeOutline(outline)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `${outline.name || "cutter"}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      };
-      document.getElementById("kit").onclick = () => {
-        downloadKit().catch((err) => alert(err.message || String(err)));
-      };
-      document.getElementById("spin").onclick = () => preview.setAnimate(true);
-      window.addEventListener("keydown", (e) => {
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-        if (e.key === "Delete" || e.key === "Backspace") {
-          e.preventDefault();
-          editor.deleteSegment();
-        } else if (e.key === "i" || e.key === "Insert") {
-          editor.insertSegment();
-        }
-      });
-
-      renderTable();
-    
-})(window);</script>
-<script>
-      (function () {
-        const el = document.getElementById("sw-status");
-        function set(msg) {
-          if (el) el.textContent = msg;
-        }
-        if (!("serviceWorker" in navigator) || location.protocol === "file:") {
-          set("offline: n/a (needs https)");
-          return;
-        }
-        set("offline: installing…");
-        navigator.serviceWorker
-          .register("./sw.js")
-          .then(() => navigator.serviceWorker.ready)
-          .then(() => caches.keys())
-          .then((keys) => set(keys.length ? "offline: ready" : "offline: waiting"))
-          .catch((err) => set("offline: " + (err.message || "failed")));
-      })();
-    </script>
+            <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}" /></td>`;tr.addEventListener("click",(e)=>{if(e.target.tagName==="INPUT") return;editor.setSelected(i);renderTable();});rows.appendChild(tr);});}
+rows.addEventListener("change",(e)=>{const t=e.target;if(!(t instanceof HTMLInputElement)) return;const i=Number(t.dataset.i);const f=t.dataset.f;const v=Number(t.value);const next=outline.turtlePath.map((s)=>s.slice());next[i][f==="len"?0:1]=v;outline={...outline,turtlePath:next};editor.setOutline(outline,{commit:"table"});editor.setSelected(i);preview.setOutline(outline,{scale:Number(scaleIn.value)});});shapeSel.addEventListener("change",()=>load(shapeSel.value));scaleIn.addEventListener("change",()=>{preview.setOutline(outline,{scale:Number(scaleIn.value)});});document.getElementById("exportJson").onclick=()=>{const blob=new Blob([serializeOutline(outline)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${outline.name || "cutter"}.json`;a.click();URL.revokeObjectURL(a.href);};document.getElementById("kit").onclick=()=>{downloadKit().catch((err)=>alert(err.message||String(err)));};document.getElementById("spin").onclick=()=>preview.setAnimate(true);document.getElementById("undo").onclick=()=>editor.undo();window.addEventListener("keydown",(e)=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement) return;if((e.key==="z"||e.key==="Z")&&(e.metaKey||e.ctrlKey)){e.preventDefault();editor.undo();} else if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();editor.deleteSegment();} else if(e.key==="i"||e.key==="Insert"){editor.insertSegment();}});renderTable();})(window);</script>
+<script>(function(){const el=document.getElementById("sw-status");const btn=document.getElementById("updateApp");function set(msg){if(el) el.textContent=msg;}
+if(!("serviceWorker" in navigator)||location.protocol==="file:"){set("offline: n/a (needs https)");return;}
+let refreshing=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(refreshing) return;refreshing=true;location.reload();});function offer(worker){if(!worker) return;set("offline: update available");if(btn){btn.classList.add("show");btn.onclick=()=>{worker.postMessage("skipWaiting");set("offline: updating…");};}}
+set("offline: installing…");navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"}).then((reg)=>{if(reg.waiting&&navigator.serviceWorker.controller) offer(reg.waiting);reg.addEventListener("updatefound",()=>{const w=reg.installing;if(!w) return;w.addEventListener("statechange",()=>{if(w.state==="installed"&&navigator.serviceWorker.controller) offer(w);});});return navigator.serviceWorker.ready.then(()=>{if(!btn?.classList.contains("show")) set("offline: ready");return reg.update();});}).catch((err)=>set("offline: "+(err.message||"failed")));})();</script>
 </body>
 </html>
