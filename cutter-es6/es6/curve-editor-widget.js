@@ -68,6 +68,7 @@ export function render({ model, el }) {
     else if (cmd === "close") editor.closePath({ smooth: msg.smooth !== false, mode: msg.mode });
     else if (cmd === "tool") editor.setTool(msg.tool || msg.name);
     else if (cmd === "split") editor.splitSegment(msg.at);
+    else if (cmd === "undo") editor.undo();
   };
   model.on("msg:custom", onMsg);
 

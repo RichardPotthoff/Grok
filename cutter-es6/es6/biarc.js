@@ -171,20 +171,150 @@ export function applyVertex(outline, j, P, θ, pL, pR) {
   const T = Tθ(θ);
   const Pm = xy(P);
   const A = poseToCT(poseBefore(outline, a));
-  const B = poseToCT(poseBefore(outline, d + 1));
+  const endI = d + 1 > n ? n : d + 1;
+  const B = poseToCT(poseBefore(outline, endI));
   const left = computeBiarc(A.P, A.T, Pm, T, { p: pL ?? 1 });
   const right = computeBiarc(Pm, T, B.P, B.T, { p: pR ?? 1 });
+  if (isInf(left.Pm) || isInf(right.Pm) || abs(left.Tm) < 1e-12 || abs(right.Tm) < 1e-12) {
+    return outline;
+  }
   const a0 = arcFromChord(A.P, A.T, left.Pm);
   const a1 = arcFromChord(left.Pm, left.Tm, Pm);
   const b0 = arcFromChord(Pm, T, right.Pm);
   const b1 = arcFromChord(right.Pm, right.Tm, B.P);
   let out = writePair(outline, a, b, a0, a1);
   out = writePair(out, c, d, b0, b1);
-  if (a === 0 || b === 0 || c === 0) {
+  // Only the seam pose is (P, θ). Arc 0 sitting in the quad is not the seam.
+  if (j === 0 || j === n) {
     out.startPoint = P.slice();
     out.startAngle = θ / DEG;
   }
   out._biarc = { pL: left.p, pR: right.p, P, θ, j };
+  return out;
+}
+
+export function spanLength(outline, idx) {
+  const segs = outline.turtlePath || [];
+  let s = 0;
+  for (const i of idx || []) {
+    if (segs[i]) s += Math.abs(Number(segs[i][0]));
+  }
+  return s;
+}
+
+/** p≈0 and p≈−1 are poles; same-circle recoveries often land there. */
+export function saneP(p) {
+  if (!Number.isFinite(p) || Math.abs(p) > 1e5) return 1;
+  if (Math.abs(p) < 2e-3 || Math.abs(p + 1) < 2e-3) return 1;
+  return p;
+}
+
+/** True when a rewrite collapsed, exploded, or flipped to the long way around. */
+export function spanCollapsed(before, after, idx) {
+  if (!after?.turtlePath) return true;
+  const segs = after.turtlePath;
+  const prev = before?.turtlePath || [];
+  for (const i of idx || []) {
+    const row = segs[i];
+    if (!row || !Number.isFinite(row[0]) || !Number.isFinite(row[1])) return true;
+    const d1 = Number(row[1]) * DEG;
+    const d0 = prev[i] ? Number(prev[i][1]) * DEG : 0;
+    if (Math.abs(d1) > Math.PI * 1.4 && Math.abs(d0) < Math.PI * 0.85) return true;
+  }
+  const L0 = spanLength(before, idx);
+  const L1 = spanLength(after, idx);
+  if (L0 > 1e-4 && L1 < L0 * 0.08) return true;
+  if (L1 > Math.max(L0, 1) * 3.5) return true;
+  return false;
+}
+
+/**
+ * Keep-p first; if that branch swaps or collapses, try p=1 on each side
+ * and keep the candidate whose joint stays nearest the requested P.
+ */
+export function applyVertexStable(outline, j, P, θ, pL, pR) {
+  const n = (outline.turtlePath || []).length;
+  const q = quadIdx(j, n);
+  if (!q) return outline;
+  const aKeep = saneP(pL ?? 1);
+  const bKeep = saneP(pR ?? 1);
+  const tries = [
+    [aKeep, bKeep],
+    [1, bKeep],
+    [aKeep, 1],
+    [1, 1],
+  ];
+  let best = outline;
+  let bestD = Infinity;
+  for (const [a, b] of tries) {
+    const next = applyVertex(outline, j, P, θ, a, b);
+    if (next === outline || spanCollapsed(outline, next, q)) continue;
+    const jp = jointPose(next, j === n ? 0 : j);
+    const dP = Math.hypot(jp.point[0] - P[0], jp.point[1] - P[1]);
+    const L0 = Math.max(spanLength(outline, q), 1e-6);
+    const L1 = spanLength(next, q);
+    const d = dP + 0.25 * Math.abs(L1 - L0);
+    if (d < bestD) {
+      best = next;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+export function cloneOutline(o = {}) {
+  return {
+    name: o.name || "Custom",
+    startPoint: (o.startPoint || [0, 0]).slice(),
+    startAngle: o.startAngle ?? 0,
+    turtlePath: (o.turtlePath || []).map((s) => [Number(s[0]), Number(s[1])]),
+  };
+}
+
+/** Lift 2 or 4 parent arcs into a linear snippet (wrap becomes in-order). */
+export function extractSpan(outline, indices) {
+  const n = (outline.turtlePath || []).length;
+  if (!indices?.length || !n) return null;
+  const start = poseBefore(outline, indices[0]);
+  const last = indices[indices.length - 1];
+  const end = poseBefore(outline, last + 1 > n ? n : last + 1);
+  return {
+    name: "span",
+    startPoint: start.point.slice(),
+    startAngle: start.heading / DEG,
+    turtlePath: indices.map((i) => {
+      const s = outline.turtlePath[i];
+      return [Number(s[0]), Number(s[1])];
+    }),
+    indices: indices.slice(),
+    endPoint: end.point.slice(),
+    endAngle: end.heading / DEG,
+  };
+}
+
+/** Write snippet arcs back. Parent start updates only if segment 0 is in the span. */
+export function commitSpan(parent, snippet) {
+  if (!snippet?.indices) return parent;
+  const out = cloneOutline(parent);
+  snippet.indices.forEach((pi, k) => {
+    const row = snippet.turtlePath[k];
+    if (row) out.turtlePath[pi] = [Number(row[0]), Number(row[1])];
+  });
+  const slot0 = snippet.indices.indexOf(0);
+  if (slot0 === 0) {
+    out.startPoint = snippet.startPoint.slice();
+    out.startAngle = snippet.startAngle;
+  } else if (slot0 > 0) {
+    const pre = {
+      startPoint: snippet.startPoint.slice(),
+      startAngle: snippet.startAngle,
+      turtlePath: snippet.turtlePath.slice(0, slot0),
+    };
+    const pose = poseBefore(pre, slot0);
+    out.startPoint = pose.point.slice();
+    out.startAngle = wrapPi(pose.heading) / DEG;
+  }
+  if (snippet._biarc) out._biarc = snippet._biarc;
   return out;
 }
 

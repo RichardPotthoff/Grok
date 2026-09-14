@@ -1,6 +1,6 @@
 # Cookie cutter designer — progress
 
-Handoff for the next chat. Last updated 2026-09-13 (Move / Tan split).
+Handoff for the next chat. Last updated 2026-09-14 (span overlay, seam collapse, log).
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
@@ -29,7 +29,7 @@ Sidebar **beside** the canvas (not an overlay):
 
 | View | Edit | Act | Header |
 | --- | --- | --- | --- |
-| Pan, Fit | Select, Add, Arc, p, Locus, Move, Tan | Close, Split, Ins, Del | Shape, Scale, Export, Kit |
+| Pan, Fit | Select, Add, Arc, p, Locus, Move, Tan | Close, Split, Ins, Del, Undo | Shape, Scale, Export, Kit |
 
 - **Select** picks only. Empty drag pans after slop.
 - **Add** is the only tool that shows the hollow `+` / appends.
@@ -39,12 +39,26 @@ Sidebar **beside** the canvas (not an overlay):
 - Split halves the selected arc (`s/2`, `Δθ/2`).
 - `setTool("vertex")` still aliases to **Move**.
 
-### Move + Tan (this thread)
+### Move + Tan
 
-- One Vert handle was doing two jobs; the stroke was a bigger hit target than the joint, so a tap retargeted the four-arc span.
-- **Move** (`P`, keep `θ`) and **Tan** (heading, keep `P`) call the same `applyVertex`. Different handle only.
-- **JOINT_LOCK** (`p`, `locus`, `move`, `tan`): a stroke tap does **not** change `joint`. A vertex hit still retargets. Empty space pans.
-- Move draws a solid joint disc + faint heading tick (tick is not a grab). Tan draws the stem + hollow tick as the grab.
+- **Move** (`P`, keep `θ`) and **Tan** (heading, keep `P`) call the same `applyVertex`.
+- **JOINT_LOCK** (`p`, `locus`, `move`, `tan`): a stroke tap does **not** change `joint`.
+
+### Seam collapse (fixed)
+
+`applyVertex` used to write `startPoint = P` whenever arc 0 sat in the four-arc quad. That pinned the path start onto the moving joint and the drawing collapsed. Start is rewritten only when the joint **is** the seam (`j === 0` or `j === n`).
+
+### Span overlay
+
+Move / Tan / Locus / numeric p lift the 2 or 4 arcs into a linear snippet (`extractSpan`), edit that, paint it over the frozen base, then `commitSpan`. Wrap-around is in-order on the snippet. Same overlay is the place a later Möbius should run.
+
+### p is not a perfect invariant
+
+When the pair already lies on one circle the locus degenerates (`r → ∞`, recovered `p` hits the −1 pole). A tiny Tan then jumps to the long-way-around member. `applyVertexStable` treats pole `p` as 1, tries `{kept,1}×{kept,1}`, and rejects collapse / length explosion / turn flip. If every candidate fails, the snippet stays. Guard, not a theory.
+
+### Log + undo
+
+Each committed edit is a snapshot. Footer is **arc table | log**. Undo restores the previous snapshot (replay minus the last commit). Rejected swaps log as `reject`. Header Undo and `⌘Z` / `Ctrl+Z`.
 
 ### Packaging (leave alone)
 
@@ -53,17 +67,20 @@ HTML apps, IIFE script, Carnets + Pages `_esm`, `cutter_widgets/`, Spin after dr
 ## Open interaction issues
 
 1. ~~Vert combines move and tangent.~~ Split into Move + Tan.
-2. ~~Stroke tap steals the joint in those tools.~~ JOINT_LOCK.
-3. **Thru** not in the rail. Next: bead *on* the pair; `compute_biarc(..., P=bead)` so the ink goes through the bead.
-4. Single-arc **Len vs Turn** lock still not built. Arc is still 2-DOF `fitArc` to the offset point.
-5. Insert still plants `[4, 0]`.
-6. IIFE not regenerated after these edits.
+2. ~~Stroke tap steals the joint.~~ JOINT_LOCK.
+3. ~~Seam collapse when arc 0 is in the quad.~~ Overlay + seam guard.
+4. **p / same-circle locus swap** still open. What should Move/Tan actually hold?
+5. **Thru** not in the rail.
+6. Single-arc **Len vs Turn** still not built.
+7. Insert still plants `[4, 0]`.
+8. IIFE not regenerated.
 
 ## Next conversation — pick one
 
-1. **Thru bead** on the two-arc span (`P` = point on an arc, as in the notebook).
-2. **Arc Len / Turn** as separate tools (or radial vs tangential on the stem).
-3. Only then: regenerate IIFE, push anyui fixes back, Marimo on the Pi.
+1. Stay on the p / same-circle theory if it is still biting in testing.
+2. **Thru bead** on the two-arc span.
+3. **Arc Len / Turn**.
+4. Only then IIFE / anyui / Marimo.
 
 Keep `standalone.html` as the reference.
 

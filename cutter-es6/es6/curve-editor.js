@@ -16,7 +16,7 @@ import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
 import { closePath, closureInfo, CLOSE_MODES } from "./close-path.js";
 import {
   applyBiarc,
-  applyVertex,
+  applyVertexStable,
   recoverP,
   splitSeg,
   pairIdx,
@@ -24,8 +24,12 @@ import {
   jointPose,
   locusCircle,
   projectToCircle,
-  xy,
+  extractSpan,
+  commitSpan,
+  cloneOutline,
+  spanCollapsed,
   arr,
+  xy,
 } from "./biarc.js";
 
 export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "p", "locus", "move", "tan"];
@@ -61,6 +65,12 @@ export class CurveEditor {
     const n0 = this.outline.turtlePath.length;
     this.joint = n0;
     this.pVal = 1;
+    this._base = null;
+    this._span = null;
+    this.onLog = opts.onLog || (() => {});
+    this._hist = [{ t: Date.now(), kind: "load", summary: "load", outline: this.getOutline() }];
+    this._histAt = 0;
+    this._notes = [];
 
     this._onPtrDown = this._onPtrDown.bind(this);
     this._onPtrMove = this._onPtrMove.bind(this);
@@ -121,7 +131,7 @@ export class CurveEditor {
     this.joint = i + 1;
     this.redraw();
     this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
+    this._commit("split");
     return this.editIdx;
   }
 
@@ -133,7 +143,7 @@ export class CurveEditor {
     this.editIdx = n ? n - 1 : -1;
     this.redraw();
     this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
+    this._commit(`close ${mode}`);
     return closureInfo(this.outline);
   }
 
@@ -141,12 +151,13 @@ export class CurveEditor {
     return closureInfo(this.outline);
   }
 
-  setOutline(outline, { fit = false, keepSelection = true } = {}) {
+  setOutline(outline, { fit = false, keepSelection = true, commit = false } = {}) {
     this.outline = normalizeOutline(outline);
     const n = this.outline.turtlePath.length;
     if (!keepSelection || this.editIdx >= n) this.editIdx = n ? n - 1 : -1;
     if (fit) this.fit();
     this.redraw();
+    if (commit) this._commit(typeof commit === "string" ? commit : "set", { reset: commit === "load" });
   }
 
   setSelected(idx) {
@@ -178,6 +189,94 @@ export class CurveEditor {
     };
   }
 
+  getLog() {
+    return this._notes.slice();
+  }
+
+  canUndo() {
+    return this._histAt > 0;
+  }
+
+  undo() {
+    if (!this.canUndo()) return false;
+    const last = this._hist[this._histAt];
+    this._histAt -= 1;
+    this.outline = normalizeOutline(this._hist[this._histAt].outline);
+    this._note("undo", last?.summary || "edit", { replay: this._histAt });
+    this.redraw();
+    this.onSelect(this.editIdx);
+    this.onChange(this.getOutline());
+    return true;
+  }
+
+  _note(kind, summary, extra = {}) {
+    const row = {
+      t: Date.now(),
+      kind,
+      summary,
+      tool: this.tool,
+      joint: this.joint,
+      extra,
+    };
+    this._notes.push(row);
+    if (this._notes.length > 250) this._notes.shift();
+    this.onLog(this.getLog());
+    return row;
+  }
+
+  _commit(summary, { reset = false, extra = {} } = {}) {
+    const outline = this.getOutline();
+    if (reset) {
+      this._hist = [{ t: Date.now(), kind: "load", summary, outline }];
+      this._histAt = 0;
+    } else {
+      this._hist = this._hist.slice(0, this._histAt + 1);
+      this._hist.push({ t: Date.now(), kind: "edit", summary, outline });
+      this._histAt = this._hist.length - 1;
+    }
+    this._note(reset ? "load" : "edit", summary, extra);
+    this.onChange(outline);
+  }
+
+  _spanIdx() {
+    const n = this.outline.turtlePath.length;
+    if (SPAN4.has(this.tool)) return quadIdx(this.joint, n);
+    if (SPAN2.has(this.tool)) return pairIdx(this.joint, n);
+    return null;
+  }
+
+  _beginSpan() {
+    const idx = this._spanIdx();
+    if (!idx) {
+      this._base = null;
+      this._span = null;
+      return null;
+    }
+    this._base = cloneOutline(this.outline);
+    this._span = extractSpan(this._base, idx);
+    return this._span;
+  }
+
+  _previewSpan(nextSpan) {
+    if (!this._base || !nextSpan) return false;
+    if (spanCollapsed(this._span || this._base, nextSpan, nextSpan.indices.map((_, i) => i))) {
+      this._note("reject", "collapsed span", {
+        p: nextSpan._biarc?.p ?? nextSpan._biarc?.pL,
+        pR: nextSpan._biarc?.pR,
+      });
+      return false;
+    }
+    this._span = nextSpan;
+    this.outline = commitSpan(this._base, this._span);
+    return true;
+  }
+
+  _endSpan(didEdit) {
+    this._base = null;
+    this._span = null;
+    if (didEdit) this._commit(this.tool);
+  }
+
   insertSegment(at) {
     const n = this.outline.turtlePath.length;
     const i = at == null ? (this.editIdx >= 0 ? this.editIdx + 1 : n) : at;
@@ -186,7 +285,7 @@ export class CurveEditor {
     this.editIdx = clamped;
     this.redraw();
     this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
+    this._commit("insert");
     return this.editIdx;
   }
 
@@ -200,7 +299,7 @@ export class CurveEditor {
     this.editIdx = m ? Math.min(i, m - 1) : -1;
     this.redraw();
     this.onSelect(this.editIdx);
-    this.onChange(this.getOutline());
+    this._commit("delete");
     return this.editIdx;
   }
 
@@ -317,6 +416,7 @@ export class CurveEditor {
         <button type="button" data-action="split" title="Split selected arc">Split</button>
         <button type="button" data-action="insert" title="Insert dummy arc">Ins</button>
         <button type="button" data-action="del" title="Delete selected arc">Del</button>
+        <button type="button" data-action="undo" title="Undo last committed edit">Undo</button>
       </div>
     `;
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -329,6 +429,7 @@ export class CurveEditor {
       if (btn.dataset.action === "insert") this.insertSegment();
       if (btn.dataset.action === "del") this.deleteSegment();
       if (btn.dataset.action === "fit") this.fit();
+      if (btn.dataset.action === "undo") this.undo();
     });
     const modeSel = bar.querySelector("[data-close-mode]");
     if (modeSel) {
@@ -342,8 +443,12 @@ export class CurveEditor {
         if (!Number.isFinite(v)) return;
         this.pVal = v;
         if (SPAN2.has(this.tool) || this.tool === "p") {
-          this.outline = applyBiarc(this.outline, this.joint, { p: v });
-          this.onChange(this.getOutline());
+          this._beginSpan();
+          const localJ = 1;
+          const next = applyBiarc(this._span || this.outline, localJ, { p: v });
+          if (this._span) this._previewSpan(next);
+          else this.outline = next;
+          this._endSpan(true);
           this.redraw();
         }
       });
@@ -379,14 +484,20 @@ export class CurveEditor {
       this._status.textContent = "";
       return;
     }
+    const bi = this.outline._biarc;
+    const pBit = bi
+      ? bi.pR != null
+        ? ` · pL ${fmtP(bi.pL)} pR ${fmtP(bi.pR)}`
+        : ` · p ${fmtP(bi.p)}`
+      : "";
     if (info.g1) {
       this._status.className = "curve-close-status ok";
-      this._status.textContent = "closed · G1";
+      this._status.textContent = "closed · G1" + pBit;
       return;
     }
     this._status.className = "curve-close-status";
     const gap = info.gap < 0.001 ? info.gap.toExponential(2) : info.gap.toFixed(3);
-    this._status.textContent = `gap ${gap} · Δθ ${info.dHeadingDeg.toFixed(2)}°`;
+    this._status.textContent = `gap ${gap} · Δθ ${info.dHeadingDeg.toFixed(2)}°` + pBit;
   }
 
   worldFromEvent(e) {
@@ -493,11 +604,13 @@ export class CurveEditor {
       return;
     }
     if (this.tool === "locus") {
+      this._beginSpan();
       const loc = locusCircle(this.outline, this.joint);
       const Pm = loc?.Pm ? arr(loc.Pm) : jointPose(this.outline, this.joint === n ? 0 : this.joint).point;
       this._drag = {
         mode: "locus",
         j: this.joint,
+        localJ: 1,
         loc,
         ox: Pm[0] - world[0],
         oy: Pm[1] - world[1],
@@ -509,6 +622,7 @@ export class CurveEditor {
       return;
     }
     if (SPAN4.has(this.tool)) {
+      this._beginSpan();
       const jp = jointPose(this.outline, this.joint === n ? 0 : this.joint);
       const tick = STEM_PX / this.view.scale;
       const tx = jp.point[0] + Math.cos(jp.heading) * tick;
@@ -522,6 +636,7 @@ export class CurveEditor {
       this._drag = {
         mode: tangent ? "tangent" : "vertex",
         j: this.joint,
+        localJ: 2,
         P: jp.point.slice(),
         θ: jp.heading,
         ox: hx - world[0],
@@ -582,20 +697,32 @@ export class CurveEditor {
       const loc = this._drag.loc;
       let P = xy(world);
       if (loc?.c && Number.isFinite(loc.r)) P = projectToCircle(loc.c, loc.r, P);
-      this.outline = applyBiarc(this.outline, this._drag.j, { P });
+      const src = this._span || this.outline;
+      const j = this._span ? this._drag.localJ : this._drag.j;
+      const next = applyBiarc(src, j, { P });
+      if (this._span) this._previewSpan(next);
+      else this.outline = next;
       this.redraw();
       return;
     }
     if (this._drag.mode === "vertex") {
       this._drag.P = world.slice();
-      this.outline = applyVertex(this.outline, this._drag.j, this._drag.P, this._drag.θ, this._pL, this._pR);
+      const src = this._span || this.outline;
+      const j = this._span ? this._drag.localJ : this._drag.j;
+      const next = applyVertexStable(src, j, this._drag.P, this._drag.θ, this._pL, this._pR);
+      if (this._span) this._previewSpan(next);
+      else this.outline = next;
       this.redraw();
       return;
     }
     if (this._drag.mode === "tangent") {
       const P = this._drag.P;
       this._drag.θ = Math.atan2(world[1] - P[1], world[0] - P[0]);
-      this.outline = applyVertex(this.outline, this._drag.j, P, this._drag.θ, this._pL, this._pR);
+      const src = this._span || this.outline;
+      const j = this._span ? this._drag.localJ : this._drag.j;
+      const next = applyVertexStable(src, j, P, this._drag.θ, this._pL, this._pR);
+      if (this._span) this._previewSpan(next);
+      else this.outline = next;
       this.redraw();
       return;
     }
@@ -623,7 +750,8 @@ export class CurveEditor {
         this.onSelect(this.editIdx);
       }
     }
-    if (edited) this.onChange(this.getOutline());
+    if (this._base) this._endSpan(!!edited);
+    else if (edited) this._commit(this.tool === "add" ? "add" : this.tool);
     this._drag = null;
     this.redraw();
   }
@@ -678,20 +806,30 @@ export class CurveEditor {
     );
 
     this._drawGrid(ctx);
+    const overlay = this._base && this._span;
     const samples = walkPath(this.outline, { scale: 1, tol: 0.03, returnStart: true });
     if (!samples.length) return;
 
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 1.6 / this.view.scale;
-    ctx.beginPath();
-    ctx.moveTo(samples[0].point[0], samples[0].point[1]);
-    for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].point[0], samples[i].point[1]);
-    ctx.stroke();
+    if (overlay) {
+      const frozen = walkPath(this._base, { scale: 1, tol: 0.03, returnStart: true });
+      const hide = new Set(this._span.indices);
+      ctx.strokeStyle = "rgba(42,36,28,0.28)";
+      ctx.lineWidth = 1.4 / this.view.scale;
+      strokePath(ctx, frozen, (s) => !hide.has(s.segmentIndex));
+      const over = walkPath(this._span, { scale: 1, tol: 0.03, returnStart: true });
+      ctx.strokeStyle = "#6b3b9a";
+      ctx.lineWidth = 3.2 / this.view.scale;
+      strokePath(ctx, over, () => true);
+    } else {
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = 1.6 / this.view.scale;
+      strokePath(ctx, samples, () => true);
+    }
 
     const span = new Set(this.span());
-    if (span.size) {
+    if (span.size && !overlay) {
       ctx.strokeStyle = accent;
       ctx.lineWidth = 3.4 / this.view.scale;
       ctx.beginPath();
@@ -875,6 +1013,31 @@ export class CurveEditor {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+function strokePath(ctx, samples, keep) {
+  if (!samples.length) return;
+  ctx.beginPath();
+  let pen = false;
+  let prev = samples[0].point;
+  for (const s of samples) {
+    if (keep(s)) {
+      if (!pen) {
+        ctx.moveTo(prev[0], prev[1]);
+        pen = true;
+      }
+      ctx.lineTo(s.point[0], s.point[1]);
+    } else {
+      pen = false;
+    }
+    prev = s.point;
+  }
+  ctx.stroke();
+}
+
+function fmtP(v) {
+  if (!Number.isFinite(v)) return "·";
+  return Math.abs(v) >= 100 ? v.toExponential(1) : v.toFixed(2);
 }
 
 function headingTick(ctx, p, heading, len) {
