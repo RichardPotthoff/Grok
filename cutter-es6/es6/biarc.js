@@ -61,13 +61,26 @@ export function arcFromChord(P0, T0, P1) {
   return { s, Δθ: 2 * α };
 }
 
-/**
- * One-parameter G1 family from (P0,T0) to (P1,T1).
- * Pass p, or a world point P that the curve should go through.
- */
-export function computeBiarc(P0, T0, P1, T1, { p = null, P = null } = {}) {
+function sqrtC(z, branch = 0) {
+  const r = abs(z);
+  const θ = arg(z) / 2 + branch * Math.PI;
+  return fromPolar(Math.sqrt(r), θ);
+}
+
+function scorePair(a0, a1, hint) {
+  if (hint) {
+    const d0 = hint.d0 ?? 0;
+    const d1 = hint.d1 ?? 0;
+    const s0 = hint.s0 ?? 0;
+    const s1 = hint.s1 ?? 0;
+    return (a0.Δθ - d0) ** 2 + (a1.Δθ - d1) ** 2 + 0.04 * ((a0.s - s0) ** 2 + (a1.s - s1) ** 2);
+  }
+  return Math.abs(a0.Δθ) + Math.abs(a1.Δθ) + 0.02 * (Math.abs(a0.s) + Math.abs(a1.s));
+}
+
+function computeBiarcBranch(P0, T0, P1, T1, { p = null, P = null } = {}, branch = 0) {
   const m = [C(2), C(-(P0.x + P1.x), -(P0.y + P1.y)), C(0), sub(P1, P0)];
-  let phl = unit(sqrtC(mul(T1, conj(T0))));
+  const phl = unit(sqrtC(mul(T1, conj(T0)), branch));
   const ml = [add(phl, C(1)), sub(phl, C(1)), sub(phl, C(1)), add(phl, C(1))];
   const mn = mm(ml, m);
   const [a, b, c, d] = mn;
@@ -95,13 +108,37 @@ export function computeBiarc(P0, T0, P1, T1, { p = null, P = null } = {}) {
   let Tl = dmti(xj, a, b, c, d);
   Tl = unit(Tl);
   const Popp = abs(xj) < 1e-16 ? C(inf, inf) : mti(C(-1 / xj.x, 0), a, b, c, d);
-  return { Pm, Tm, Tl, Popp, p: p̂ };
+  return { Pm, Tm, Tl, Popp, p: p̂, branch };
 }
 
-function sqrtC(z) {
-  const r = abs(z);
-  const θ = arg(z) / 2;
-  return fromPolar(Math.sqrt(r), θ);
+/**
+ * One-parameter G1 family from (P0,T0) to (P1,T1).
+ * sqrt(T1 conj(T0)) has two branches — one is the short pair, the other
+ * the long-way-around pair. Both are tried; `hint` (previous s, Δθ)
+ * picks continuity, otherwise the shorter total turn wins.
+ */
+export function computeBiarc(P0, T0, P1, T1, opts = {}) {
+  const { hint = null } = opts;
+  let best = null;
+  let bestScore = Infinity;
+  for (const br of [0, 1]) {
+    let cand;
+    try {
+      cand = computeBiarcBranch(P0, T0, P1, T1, opts, br);
+    } catch (_) {
+      continue;
+    }
+    if (!cand || isInf(cand.Pm) || abs(cand.Tm) < 1e-12) continue;
+    const a0 = arcFromChord(P0, T0, cand.Pm);
+    const a1 = arcFromChord(cand.Pm, cand.Tm, P1);
+    if (![a0.s, a0.Δθ, a1.s, a1.Δθ].every(Number.isFinite)) continue;
+    const score = scorePair(a0, a1, hint);
+    if (score < bestScore) {
+      best = { ...cand, a0, a1 };
+      bestScore = score;
+    }
+  }
+  return best || computeBiarcBranch(P0, T0, P1, T1, opts, 0);
 }
 
 export function xy(p) {
@@ -153,7 +190,14 @@ export function applyBiarc(outline, j, opts = {}) {
   const [i0, i1] = idx;
   const A = poseToCT(poseBefore(outline, i0));
   const B = poseToCT(poseBefore(outline, i1 + 1));
-  const { Pm, Tm, p } = computeBiarc(A.P, A.T, B.P, B.T, opts);
+  const segs = outline.turtlePath;
+  const hint = {
+    s0: Number(segs[i0][0]),
+    d0: Number(segs[i0][1]) * DEG,
+    s1: Number(segs[i1][0]),
+    d1: Number(segs[i1][1]) * DEG,
+  };
+  const { Pm, Tm, p } = computeBiarc(A.P, A.T, B.P, B.T, { ...opts, hint });
   if (isInf(Pm) || abs(Tm) < 1e-12) return outline;
   const a0 = arcFromChord(A.P, A.T, Pm);
   const a1 = arcFromChord(Pm, Tm, B.P);
@@ -173,8 +217,21 @@ export function applyVertex(outline, j, P, θ, pL, pR) {
   const A = poseToCT(poseBefore(outline, a));
   const endI = d + 1 > n ? n : d + 1;
   const B = poseToCT(poseBefore(outline, endI));
-  const left = computeBiarc(A.P, A.T, Pm, T, { p: pL ?? 1 });
-  const right = computeBiarc(Pm, T, B.P, B.T, { p: pR ?? 1 });
+  const segs = outline.turtlePath;
+  const hintL = {
+    s0: Number(segs[a][0]),
+    d0: Number(segs[a][1]) * DEG,
+    s1: Number(segs[b][0]),
+    d1: Number(segs[b][1]) * DEG,
+  };
+  const hintR = {
+    s0: Number(segs[c][0]),
+    d0: Number(segs[c][1]) * DEG,
+    s1: Number(segs[d][0]),
+    d1: Number(segs[d][1]) * DEG,
+  };
+  const left = computeBiarc(A.P, A.T, Pm, T, { p: pL ?? 1, hint: hintL });
+  const right = computeBiarc(Pm, T, B.P, B.T, { p: pR ?? 1, hint: hintR });
   if (isInf(left.Pm) || isInf(right.Pm) || abs(left.Tm) < 1e-12 || abs(right.Tm) < 1e-12) {
     return outline;
   }
@@ -332,7 +389,14 @@ export function recoverP(outline, j) {
   const A = poseToCT(poseBefore(outline, i0));
   const B = poseToCT(poseBefore(outline, i1 + 1));
   const Pm = xy(jointPose(outline, j === n ? 0 : j).point);
-  const { p } = computeBiarc(A.P, A.T, B.P, B.T, { P: Pm });
+  const segs = outline.turtlePath;
+  const hint = {
+    s0: Number(segs[i0][0]),
+    d0: Number(segs[i0][1]) * DEG,
+    s1: Number(segs[i1][0]),
+    d1: Number(segs[i1][1]) * DEG,
+  };
+  const { p } = computeBiarc(A.P, A.T, B.P, B.T, { P: Pm, hint });
   return p;
 }
 

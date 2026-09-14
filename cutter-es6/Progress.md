@@ -1,6 +1,6 @@
 # Cookie cutter designer — progress
 
-Handoff for the next chat. Last updated 2026-09-14 (span overlay, seam collapse, log).
+Handoff for the next chat. Last updated 2026-09-14 (sqrt branch, SW update, live log).
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
@@ -54,11 +54,15 @@ Move / Tan / Locus / numeric p lift the 2 or 4 arcs into a linear snippet (`extr
 
 ### p is not a perfect invariant
 
-When the pair already lies on one circle the locus degenerates (`r → ∞`, recovered `p` hits the −1 pole). A tiny Tan then jumps to the long-way-around member. `applyVertexStable` treats pole `p` as 1, tries `{kept,1}×{kept,1}`, and rejects collapse / length explosion / turn flip. If every candidate fails, the snippet stays. Guard, not a theory.
+When the pair already lies on one circle the locus degenerates (`r → ∞`). Worse: `sqrt(T1 conj(T0))` has two branches. One is the short 90°+90° pair, the other 270°+270°. The old solver took the long root; the collapse guard then rejected it, so Tan/Move on a 4-arc Plain circle looked frozen (no JS exception). `computeBiarc` now tries both branches and keeps the one closer to the previous `(s, Δθ)`, else the shorter total turn. `applyVertex` passes the current pair as that hint.
 
 ### Log + undo
 
-Each committed edit is a snapshot. Footer is **arc table | log**. Undo restores the previous snapshot (replay minus the last commit). Rejected swaps log as `reject`. Header Undo and `⌘Z` / `Ctrl+Z`.
+Each committed edit is a snapshot. Footer is **arc table | log**. The last line is **live** during a drag and lists which `#i s / Δθ` rows changed; on pointer-up that line becomes the commit. `console.error` / `window.onerror` / unhandled rejections also land in the log (`err`). Undo restores the previous snapshot. Header Undo and `⌘Z` / `Ctrl+Z`.
+
+### Service worker
+
+Safari was serving `cutter-offline-v1` cache-first, and HTTP-caching `sw.js`, so a normal refresh never saw new modules. Private mode has no SW, which is why it looked “fine”. `sw.js` is now `cutter-offline-v3-20260914`, HTML/JS are network-first, register uses `updateViaCache: "none"`. Header **Update app** appears when a new worker is waiting; click → `skipWaiting` → reload. After this deploy, open the Pages URL once, tap Update app if the button shows.
 
 ### Packaging (leave alone)
 
@@ -69,7 +73,7 @@ HTML apps, IIFE script, Carnets + Pages `_esm`, `cutter_widgets/`, Spin after dr
 1. ~~Vert combines move and tangent.~~ Split into Move + Tan.
 2. ~~Stroke tap steals the joint.~~ JOINT_LOCK.
 3. ~~Seam collapse when arc 0 is in the quad.~~ Overlay + seam guard.
-4. **p / same-circle locus swap** still open. What should Move/Tan actually hold?
+4. Same-circle **sqrt branch** is fixed; locus `r → ∞` / raw `p` as an invariant is still a weaker open question.
 5. **Thru** not in the rail.
 6. Single-arc **Len vs Turn** still not built.
 7. Insert still plants `[4, 0]`.

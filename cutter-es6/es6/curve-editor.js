@@ -193,6 +193,10 @@ export class CurveEditor {
     return this._notes.slice();
   }
 
+  noteFromHost(kind, summary, extra = {}) {
+    return this._note(kind, summary, extra);
+  }
+
   canUndo() {
     return this._histAt > 0;
   }
@@ -218,10 +222,47 @@ export class CurveEditor {
       joint: this.joint,
       extra,
     };
-    this._notes.push(row);
+    const last = this._notes[this._notes.length - 1];
+    if (last?.kind === "live" && (kind === "live" || kind === "edit" || kind === "reject")) {
+      this._notes[this._notes.length - 1] = row;
+    } else {
+      this._notes.push(row);
+    }
     if (this._notes.length > 250) this._notes.shift();
     this.onLog(this.getLog());
     return row;
+  }
+
+  _describeChange(before, after) {
+    if (!before || !after) return this.tool;
+    const bits = [`${this.tool} j=${this.joint}`];
+    const sp0 = before.startPoint || [0, 0];
+    const sp1 = after.startPoint || [0, 0];
+    if (Math.hypot(sp1[0] - sp0[0], sp1[1] - sp0[1]) > 1e-4 || Math.abs((after.startAngle ?? 0) - (before.startAngle ?? 0)) > 1e-3) {
+      bits.push(`start (${fmtN(sp1[0], 2)},${fmtN(sp1[1], 2)}) θ=${fmtN(after.startAngle, 1)}°`);
+    }
+    const a = before.turtlePath || [];
+    const b = after.turtlePath || [];
+    const n = Math.max(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      const u = a[i];
+      const v = b[i];
+      if (!u && v) {
+        bits.push(`#${i + 1} +[${fmtN(v[0], 2)},${fmtN(v[1], 1)}]`);
+        continue;
+      }
+      if (u && !v) {
+        bits.push(`#${i + 1} del`);
+        continue;
+      }
+      if (!u || !v) continue;
+      if (Math.abs(u[0] - v[0]) < 1e-4 && Math.abs(u[1] - v[1]) < 1e-3) continue;
+      bits.push(`#${i + 1} s ${fmtN(u[0], 2)}→${fmtN(v[0], 2)}  Δθ ${fmtN(u[1], 1)}→${fmtN(v[1], 1)}`);
+    }
+    const bi = after._biarc;
+    if (bi?.pR != null) bits.push(`pL ${fmtP(bi.pL)} pR ${fmtP(bi.pR)}`);
+    else if (bi?.p != null) bits.push(`p ${fmtP(bi.p)}`);
+    return bits.join(" · ");
   }
 
   _commit(summary, { reset = false, extra = {} } = {}) {
@@ -254,6 +295,8 @@ export class CurveEditor {
     }
     this._base = cloneOutline(this.outline);
     this._span = extractSpan(this._base, idx);
+    this._span0 = this.getOutline();
+    this._liveSummary = "";
     return this._span;
   }
 
@@ -268,13 +311,21 @@ export class CurveEditor {
     }
     this._span = nextSpan;
     this.outline = commitSpan(this._base, this._span);
+    this._liveSummary = this._describeChange(this._span0 || this._base, this.outline);
+    this._note("live", this._liveSummary, {
+      p: nextSpan._biarc?.p ?? nextSpan._biarc?.pL,
+      pR: nextSpan._biarc?.pR,
+    });
     return true;
   }
 
   _endSpan(didEdit) {
+    const summary = this._liveSummary || this.tool;
     this._base = null;
     this._span = null;
-    if (didEdit) this._commit(this.tool);
+    this._span0 = null;
+    this._liveSummary = "";
+    if (didEdit) this._commit(summary);
   }
 
   insertSegment(at) {
@@ -588,6 +639,7 @@ export class CurveEditor {
     const startState = stateBefore(this.outline, idx);
     const endPt = vertices[idx + 1] || vertices[vertices.length - 1];
     if (this.tool === "arc" || this.tool === "add") {
+      this._span0 = this.getOutline();
       this._drag = {
         mode: "edit",
         idx,
@@ -693,44 +745,50 @@ export class CurveEditor {
 
     const raw = this.worldFromEvent(e);
     const world = [raw[0] + (this._drag.ox || 0), raw[1] + (this._drag.oy || 0)];
-    if (this._drag.mode === "locus") {
-      const loc = this._drag.loc;
-      let P = xy(world);
-      if (loc?.c && Number.isFinite(loc.r)) P = projectToCircle(loc.c, loc.r, P);
-      const src = this._span || this.outline;
-      const j = this._span ? this._drag.localJ : this._drag.j;
-      const next = applyBiarc(src, j, { P });
-      if (this._span) this._previewSpan(next);
-      else this.outline = next;
-      this.redraw();
-      return;
-    }
-    if (this._drag.mode === "vertex") {
-      this._drag.P = world.slice();
-      const src = this._span || this.outline;
-      const j = this._span ? this._drag.localJ : this._drag.j;
-      const next = applyVertexStable(src, j, this._drag.P, this._drag.θ, this._pL, this._pR);
-      if (this._span) this._previewSpan(next);
-      else this.outline = next;
-      this.redraw();
-      return;
-    }
-    if (this._drag.mode === "tangent") {
-      const P = this._drag.P;
-      this._drag.θ = Math.atan2(world[1] - P[1], world[0] - P[0]);
-      const src = this._span || this.outline;
-      const j = this._span ? this._drag.localJ : this._drag.j;
-      const next = applyVertexStable(src, j, P, this._drag.θ, this._pL, this._pR);
-      if (this._span) this._previewSpan(next);
-      else this.outline = next;
-      this.redraw();
-      return;
-    }
-    if (this._drag.mode !== "edit") return;
-    const { len, ang } = fitArc(this._drag.start, this._drag.heading, world);
-    const idx = this._drag.idx;
-    if (idx >= 0) {
-      this.outline.turtlePath[idx] = [roundN(len, 4), roundN(ang, 3)];
+    try {
+      if (this._drag.mode === "locus") {
+        const loc = this._drag.loc;
+        let P = xy(world);
+        if (loc?.c && Number.isFinite(loc.r)) P = projectToCircle(loc.c, loc.r, P);
+        const src = this._span || this.outline;
+        const j = this._span ? this._drag.localJ : this._drag.j;
+        const next = applyBiarc(src, j, { P });
+        if (this._span) this._previewSpan(next);
+        else this.outline = next;
+        this.redraw();
+        return;
+      }
+      if (this._drag.mode === "vertex") {
+        this._drag.P = world.slice();
+        const src = this._span || this.outline;
+        const j = this._span ? this._drag.localJ : this._drag.j;
+        const next = applyVertexStable(src, j, this._drag.P, this._drag.θ, this._pL, this._pR);
+        if (this._span) this._previewSpan(next);
+        else this.outline = next;
+        this.redraw();
+        return;
+      }
+      if (this._drag.mode === "tangent") {
+        const P = this._drag.P;
+        this._drag.θ = Math.atan2(world[1] - P[1], world[0] - P[0]);
+        const src = this._span || this.outline;
+        const j = this._span ? this._drag.localJ : this._drag.j;
+        const next = applyVertexStable(src, j, P, this._drag.θ, this._pL, this._pR);
+        if (this._span) this._previewSpan(next);
+        else this.outline = next;
+        this.redraw();
+        return;
+      }
+      if (this._drag.mode !== "edit") return;
+      const { len, ang } = fitArc(this._drag.start, this._drag.heading, world);
+      const idx = this._drag.idx;
+      if (idx >= 0) {
+        this.outline.turtlePath[idx] = [roundN(len, 4), roundN(ang, 3)];
+        this._liveSummary = this._describeChange(this._span0 || this.outline, this.outline);
+        this._note("live", this._liveSummary);
+      }
+    } catch (err) {
+      this._note("err", err?.message || String(err), { stack: err?.stack });
     }
     this.redraw();
   }
@@ -1038,6 +1096,12 @@ function strokePath(ctx, samples, keep) {
 function fmtP(v) {
   if (!Number.isFinite(v)) return "·";
   return Math.abs(v) >= 100 ? v.toExponential(1) : v.toFixed(2);
+}
+
+function fmtN(v, n) {
+  const x = Number(v);
+  if (!Number.isFinite(x)) return "·";
+  return x.toFixed(n);
 }
 
 function headingTick(ctx, p, heading, len) {

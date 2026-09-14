@@ -92,6 +92,11 @@
       #log .row.undo { color: #c4a574; }
       #log .row.reject { color: #c47a6a; }
       #log .row.edit { color: var(--fg); }
+      #log .row.live { color: #7a9e96; }
+      #log .row.err { color: #e07070; }
+      #log .row.warn { color: #c4a574; }
+      #updateApp { display: none; }
+      #updateApp.show { display: inline-block; background: var(--primary); color: #12110f; border-color: transparent; font-weight: 600; }
       table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
       th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; }
       td { padding: 2px 6px; }
@@ -115,8 +120,9 @@
         <button id="exportJson" type="button" class="primary">Export JSON</button>
         <button id="undo" type="button">Undo</button>
         <button id="kit" type="button">Download kit</button>
+        <button id="updateApp" type="button">Update app</button>
         <span id="sw-status"></span>
-        <p class="hint">Move / Tan edit a snippet overlay (not the live seam). Undo replays the log minus the last commit. p is kept until the family swaps — then p=1 is tried.</p>
+        <p class="hint">Update app reloads a new GitHub Pages build. Log last line tracks the live drag. Plain split to 4 arcs: Move/Tan now pick the short sqrt branch.</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -173,14 +179,29 @@
         const tail = (rows || []).slice(-80);
         logEl.innerHTML = tail
           .map((r) => {
-            const extra = r.extra && (r.extra.p != null || r.extra.pR != null)
-              ? ` p ${r.extra.p ?? "·"}/${r.extra.pR ?? "·"}`
-              : "";
-            return `<div class="row ${r.kind}">${r.kind} · ${r.summary} · j=${r.joint}${extra}</div>`;
+            const text = r.summary || "";
+            return `<div class="row ${r.kind}">${r.kind} · ${text}</div>`;
           })
           .join("");
         logEl.scrollTop = logEl.scrollHeight;
       }
+
+      const origErr = console.error.bind(console);
+      const origWarn = console.warn.bind(console);
+      console.error = (...args) => {
+        origErr(...args);
+        editor?.noteFromHost?.("err", args.map(String).join(" "));
+      };
+      console.warn = (...args) => {
+        origWarn(...args);
+        editor?.noteFromHost?.("warn", args.map(String).join(" "));
+      };
+      window.addEventListener("error", (e) => {
+        editor?.noteFromHost?.("err", e.message || String(e.error || e));
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        editor?.noteFromHost?.("err", String(e.reason?.message || e.reason || e));
+      });
 
       const editor = new CurveEditor(document.getElementById("edit"), {
         outline,
@@ -279,6 +300,7 @@
     <script>
       (function () {
         const el = document.getElementById("sw-status");
+        const btn = document.getElementById("updateApp");
         function set(msg) {
           if (el) el.textContent = msg;
         }
@@ -286,12 +308,40 @@
           set("offline: n/a (needs https)");
           return;
         }
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (refreshing) return;
+          refreshing = true;
+          location.reload();
+        });
+        function offer(worker) {
+          if (!worker) return;
+          set("offline: update available");
+          if (btn) {
+            btn.classList.add("show");
+            btn.onclick = () => {
+              worker.postMessage("skipWaiting");
+              set("offline: updating…");
+            };
+          }
+        }
         set("offline: installing…");
         navigator.serviceWorker
-          .register("./sw.js")
-          .then(() => navigator.serviceWorker.ready)
-          .then(() => caches.keys())
-          .then((keys) => set(keys.length ? "offline: ready" : "offline: waiting"))
+          .register("./sw.js", { updateViaCache: "none" })
+          .then((reg) => {
+            if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+            reg.addEventListener("updatefound", () => {
+              const w = reg.installing;
+              if (!w) return;
+              w.addEventListener("statechange", () => {
+                if (w.state === "installed" && navigator.serviceWorker.controller) offer(w);
+              });
+            });
+            return navigator.serviceWorker.ready.then(() => {
+              if (!btn?.classList.contains("show")) set("offline: ready");
+              return reg.update();
+            });
+          })
           .catch((err) => set("offline: " + (err.message || "failed")));
       })();
     </script>
