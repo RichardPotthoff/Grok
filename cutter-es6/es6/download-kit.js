@@ -23,6 +23,8 @@ export const KIT_FILES = [
   "es6/m4.js",
   "es6/cookiecutters.js",
   "es6/path-utils.js",
+  "es6/close-path.js",
+  "es6/biarc.js",
   "es6/curve-editor.js",
   "es6/webgl-cutter.js",
   "es6/curve-editor-widget.js",
