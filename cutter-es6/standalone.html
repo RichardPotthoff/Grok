@@ -27,7 +27,10 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font);
         -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
-      input, textarea, select { -webkit-user-select: text; user-select: text; }
+      input, textarea, select, #log, #log * {
+        -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+      }
+      #log { touch-action: auto; cursor: text; }
       button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
       button:disabled { opacity: 0.4; cursor: default; }
       #app {
@@ -87,6 +90,7 @@
       #log {
         font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
         color: var(--muted); white-space: pre-wrap;
+        overflow: auto; max-height: 28vh; min-height: 4rem;
       }
       #log .row { padding: 2px 0; border-bottom: 1px solid var(--border); }
       #log .row.undo { color: #c4a574; }
@@ -174,13 +178,19 @@
       let outline = getOutline("Duck");
 
       const logEl = document.getElementById("log");
+      function escapeLog(s) {
+        return String(s ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
       function renderLog(rows) {
         if (!logEl) return;
         const tail = (rows || []).slice(-80);
         logEl.innerHTML = tail
           .map((r) => {
-            const text = r.summary || "";
-            return `<div class="row ${r.kind}">${r.kind} · ${text}</div>`;
+            const text = escapeLog(r.summary || "");
+            return `<div class="row ${escapeLog(r.kind)}">${escapeLog(r.kind)} · ${text}</div>`;
           })
           .join("");
         logEl.scrollTop = logEl.scrollHeight;

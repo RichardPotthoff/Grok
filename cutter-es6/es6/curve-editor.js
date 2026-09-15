@@ -228,7 +228,7 @@ export class CurveEditor {
     } else {
       this._notes.push(row);
     }
-    if (this._notes.length > 250) this._notes.shift();
+    if (this._notes.length > 80) this._notes.shift();
     this.onLog(this.getLog());
     return row;
   }

@@ -286,37 +286,23 @@ export function spanCollapsed(before, after, idx) {
 }
 
 /**
- * Keep-p first; if that branch swaps or collapses, try p=1 on each side
- * and keep the candidate whose joint stays nearest the requested P.
+ * Move/Tan: keep each pair's p. Do not fall back to p=1 — that swap is
+ * what made the junction flicker between two geometries mid-drag.
+ * If keep-p is singular, return the incoming outline (caller rejects).
  */
 export function applyVertexStable(outline, j, P, θ, pL, pR) {
   const n = (outline.turtlePath || []).length;
   const q = quadIdx(j, n);
   if (!q) return outline;
-  const aKeep = saneP(pL ?? 1);
-  const bKeep = saneP(pR ?? 1);
-  const tries = [
-    [aKeep, bKeep],
-    [1, bKeep],
-    [aKeep, 1],
-    [1, 1],
-  ];
-  let best = outline;
-  let bestD = Infinity;
-  for (const [a, b] of tries) {
-    const next = applyVertex(outline, j, P, θ, a, b);
-    if (next === outline || spanCollapsed(outline, next, q)) continue;
-    const jp = jointPose(next, j === n ? 0 : j);
-    const dP = Math.hypot(jp.point[0] - P[0], jp.point[1] - P[1]);
-    const L0 = Math.max(spanLength(outline, q), 1e-6);
-    const L1 = spanLength(next, q);
-    const d = dP + 0.25 * Math.abs(L1 - L0);
-    if (d < bestD) {
-      best = next;
-      bestD = d;
-    }
+  const aKeep = Number.isFinite(pL) ? pL : 1;
+  const bKeep = Number.isFinite(pR) ? pR : 1;
+  const next = applyVertex(outline, j, P, θ, aKeep, bKeep);
+  if (next === outline || spanCollapsed(outline, next, q)) return outline;
+  if (next._biarc) {
+    next._biarc.pL = aKeep;
+    next._biarc.pR = bKeep;
   }
-  return best;
+  return next;
 }
 
 export function cloneOutline(o = {}) {

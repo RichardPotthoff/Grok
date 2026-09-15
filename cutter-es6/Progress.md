@@ -1,6 +1,6 @@
 # Cookie cutter designer — progress
 
-Handoff for the next chat. Last updated 2026-09-14 (sqrt branch, SW update, live log).
+Handoff for the next chat. Last updated 2026-09-15 (keep-p on Move/Tan; selectable log).
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
@@ -43,6 +43,8 @@ Sidebar **beside** the canvas (not an overlay):
 
 - **Move** (`P`, keep `θ`) and **Tan** (heading, keep `P`) call the same `applyVertex`.
 - **JOINT_LOCK** (`p`, `locus`, `move`, `tan`): a stroke tap does **not** change `joint`.
+- Keep each pair’s `p` for the whole drag. `applyVertexStable` used to retry `p = 1` when keep-p looked collapsed; the two geometries fought and the junction flickered, then the log showed `pR 1.00`. Fallback is gone: a bad frame is rejected, `p` stays what `recoverP` captured at pointer-down.
+- Log text is selectable/copyable; the panel autoscrolls; stored rows cap at 80.
 
 ### Seam collapse (fixed)
 
