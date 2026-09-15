@@ -681,8 +681,10 @@ export class CurveEditor {
       const ty = jp.point[1] + Math.sin(jp.heading) * tick;
       const tangent = this.tool === "tan";
       const q = quadIdx(this.joint, n);
-      this._pL = q ? recoverP(this.outline, q[1]) : 1;
-      this._pR = q ? recoverP(this.outline, q[3]) : 1;
+      const sameJ = this._pJoint === this.joint;
+      this._pL = q ? recoverP(this.outline, q[1], sameJ ? this._pL : null) : 1;
+      this._pR = q ? recoverP(this.outline, q[3], sameJ ? this._pR : null) : 1;
+      this._pJoint = this.joint;
       const hx = tangent ? tx : jp.point[0];
       const hy = tangent ? ty : jp.point[1];
       this._drag = {

@@ -367,10 +367,10 @@ export function jointPose(outline, j) {
   return poseBefore(outline, j);
 }
 
-export function recoverP(outline, j) {
+export function recoverP(outline, j, preferP = null) {
   const n = (outline.turtlePath || []).length;
   const idx = pairIdx(j, n);
-  if (!idx) return 1;
+  if (!idx) return Number.isFinite(preferP) ? preferP : 1;
   const [i0, i1] = idx;
   const A = poseToCT(poseBefore(outline, i0));
   const B = poseToCT(poseBefore(outline, i1 + 1));
@@ -382,8 +382,33 @@ export function recoverP(outline, j) {
     s1: Number(segs[i1][0]),
     d1: Number(segs[i1][1]) * DEG,
   };
-  const { p } = computeBiarc(A.P, A.T, B.P, B.T, { P: Pm, hint });
-  return p;
+  const cands = [];
+  for (const br of [0, 1]) {
+    let cand;
+    try {
+      cand = computeBiarcBranch(A.P, A.T, B.P, B.T, { P: Pm }, br);
+    } catch (_) {
+      continue;
+    }
+    if (!cand || !Number.isFinite(cand.p) || isInf(cand.Pm)) continue;
+    const a0 = arcFromChord(A.P, A.T, cand.Pm);
+    const a1 = arcFromChord(cand.Pm, cand.Tm, B.P);
+    if (![a0.s, a0.Δθ, a1.s, a1.Δθ].every(Number.isFinite)) continue;
+    cands.push({ p: cand.p, g: scorePair(a0, a1, hint) });
+  }
+  if (!cands.length) return Number.isFinite(preferP) ? preferP : 1;
+  const bestG = Math.min(...cands.map((c) => c.g));
+  const viable = cands.filter((c) => c.g <= bestG + 0.35);
+  const pref = Number.isFinite(preferP) ? preferP : null;
+  viable.sort((a, b) => {
+    if (pref != null) {
+      const da = Math.abs(a.p - pref);
+      const db = Math.abs(b.p - pref);
+      if (da !== db) return da - db;
+    }
+    return a.g - b.g;
+  });
+  return viable[0].p;
 }
 
 export function pairPoses(outline, j) {
