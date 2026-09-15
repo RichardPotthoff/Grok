@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Arc Draw" />
+    <meta name="theme-color" content="#12110f" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>Arc Drawing</title>
+    <style>
+      :root {
+        --bg: #12110f;
+        --surface: #1c1b18;
+        --fg: #ece7dc;
+        --muted: #9a9488;
+        --primary: #7a9e96;
+        --paper: #f3ead8;
+        --ink: #2a241c;
+        --border: color-mix(in oklab, #ece7dc 12%, transparent);
+        --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font);
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+      input, textarea, select, #log, #log * {
+        -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+      }
+      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      #app {
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 100dvh;
+      }
+      header {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      header h1 { font-size: 1.05rem; font-weight: 600; margin: 0 10px 0 0; letter-spacing: -0.02em; }
+      header select, header input, header button, header a.btn {
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 8px 10px; font: inherit; min-height: 40px;
+        text-decoration: none; display: inline-flex; align-items: center;
+      }
+      header button.primary { background: var(--primary); color: #12110f; border-color: transparent; font-weight: 600; }
+      header input[type="text"] { min-width: 10rem; }
+      .hint { width: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+      .stage {
+        display: grid; grid-template-columns: 1fr minmax(11rem, 16rem); min-height: 0;
+      }
+      @media (max-width: 800px) {
+        .stage { grid-template-columns: 1fr; grid-template-rows: 1fr 38vh; }
+      }
+      .panel { position: relative; min-height: 180px; }
+      .gallery-panel {
+        border-left: 1px solid var(--border);
+        background: var(--surface);
+        display: flex; flex-direction: column; min-height: 0;
+      }
+      canvas { width: 100%; height: 100%; display: block; }
+      .label {
+        position: absolute; top: 10px; left: 64px; z-index: 2;
+        font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--muted); pointer-events: none;
+      }
+      .gallery-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 10px; border-bottom: 1px solid var(--border);
+        font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+      }
+      .gallery-head button { min-height: 32px; padding: 4px 8px; }
+      #gallery {
+        flex: 1; overflow: auto; padding: 8px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start;
+      }
+      .thumb {
+        background: var(--paper); color: var(--ink); border: 1px solid var(--border);
+        border-radius: 8px; padding: 6px; min-height: 88px;
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .thumb.on { outline: 2px solid var(--primary); }
+      .thumb svg { width: 100%; height: 64px; display: block; }
+      .thumb .nm { font-size: 11px; color: var(--ink); text-align: center; font-weight: 600; }
+      footer {
+        border-top: 1px solid var(--border); background: var(--surface);
+        max-height: 32vh; padding: 8px 12px 16px;
+        display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(10rem, 14rem) 1fr;
+        gap: 12px; min-height: 0;
+      }
+      @media (max-width: 800px) {
+        footer { grid-template-columns: 1fr; max-height: 40vh; }
+      }
+      .dock { min-height: 0; overflow: auto; }
+      .dock h2 {
+        margin: 0 0 6px; font-size: 11px; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--muted); font-weight: 600;
+      }
+      #log {
+        font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--muted); white-space: pre-wrap;
+        overflow: auto; max-height: 26vh; min-height: 4rem;
+      }
+      #log .row { padding: 2px 0; border-bottom: 1px solid var(--border); }
+      #log .row.undo { color: #c4a574; }
+      #log .row.reject { color: #c47a6a; }
+      #log .row.edit { color: var(--fg); }
+      #log .row.live { color: #7a9e96; }
+      #log .row.err { color: #e07070; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+      th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; }
+      td { padding: 2px 6px; }
+      td input {
+        width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 6px; padding: 6px 8px; font: inherit;
+      }
+      tr.sel td { background: color-mix(in oklab, var(--primary) 18%, transparent); }
+      #strokes { display: flex; flex-direction: column; gap: 4px; }
+      .stroke-row {
+        display: flex; align-items: center; gap: 6px;
+        padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border);
+        background: var(--bg); min-height: 36px;
+      }
+      .stroke-row.on { outline: 2px solid var(--primary); }
+      .swatch { width: 12px; height: 12px; border-radius: 50%; background: var(--primary); flex: 0 0 auto; }
+      .stroke-row span { flex: 1; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Arc Drawing</h1>
+        <input id="docName" type="text" value="Untitled" aria-label="Drawing name" />
+        <button id="newDoc" type="button">New</button>
+        <button id="addStroke" type="button">Add stroke</button>
+        <button id="resetIcon" type="button">Reset icon</button>
+        <button id="copySvg" type="button" class="primary">Copy SVG</button>
+        <button id="copyJson" type="button">Copy JSON</button>
+        <button id="undo" type="button">Undo</button>
+        <a class="btn" href="./standalone.html">Cutter</a>
+        <p class="hint">Same editor tools as the cookie cutter. Icons are drawings — pick one in the gallery and edit its arcs. Copy SVG / JSON for iPad previews (no file download).</p>
+      </header>
+      <div class="stage">
+        <div class="panel">
+          <div class="label">Path</div>
+          <canvas id="edit"></canvas>
+        </div>
+        <div class="gallery-panel">
+          <div class="gallery-head">
+            <span>Gallery</span>
+            <button id="newFromBlank" type="button">+ Page</button>
+          </div>
+          <div id="gallery"></div>
+        </div>
+      </div>
+      <footer>
+        <div class="dock">
+          <h2>Arcs</h2>
+          <table>
+            <thead><tr><th>#</th><th>Length</th><th>Angle (deg)</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="dock">
+          <h2>Strokes</h2>
+          <div id="strokes"></div>
+        </div>
+        <div class="dock">
+          <h2>Log</h2>
+          <div id="log"></div>
+        </div>
+      </footer>
+    </div>
+    <script type="module">
+      import { CurveEditor } from "./es6/curve-editor.js";
+      import { getOutline } from "./es6/cookiecutters.js";
+      import {
+        blankDrawing,
+        blankStroke,
+        cloneDrawing,
+        normalizeDrawing,
+        serializeDrawing,
+        parseDrawing,
+        outlineFromStroke,
+        strokeFromOutline,
+        withActiveStroke,
+        activeStroke,
+      } from "./es6/drawing-doc.js";
+      import { TOOL_ICONS, iconDrawing, drawingToSvg } from "./es6/tool-icons.js";
+
+      const STORE = "arc-drawing-app-v2";
+      const nameIn = document.getElementById("docName");
+      const rows = document.getElementById("rows");
+      const galleryEl = document.getElementById("gallery");
+      const strokesEl = document.getElementById("strokes");
+      const logEl = document.getElementById("log");
+
+      function seedLibrary() {
+        const duck = strokeFromOutline(getOutline("Duck"), { stroke: "ink", width: 1.8 });
+        return [
+          ...TOOL_ICONS.map((d) => cloneDrawing(d)),
+          normalizeDrawing({ name: "Duck", id: "sample-duck", paths: [duck] }),
+          blankDrawing("Blank"),
+        ];
+      }
+
+      function loadStore() {
+        try {
+          const raw = localStorage.getItem(STORE);
+          if (!raw) return null;
+          const data = JSON.parse(raw);
+          if (!Array.isArray(data.library) || !data.library.length) return null;
+          return {
+            library: data.library.map(normalizeDrawing),
+            index: Math.max(0, Math.min(data.index || 0, data.library.length - 1)),
+          };
+        } catch {
+          return null;
+        }
+      }
+
+      const saved = loadStore();
+      let library = saved ? saved.library : seedLibrary();
+      let index = saved ? saved.index : 0;
+      let drawing = cloneDrawing(library[index]);
+
+      function persist() {
+        library[index] = cloneDrawing(drawing);
+        try {
+          localStorage.setItem(STORE, JSON.stringify({ index, library }));
+        } catch (_) {}
+      }
+
+      function escapeLog(s) {
+        return String(s ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      function renderLog(list) {
+        if (!logEl) return;
+        const tail = (list || []).slice(-80);
+        logEl.innerHTML = tail
+          .map((r) => `<div class="row ${escapeLog(r.kind)}">${escapeLog(r.kind)} · ${escapeLog(r.summary || "")}</div>`)
+          .join("");
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function currentStroke() {
+        return activeStroke(drawing);
+      }
+
+      function otherStrokes() {
+        return drawing.paths.filter((_, i) => i !== drawing.active);
+      }
+
+      function pushStrokeToEditor({ fit = false, commit = false } = {}) {
+        const s = currentStroke();
+        editor.setBackdrop(otherStrokes().map(outlineFromStroke));
+        editor.setOutline(outlineFromStroke(s), { fit, keepSelection: false, commit });
+      }
+
+      const editor = new CurveEditor(document.getElementById("edit"), {
+        outline: outlineFromStroke(currentStroke()),
+        backdrop: otherStrokes().map(outlineFromStroke),
+        onChange(next) {
+          const prev = currentStroke();
+          drawing = withActiveStroke(drawing, {
+            ...next,
+            stroke: prev.stroke,
+            width: prev.width,
+            fill: prev.fill,
+            name: prev.name,
+          });
+          persist();
+          renderTable();
+          renderGallery();
+          renderStrokes();
+        },
+        onSelect() {
+          renderTable();
+        },
+        onLog: renderLog,
+      });
+      renderLog(editor.getLog());
+
+      nameIn.value = drawing.name || "";
+      nameIn.addEventListener("change", () => {
+        drawing.name = nameIn.value.trim() || "Untitled";
+        persist();
+        renderGallery();
+      });
+
+      function selectDoc(i, { fit = true } = {}) {
+        persist();
+        index = i;
+        drawing = cloneDrawing(library[index]);
+        nameIn.value = drawing.name || "";
+        pushStrokeToEditor({ fit, commit: "load" });
+        persist();
+        renderAll();
+      }
+
+      function renderGallery() {
+        galleryEl.innerHTML = "";
+        library.forEach((doc, i) => {
+          const shown = i === index ? drawing : doc;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "thumb" + (i === index ? " on" : "");
+          btn.innerHTML = `${drawingToSvg(shown, { size: 96, theme: "light", pad: 3 })}<span class="nm">${escapeLog(shown.name)}</span>`;
+          btn.addEventListener("click", () => selectDoc(i));
+          galleryEl.appendChild(btn);
+        });
+      }
+
+      function renderStrokes() {
+        strokesEl.innerHTML = "";
+        drawing.paths.forEach((s, i) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "stroke-row" + (i === drawing.active ? " on" : "");
+          const color =
+            s.stroke === "accent" ? "#7a9e96" : s.stroke === "danger" ? "#e07070" : s.stroke === "muted" ? "#9a9488" : "#ece7dc";
+          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${i + 1}. ${s.name || s.stroke} · ${s.turtlePath.length} arcs</span>`;
+          row.addEventListener("click", () => {
+            drawing.active = i;
+            pushStrokeToEditor({ fit: true });
+            persist();
+            renderAll();
+          });
+          strokesEl.appendChild(row);
+        });
+      }
+
+      function renderTable() {
+        const selected = editor.getSelected();
+        const path = currentStroke().turtlePath;
+        rows.innerHTML = "";
+        path.forEach(([len, ang], i) => {
+          const tr = document.createElement("tr");
+          if (i === selected) tr.className = "sel";
+          tr.innerHTML = `<td>${i + 1}</td>
+            <td><input data-i="${i}" data-f="len" type="number" step="0.01" value="${len}" /></td>
+            <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}" /></td>`;
+          tr.addEventListener("click", (e) => {
+            if (e.target.tagName === "INPUT") return;
+            editor.setSelected(i);
+            renderTable();
+          });
+          rows.appendChild(tr);
+        });
+      }
+
+      function renderAll() {
+        renderTable();
+        renderGallery();
+        renderStrokes();
+      }
+
+      rows.addEventListener("change", (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLInputElement)) return;
+        const i = Number(t.dataset.i);
+        const f = t.dataset.f;
+        const v = Number(t.value);
+        const next = currentStroke().turtlePath.map((s) => s.slice());
+        next[i][f === "len" ? 0 : 1] = v;
+        drawing = withActiveStroke(drawing, { turtlePath: next });
+        editor.setOutline(outlineFromStroke(currentStroke()), { commit: "table" });
+        editor.setSelected(i);
+        persist();
+        renderAll();
+      });
+
+      document.getElementById("newDoc").onclick = () => {
+        library.push(blankDrawing("Untitled"));
+        selectDoc(library.length - 1);
+      };
+      document.getElementById("newFromBlank").onclick = () => {
+        library.push(blankDrawing("Page " + (library.length + 1)));
+        selectDoc(library.length - 1);
+      };
+      document.getElementById("addStroke").onclick = () => {
+        drawing.paths.push(blankStroke("stroke " + (drawing.paths.length + 1)));
+        drawing.active = drawing.paths.length - 1;
+        pushStrokeToEditor({ fit: true });
+        persist();
+        renderAll();
+      };
+      document.getElementById("resetIcon").onclick = () => {
+        const id = drawing.id;
+        const fresh = id ? iconDrawing(id) : null;
+        if (!fresh) {
+          editor.noteFromHost?.("warn", "Not a catalog icon — nothing to reset");
+          return;
+        }
+        drawing = fresh;
+        nameIn.value = drawing.name;
+        pushStrokeToEditor({ fit: true, commit: "load" });
+        persist();
+        renderAll();
+      };
+
+      async function copyText(text, okMsg) {
+        try {
+          await navigator.clipboard.writeText(text);
+          editor.noteFromHost?.("edit", okMsg);
+        } catch (err) {
+          editor.noteFromHost?.("err", err.message || String(err));
+        }
+      }
+      document.getElementById("copySvg").onclick = () => {
+        copyText(drawingToSvg(drawing, { size: 256, theme: "light", pad: 3 }), "copied SVG");
+      };
+      document.getElementById("copyJson").onclick = () => {
+        copyText(serializeDrawing(drawing), "copied JSON");
+      };
+      document.getElementById("undo").onclick = () => editor.undo();
+
+      window.addEventListener("keydown", (e) => {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+        if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          editor.undo();
+        } else if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          editor.deleteSegment();
+        }
+      });
+
+      const origErr = console.error.bind(console);
+      console.error = (...args) => {
+        origErr(...args);
+        editor?.noteFromHost?.("err", args.map(String).join(" "));
+      };
+      window.addEventListener("error", (e) => {
+        editor?.noteFromHost?.("err", e.message || String(e.error || e));
+      });
+
+      editor.fit();
+      renderAll();
+    </script>
+  </body>
+</html>

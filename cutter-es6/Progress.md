@@ -1,6 +1,6 @@
 # Cookie cutter designer — progress
 
-Handoff for the next chat. Last updated 2026-09-15 (keep-p on Move/Tan; selectable log).
+Handoff for the next chat. Last updated 2026-09-15 (drawing app + turtle-drawn tool icons).
 
 **Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
 
@@ -60,7 +60,56 @@ When the pair already lies on one circle the locus degenerates (`r → ∞`). Wo
 
 ### Log + undo
 
-Each committed edit is a snapshot. Footer is **arc table | log**. The last line is **live** during a drag and lists which `#i s / Δθ` rows changed; on pointer-up that line becomes the commit. `console.error` / `window.onerror` / unhandled rejections also land in the log (`err`). Undo restores the previous snapshot. Header Undo and `⌘Z` / `Ctrl+Z`.
+Each committed edit is a snapshot. Footer is **arc table | log**. The last line is **live** during a drag and lists which `#i s / Δθ` rows changed; on pointer-up that line becomes the commit. `console.error` / `window.onerror` / unhandled rejections also land in the log (`err`). Undo restores the previous snapshot. Header Undo and `⌘Z` / `Ctrl+Z`. Log panel: selectable/copyable text, autoscroll to last line, cap 80 rows.
+
+### Shared tools (cutter + drawing app)
+
+Same editor tools for both products. Do not fork `es6/biarc.js`, `close-path.js`, `path-utils.js`, `turtle-graphics.js`, or the CurveEditor core. Cutter keeps WebGL + cookie outlines. Drawing app does not take those.
+
+## Two products, same tools
+
+| App | Entry | Second pane | Document |
+| --- | --- | --- | --- |
+| Cookie cutter | `standalone.html` | WebGL blade | one outline (one start pose + one `turtlePath`) |
+| Drawing | new `drawing.html` (separate conversation) | Gallery of drawings | several strokes on a page |
+
+A **stroke** is still `{ startPoint, startAngle, turtlePath }` with `[s, Δθ]` arcs. Extra start/end points are extra poses. Color and width hang on the stroke, not on the arc. Commit remains `[s, Δθ]` plus start pose; biarc/dual-biarc stay on-the-fly.
+
+```js
+{
+  name: "Move icon",
+  paths: [
+    { startPoint, startAngle, turtlePath, stroke: "ink", width: 1.5 },
+    { startPoint, startAngle, turtlePath, stroke: "accent", fill: "accent" }
+  ]
+}
+```
+
+One path in the list is the active stroke. Select / Move / Tan / Close already work on that object. New work is: pick which stroke, add a stroke, gallery of documents. Overlay snippet stays stroke-local. Later a Möbius tool can run on a span without touching the rest of the page.
+
+**Icons:** design them as drawings in this app, show them in the gallery, then render the same SVG into cutter’s toolbar. No bitmap source of truth.
+
+## Open interaction issues
+
+1. ~~Vert combines move and tangent.~~ Split into Move + Tan.
+2. ~~Stroke tap steals the joint.~~ JOINT_LOCK.
+3. ~~Seam collapse when arc 0 is in the quad.~~ Overlay + seam guard.
+4. ~~Keep-p vs p=1 flicker on Move/Tan.~~ Fallback removed; p frozen for the drag.
+5. Same-circle locus `r → ∞` / raw `p` as a perfect invariant is still weaker; sign-stable `recoverP` is in, not fully proven.
+6. **Thru** not in the rail.
+7. Single-arc **Len vs Turn** still not built.
+8. Insert still plants `[4, 0]`.
+9. IIFE not regenerated (leave until drawing/icons settle).
+
+## Drawing app + icons (this pass)
+
+- Document: `{ name, paths: [ stroke, … ] }` in `es6/drawing-doc.js`. A stroke is an outline plus `stroke` / `width` / `fill`. CurveEditor still edits one outline; other strokes are `setBackdrop`.
+- Icons: `es6/tool-icons.js`. Catalog drawings → exact SVG `A` (full circles split). Dark toolbar uses `currentColor` for ink so the pressed button inverts.
+- App: `drawing.html` (gallery + editor, no WebGL). Seeded with the tool icons, Duck, Blank. localStorage `arc-drawing-app-v1`. Copy SVG / Copy JSON (iPad-safe).
+- Cutter sidebar buttons now render those SVGs; `title` is still the tool name. `standalone.html` links to Drawing.
+- Shared math is not forked. SW bumped to `cutter-offline-v4-20260915` and precaches the new files.
+
+Icons are a first cut — edit them in the drawing app (Reset icon restores the catalog). Select / Undo glyphs are the ones most worth a second pass.
 
 ### Service worker
 
@@ -83,12 +132,12 @@ HTML apps, IIFE script, Carnets + Pages `_esm`, `cutter_widgets/`, Spin after dr
 
 ## Next conversation — pick one
 
-1. Stay on the p / same-circle theory if it is still biting in testing.
+1. Redraw weak icons in `drawing.html` (Select, Undo) and keep the catalog in `tool-icons.js` in sync — or treat the gallery JSON as source and codegen the catalog.
 2. **Thru bead** on the two-arc span.
 3. **Arc Len / Turn**.
 4. Only then IIFE / anyui / Marimo.
 
-Keep `standalone.html` as the reference.
+Keep `standalone.html` as the cutter reference and `drawing.html` as the drawing reference.
 
 ## Layout (do not merge)
 

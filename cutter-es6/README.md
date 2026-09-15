@@ -4,7 +4,8 @@ Vanilla cookie-cutter designer. No Node, no bundler.
 
 | File | What |
 | --- | --- |
-| `standalone.html` | Reference app: HTML chrome + `es6/` editor |
+| `standalone.html` | Reference cutter: HTML chrome + `es6/` editor + WebGL |
+| `drawing.html` | Multi-stroke drawing app + icon gallery (no WebGL) |
 | `cutter_anyui.html` | Same app, chrome built from copied `anyui/` widgets |
 | `cutter_anyui_main.js` | Programmatic widget tree (VBox / HBox / Button / …) |
 | `anyui/` | Copied UI widgets (from the anyui project) |

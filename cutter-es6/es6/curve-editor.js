@@ -14,6 +14,7 @@
 
 import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
 import { closePath, closureInfo, CLOSE_MODES } from "./close-path.js";
+import { iconMarkup } from "./tool-icons.js";
 import {
   applyBiarc,
   applyVertexStable,
@@ -68,6 +69,7 @@ export class CurveEditor {
     this._base = null;
     this._span = null;
     this.onLog = opts.onLog || (() => {});
+    this.backdrop = Array.isArray(opts.backdrop) ? opts.backdrop : [];
     this._hist = [{ t: Date.now(), kind: "load", summary: "load", outline: this.getOutline() }];
     this._histAt = 0;
     this._notes = [];
@@ -354,9 +356,18 @@ export class CurveEditor {
     return this.editIdx;
   }
 
+  setBackdrop(paths) {
+    this.backdrop = Array.isArray(paths) ? paths : [];
+    this.redraw();
+  }
+
   fit() {
+    const pts = [];
+    for (const o of this.backdrop || []) {
+      for (const s of walkPath(o, { scale: 1, tol: 0.08, returnStart: true })) pts.push(s.point);
+    }
     const samples = walkPath(this.outline, { scale: 1, tol: 0.08, returnStart: true });
-    const pts = samples.map((s) => s.point);
+    for (const s of samples) pts.push(s.point);
     if (!pts.length) pts.push([0, 0]);
     const b = boundsOf(pts);
     const rect = this.canvas.getBoundingClientRect();
@@ -420,9 +431,16 @@ export class CurveEditor {
           border: 1px solid color-mix(in oklab, #ece7dc 18%, transparent);
           background: #12110f; color: #ece7dc;
         }
+        .curve-tools button {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 1px; min-height: 40px; padding: 3px 2px 2px;
+        }
+        .curve-tools button svg { width: 22px; height: 22px; display: block; flex: 0 0 auto; }
+        .curve-tools button .tool-nm { font-size: 9px; font-weight: 650; letter-spacing: 0; line-height: 1; }
         .curve-tools button[aria-pressed="true"] {
           background: #7a9e96; color: #12110f; border-color: transparent;
         }
+        .curve-tools button[aria-pressed="true"] { color: #12110f; }
         .curve-tools button.action { font-weight: 700; }
         .curve-tools input { text-align: center; }
         .curve-close-status {
@@ -440,19 +458,19 @@ export class CurveEditor {
     bar.className = "curve-tools";
     bar.innerHTML = `
       <div class="grp">
-        <button type="button" data-tool="pan" title="Pan view">Pan</button>
-        <button type="button" data-action="fit" title="Fit path in view">Fit</button>
+        <button type="button" data-tool="pan" title="Pan view">${iconMarkup("pan", "Pan")}</button>
+        <button type="button" data-action="fit" title="Fit path in view">${iconMarkup("fit", "Fit")}</button>
       </div>
       <div class="gap"></div>
       <div class="grp">
-        <button type="button" data-tool="select" title="Select only">Select</button>
-        <button type="button" data-tool="add" title="Add arc">Add</button>
-        <button type="button" data-tool="arc" title="Edit one arc">Arc</button>
-        <button type="button" data-tool="p" title="Biarc family p">p</button>
+        <button type="button" data-tool="select" title="Select only">${iconMarkup("select", "Select")}</button>
+        <button type="button" data-tool="add" title="Add arc">${iconMarkup("add", "Add")}</button>
+        <button type="button" data-tool="arc" title="Edit one arc">${iconMarkup("arc", "Arc")}</button>
+        <button type="button" data-tool="p" title="Biarc family p">${iconMarkup("p", "p")}</button>
         <input data-pval type="number" step="0.1" value="1" title="p" />
-        <button type="button" data-tool="locus" title="Drag junction on locus">Locus</button>
-        <button type="button" data-tool="move" title="Move joint, keep heading">Move</button>
-        <button type="button" data-tool="tan" title="Rotate heading, keep joint">Tan</button>
+        <button type="button" data-tool="locus" title="Drag junction on locus">${iconMarkup("locus", "Locus")}</button>
+        <button type="button" data-tool="move" title="Move joint, keep heading">${iconMarkup("move", "Move")}</button>
+        <button type="button" data-tool="tan" title="Rotate heading, keep joint">${iconMarkup("tan", "Tan")}</button>
       </div>
       <div class="gap"></div>
       <div class="grp">
@@ -463,11 +481,11 @@ export class CurveEditor {
           <option value="spread">Sprd</option>
           <option value="corner">Corn</option>
         </select>
-        <button type="button" data-action="close" class="action" title="Close path">Close</button>
-        <button type="button" data-action="split" title="Split selected arc">Split</button>
-        <button type="button" data-action="insert" title="Insert dummy arc">Ins</button>
-        <button type="button" data-action="del" title="Delete selected arc">Del</button>
-        <button type="button" data-action="undo" title="Undo last committed edit">Undo</button>
+        <button type="button" data-action="close" class="action" title="Close path">${iconMarkup("close", "Close")}</button>
+        <button type="button" data-action="split" title="Split selected arc">${iconMarkup("split", "Split")}</button>
+        <button type="button" data-action="insert" title="Insert dummy arc">${iconMarkup("insert", "Ins")}</button>
+        <button type="button" data-action="del" title="Delete selected arc">${iconMarkup("del", "Del")}</button>
+        <button type="button" data-action="undo" title="Undo last committed edit">${iconMarkup("undo", "Undo")}</button>
       </div>
     `;
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -866,12 +884,14 @@ export class CurveEditor {
     );
 
     this._drawGrid(ctx);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    this._drawBackdrop(ctx);
+
     const overlay = this._base && this._span;
     const samples = walkPath(this.outline, { scale: 1, tol: 0.03, returnStart: true });
     if (!samples.length) return;
 
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
     if (overlay) {
       const frozen = walkPath(this._base, { scale: 1, tol: 0.03, returnStart: true });
       const hide = new Set(this._span.indices);
@@ -1018,6 +1038,19 @@ export class CurveEditor {
         ctx.stroke();
       }
     }
+  }
+
+  _drawBackdrop(ctx) {
+    const list = this.backdrop || [];
+    if (!list.length) return;
+    ctx.save();
+    ctx.strokeStyle = "rgba(42,36,28,0.34)";
+    ctx.lineWidth = 1.35 / this.view.scale;
+    for (const o of list) {
+      const samples = walkPath(o, { scale: 1, tol: 0.04, returnStart: true });
+      if (samples.length) strokePath(ctx, samples, () => true);
+    }
+    ctx.restore();
   }
 
   _drawGrid(ctx) {
