@@ -15,6 +15,7 @@
 import { walkPath, boundsOf, fitArc, DEG } from "./path-utils.js";
 import { closePath, closureInfo, CLOSE_MODES } from "./close-path.js";
 import { iconMarkup } from "./tool-icons.js";
+import { mirrorStroke, rotateStroke } from "./path-xform.js";
 import {
   applyBiarc,
   applyVertexStable,
@@ -33,7 +34,7 @@ import {
   xy,
 } from "./biarc.js";
 
-export const EDITOR_TOOLS = ["select", "add", "pan", "arc", "p", "locus", "move", "tan"];
+export const EDITOR_TOOLS = ["select", "path", "add", "pan", "arc", "p", "locus", "move", "tan"];
 export const TOOL_ALIAS = { vertex: "move" };
 export const SPAN2 = new Set(["p", "locus"]);
 export const SPAN4 = new Set(["move", "tan"]);
@@ -70,6 +71,8 @@ export class CurveEditor {
     this._span = null;
     this.onLog = opts.onLog || (() => {});
     this.backdrop = Array.isArray(opts.backdrop) ? opts.backdrop : [];
+    this.pagePaths = Array.isArray(opts.pagePaths) ? opts.pagePaths : [];
+    this.onPickPath = opts.onPickPath || (() => {});
     this._hist = [{ t: Date.now(), kind: "load", summary: "load", outline: this.getOutline() }];
     this._histAt = 0;
     this._notes = [];
@@ -361,6 +364,33 @@ export class CurveEditor {
     this.redraw();
   }
 
+  setPagePaths(list) {
+    this.pagePaths = Array.isArray(list) ? list : [];
+    this.redraw();
+  }
+
+  mirrorPath({ axisDeg = 0, origin } = {}) {
+    const o = origin || this._boundsOrigin();
+    this.outline = normalizeOutline(mirrorStroke(this.outline, axisDeg, o));
+    this.redraw();
+    this._commit("mirror");
+    return this.getOutline();
+  }
+
+  rotatePath({ deg = 90, origin } = {}) {
+    const o = origin || this._boundsOrigin();
+    this.outline = normalizeOutline(rotateStroke(this.outline, deg, o));
+    this.redraw();
+    this._commit(`rot ${deg}`);
+    return this.getOutline();
+  }
+
+  _boundsOrigin() {
+    const samples = walkPath(this.outline, { scale: 1, tol: 0.08, returnStart: true });
+    const b = boundsOf(samples.length ? samples.map((s) => s.point) : [[0, 0]]);
+    return [b.cx, b.cy];
+  }
+
   fit() {
     const pts = [];
     for (const o of this.backdrop || []) {
@@ -463,7 +493,8 @@ export class CurveEditor {
       </div>
       <div class="gap"></div>
       <div class="grp">
-        <button type="button" data-tool="select" title="Select only">${iconMarkup("select", "Select")}</button>
+        <button type="button" data-tool="path" title="Select path">${iconMarkup("path", "Path")}</button>
+        <button type="button" data-tool="select" title="Select arc — does not change path">${iconMarkup("select", "Select")}</button>
         <button type="button" data-tool="add" title="Add arc">${iconMarkup("add", "Add")}</button>
         <button type="button" data-tool="arc" title="Edit one arc">${iconMarkup("arc", "Arc")}</button>
         <button type="button" data-tool="p" title="Biarc family p">${iconMarkup("p", "p")}</button>
@@ -486,6 +517,8 @@ export class CurveEditor {
         <button type="button" data-action="insert" title="Insert dummy arc">${iconMarkup("insert", "Ins")}</button>
         <button type="button" data-action="del" title="Delete selected arc">${iconMarkup("del", "Del")}</button>
         <button type="button" data-action="undo" title="Undo last committed edit">${iconMarkup("undo", "Undo")}</button>
+        <button type="button" data-action="mirror" title="Mirror path across vertical">${iconMarkup("mirror", "Flip")}</button>
+        <button type="button" data-action="rot90" title="Rotate path 90°">${iconMarkup("rot90", "90°")}</button>
       </div>
     `;
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -499,6 +532,8 @@ export class CurveEditor {
       if (btn.dataset.action === "del") this.deleteSegment();
       if (btn.dataset.action === "fit") this.fit();
       if (btn.dataset.action === "undo") this.undo();
+      if (btn.dataset.action === "mirror") this.mirrorPath({ axisDeg: 90 });
+      if (btn.dataset.action === "rot90") this.rotatePath({ deg: 90 });
     });
     const modeSel = bar.querySelector("[data-close-mode]");
     if (modeSel) {
@@ -600,6 +635,14 @@ export class CurveEditor {
     }
 
     const world = this.worldFromEvent(e);
+    if (this.tool === "path") {
+      const hit = this._hitPagePath(world, HIT_PX / this.view.scale);
+      if (hit) this.onPickPath(hit);
+      this._drag = { mode: "maybe-pan", x: e.clientX, y: e.clientY, cx: this.view.cx, cy: this.view.cy };
+      this.redraw();
+      return;
+    }
+
     const samples = walkPath(this.outline, { scale: 1, tol: 0.04, returnStart: true });
     const vertices = vertexList(samples, this.outline);
     const tol = HIT_PX / this.view.scale;
@@ -1038,6 +1081,26 @@ export class CurveEditor {
         ctx.stroke();
       }
     }
+  }
+
+  _hitPagePath(world, tol) {
+    const list = this.pagePaths && this.pagePaths.length
+      ? this.pagePaths
+      : [{ id: this.outline.name || "path", outline: this.outline }];
+    let best = null;
+    let bestD = tol * 1.6;
+    for (const item of list) {
+      const outline = item.outline || item;
+      const samples = walkPath(outline, { scale: 1, tol: 0.05, returnStart: true });
+      for (let i = 1; i < samples.length; i++) {
+        const d = distToSeg(world, samples[i - 1].point, samples[i].point);
+        if (d < bestD) {
+          bestD = d;
+          best = item.id || item.name || null;
+        }
+      }
+    }
+    return best;
   }
 
   _drawBackdrop(ctx) {

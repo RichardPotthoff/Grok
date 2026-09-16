@@ -10,6 +10,14 @@
 import { DEG } from "./path-utils.js";
 import { stepArc } from "./close-path.js";
 import { drawingBounds, normalizeDrawing, normalizeStroke } from "./drawing-doc.js";
+import {
+  appendSegs,
+  appendStroke,
+  mirrorStroke,
+  repeatRotate,
+  rotateStroke,
+  tracePoints,
+} from "./path-xform.js";
 
 export const ICON_THEMES = {
   dark: {
@@ -40,6 +48,7 @@ function S(startPoint, startAngle, turtlePath, paint = {}) {
     width: paint.width ?? W,
     fill: paint.fill || null,
     name: paint.name || "",
+    id: paint.id || "",
   });
 }
 
@@ -84,33 +93,121 @@ function arrow(tipX, tipY, dirDeg, length = 6.5, paint = {}) {
 }
 
 function doc(id, name, paths) {
-  return normalizeDrawing({ id, name, paths, active: 0 });
+  return normalizeDrawing({ id, name, paths: paths.map((p, i) => ({ ...p, id: p.id || `${id}-${i + 1}` })), active: 0 });
+}
+
+function paint(stroke, extra = {}) {
+  return normalizeStroke({
+    ...stroke,
+    width: extra.width ?? stroke.width ?? W,
+    stroke: extra.stroke || stroke.stroke || "ink",
+    fill: extra.fill === undefined ? stroke.fill || null : extra.fill,
+    id: extra.id || stroke.id || "",
+    name: extra.name || stroke.name || "",
+  });
+}
+
+/** 1/8 of Pan → mirror → 4×90°. One walk; shaft meets the hub. */
+function panStroke() {
+  const hub = 2.05;
+  const base = 5.45;
+  const tip = 8.55;
+  const hw = 2.25;
+  const eighth = tracePoints(
+    [
+      [hub, 0],
+      [tip, 0],
+      [base, hw],
+      [base, 0],
+      [hub, 0],
+    ],
+    0,
+  );
+  const quarterHead = appendStroke(eighth, mirrorStroke(eighth, 0));
+  const quarter = appendSegs(quarterHead, [
+    [0, -90],
+    [(hub * Math.PI) / 2, 90],
+  ]);
+  return paint(repeatRotate(quarter, 4, 90), { width: WA, id: "pan" });
+}
+
+function moveStroke() {
+  const hub = 2.15;
+  const base = 5.2;
+  const tip = 8.3;
+  const hw = 1.85;
+  const eighth = tracePoints(
+    [
+      [hub, 0],
+      [tip, 0],
+      [base, hw],
+      [base, 0],
+      [hub, 0],
+    ],
+    0,
+  );
+  const quarterHead = appendStroke(eighth, mirrorStroke(eighth, 0));
+  const quarter = appendSegs(quarterHead, [
+    [0, -90],
+    [(hub * Math.PI) / 2, 90],
+  ]);
+  return paint(repeatRotate(quarter, 4, 90), { width: 2.0, id: "move" });
+}
+
+function addStroke() {
+  const arm = tracePoints(
+    [
+      [1.3, 0],
+      [7.4, 0],
+    ],
+    0,
+  );
+  return paint(repeatRotate(arm, 4, 90), { width: 2.6, stroke: "accent", id: "add" });
+}
+
+function fitStroke() {
+  const half = 7.2;
+  const cr = 1.85;
+  const quarter = S([-half + cr, -half], 0, [
+    [2 * (half - cr), 0],
+    [(cr * Math.PI) / 2, 90],
+  ]);
+  return paint(repeatRotate(quarter, 4, 90), { width: 1.9, id: "fit" });
 }
 
 export const TOOL_ICONS = [
-  doc("pan", "Pan", [
-    ...arrow(0, 8.2, 90, 6.2),
-    ...arrow(0, -8.2, -90, 6.2),
-    ...arrow(8.2, 0, 0, 6.2),
-    ...arrow(-8.2, 0, 180, 6.2),
-    circ(0, 0, 1.35, { stroke: "accent", width: 1.2 }),
-  ]),
-  doc("fit", "Fit", [
-    S([-6, -8], 0, [[12, 0], [Math.PI, 90], [12, 0], [Math.PI, 90], [12, 0], [Math.PI, 90], [12, 0], [Math.PI, 90]], {
-      width: 1.8,
-    }),
-    circ(0, 0, 3.2, { stroke: "accent", width: 1.8 }),
-  ]),
+  doc("pan", "Pan", [panStroke()]),
+  doc("fit", "Fit", [fitStroke(), circ(0, 0, 2.6, { stroke: "accent", width: 1.7, id: "fit-hub" })]),
   doc("select", "Select", [
-    line(0, 8.4, -3.8, -1.6, { width: 1.9 }),
-    line(-3.8, -1.6, 0.7, 0.5, { width: 1.9 }),
-    line(0.7, 0.5, 3.8, -8.2, { width: 1.9 }),
-    line(3.8, -8.2, 0, 8.4, { width: 1.9 }),
+    paint(
+      tracePoints(
+        [
+          [0, 8.4],
+          [-3.8, -1.6],
+          [0.7, 0.5],
+          [3.8, -8.2],
+          [0, 8.4],
+        ],
+        -110,
+      ),
+      { width: 1.7, fill: "ink", id: "select" },
+    ),
   ]),
-  doc("add", "Add", [
-    line(-7.4, 0, 7.4, 0, { width: 2.6, stroke: "accent" }),
-    line(0, -7.4, 0, 7.4, { width: 2.6, stroke: "accent" }),
+  doc("path", "Path", [
+    paint(
+      S([-6.5, -1.2], 18, [
+        [7.4, 70],
+        [7.4, -70],
+      ]),
+      { width: 2.3, id: "path-body" },
+    ),
+    paint(S([-8.2, -6.2], 0, [[16.4, 0], [Math.PI, 90], [12.4, 0], [Math.PI, 90], [16.4, 0], [Math.PI, 90], [12.4, 0], [Math.PI, 90]]), {
+      width: 1.5,
+      stroke: "accent",
+      id: "path-frame",
+    }),
   ]),
+  doc("add", "Add", [addStroke()]),
   doc("arc", "Arc", [
     arc(0, -1.2, 8.2, 28, 124, { width: 2.4 }),
     line(7.24, 2.65, 9.7, 3.7, { width: 1.6, stroke: "accent" }),
@@ -126,13 +223,39 @@ export const TOOL_ICONS = [
     arc(0, 0, 7.2, -40, 95, { width: 2.3, stroke: "ink" }),
     dot(7.2 * Math.cos(20 * DEG), 7.2 * Math.sin(20 * DEG), 1.25),
   ]),
-  doc("move", "Move", [
-    circ(0, 0, 2.1, { width: 1.6, stroke: "accent" }),
-    dot(0, 0, 0.85),
-    ...arrow(0, 8.4, 90, 4.6),
-    ...arrow(0, -8.4, -90, 4.6),
-    ...arrow(8.4, 0, 0, 4.6),
-    ...arrow(-8.4, 0, 180, 4.6),
+  doc("move", "Move", [moveStroke()]),
+  doc("mirror", "Mirror", [
+    paint(
+      appendStroke(
+        S([-2.2, -6.4], 90, [
+          [12.4, 0],
+          [0, 55],
+          [6.2, 0],
+        ]),
+        mirrorStroke(
+          S([-2.2, -6.4], 90, [
+            [12.4, 0],
+            [0, 55],
+            [6.2, 0],
+          ]),
+          90,
+        ),
+      ),
+      { width: 2.1, id: "mirror-body" },
+    ),
+    line(0, -8.2, 0, 8.2, { width: 1.4, stroke: "accent" }),
+  ]),
+  doc("rot90", "90°", [
+    paint(
+      S([6.2, 0], 90, [
+        [(6.2 * Math.PI) / 2, 90],
+        [0, 40],
+        [3.0, 0],
+        [0, -160],
+        [3.0, 0],
+      ]),
+      { width: 2.2, id: "rot90" },
+    ),
   ]),
   doc("tan", "Tan", [
     circ(0, 0, 2.05, { width: 1.6, stroke: "accent" }),
@@ -254,7 +377,10 @@ function emitSeg(p, h, len, ang) {
 
 export function resolvePaint(role, theme = "light") {
   const pal = ICON_THEMES[theme] || ICON_THEMES.light;
-  return pal[role] || pal.ink;
+  if (!role) return pal.ink;
+  if (role === "none") return "none";
+  if (role.startsWith("#") || role.startsWith("rgb") || role.startsWith("hsl")) return role;
+  return pal[role] || role;
 }
 
 export function drawingToSvg(drawing, opts = {}) {
@@ -287,7 +413,7 @@ export function drawingToSvg(drawing, opts = {}) {
       : "none";
     const width = stroke.width ?? 1.6;
     parts.push(
-      `<path d="${d}" fill="${fill}" stroke="${sw}" stroke-width="${fmt(width)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="${d}" fill="${fill}" fill-rule="evenodd" stroke="${sw}" stroke-width="${fmt(width)}" stroke-linecap="round" stroke-linejoin="round"/>`,
     );
   }
   const inner = `<g transform="translate(0,0) scale(1,-1)">${parts.join("")}</g>`;

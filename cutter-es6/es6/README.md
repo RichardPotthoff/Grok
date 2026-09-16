@@ -12,6 +12,8 @@ Vanilla modules — no React, no bundler. GitHub Pages can serve them as-is.
 | `curve-editor.js` | `CurveEditor` core |
 | `drawing-doc.js` | Multi-stroke `{ name, paths }` document |
 | `tool-icons.js` | Icon drawings + exact SVG `A` renderer |
+| `path-xform.js` | Exact rotate / mirror / stitch |
+| `turtle-cmd.js` | Stack tape (`ah`, `loop`, `seg`, `emit`, …) |
 | `webgl-cutter.js` | `WebGLCutter` 3D preview |
 | `curve-editor-widget.js` | anywidget `_esm` render |
 | `webgl-cutter-widget.js` | anywidget `_esm` render |

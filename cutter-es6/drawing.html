@@ -24,7 +24,7 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font);
         -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
-      input, textarea, select, #log, #log * {
+      input, textarea, select, #log, #log *, #tape {
         -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
       }
       button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
@@ -32,7 +32,7 @@
       #app {
         height: 100%;
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto 1fr auto auto;
         min-height: 100dvh;
       }
       header {
@@ -85,6 +85,27 @@
       .thumb.on { outline: 2px solid var(--primary); }
       .thumb svg { width: 100%; height: 64px; display: block; }
       .thumb .nm { font-size: 11px; color: var(--ink); text-align: center; font-weight: 600; }
+      #tape-strip {
+        border-top: 1px solid var(--border); background: var(--surface);
+        padding: 8px 12px 10px;
+      }
+      .tape-head {
+        display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+        margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--muted); font-weight: 600;
+      }
+      .tape-head button {
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 6px 10px; font: inherit; min-height: 32px;
+        text-transform: none; letter-spacing: 0;
+      }
+      #tape {
+        width: 100%; min-height: 7rem; max-height: 22vh; resize: vertical;
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 8px 10px;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        touch-action: auto;
+      }
       footer {
         border-top: 1px solid var(--border); background: var(--surface);
         max-height: 32vh; padding: 8px 12px 16px;
@@ -141,7 +162,7 @@
         <button id="copyJson" type="button">Copy JSON</button>
         <button id="undo" type="button">Undo</button>
         <a class="btn" href="./standalone.html">Cutter</a>
-        <p class="hint">Same editor tools as the cookie cutter. Icons are drawings — pick one in the gallery and edit its arcs. Copy SVG / JSON for iPad previews (no file download).</p>
+        <p class="hint">Path picks a whole stroke; Select only picks an arc on the current path. Tape is a stack language — Run the Pan example to see AH + TL.</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -156,6 +177,16 @@
           <div id="gallery"></div>
         </div>
       </div>
+      <div id="tape-strip">
+        <div class="tape-head">
+          <span>Tape</span>
+          <button id="tapeRun" type="button">Run</button>
+          <button id="tapePan" type="button">Pan example</button>
+          <button id="tapeWords" type="button">Words</button>
+          <button id="tapeCopy" type="button">Copy tape</button>
+        </div>
+        <textarea id="tape" spellcheck="false" aria-label="Command tape"></textarea>
+      </div>
       <footer>
         <div class="dock">
           <h2>Arcs</h2>
@@ -166,6 +197,24 @@
         </div>
         <div class="dock">
           <h2>Strokes</h2>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <label style="font-size:11px;color:var(--muted)">Stroke
+              <select id="strokeRole">
+                <option value="ink">ink</option>
+                <option value="accent">accent</option>
+                <option value="muted">muted</option>
+                <option value="danger">danger</option>
+              </select>
+            </label>
+            <label style="font-size:11px;color:var(--muted)">Fill
+              <select id="fillRole">
+                <option value="">none</option>
+                <option value="ink">ink</option>
+                <option value="accent">accent</option>
+                <option value="paper">paper</option>
+              </select>
+            </label>
+          </div>
           <div id="strokes"></div>
         </div>
         <div class="dock">
@@ -190,8 +239,9 @@
         activeStroke,
       } from "./es6/drawing-doc.js";
       import { TOOL_ICONS, iconDrawing, drawingToSvg } from "./es6/tool-icons.js";
+      import { TurtleStack, TAPE_HELP, TAPE_PAN } from "./es6/turtle-cmd.js";
 
-      const STORE = "arc-drawing-app-v2";
+      const STORE = "arc-drawing-app-v3";
       const nameIn = document.getElementById("docName");
       const rows = document.getElementById("rows");
       const galleryEl = document.getElementById("gallery");
@@ -257,19 +307,37 @@
         return drawing.paths.filter((_, i) => i !== drawing.active);
       }
 
+      function pagePathList() {
+        return drawing.paths.map((s) => ({ id: s.id, outline: outlineFromStroke(s) }));
+      }
+
       function pushStrokeToEditor({ fit = false, commit = false } = {}) {
         const s = currentStroke();
         editor.setBackdrop(otherStrokes().map(outlineFromStroke));
+        editor.setPagePaths(pagePathList());
         editor.setOutline(outlineFromStroke(s), { fit, keepSelection: false, commit });
+      }
+
+      function pickPathById(id) {
+        const i = drawing.paths.findIndex((s) => s.id === id);
+        if (i < 0 || i === drawing.active) return;
+        drawing.active = i;
+        pushStrokeToEditor({ fit: false });
+        persist();
+        renderAll();
+        editor.noteFromHost?.("edit", `path ${id}`);
       }
 
       const editor = new CurveEditor(document.getElementById("edit"), {
         outline: outlineFromStroke(currentStroke()),
         backdrop: otherStrokes().map(outlineFromStroke),
+        pagePaths: drawing.paths.map((s) => ({ id: s.id, outline: outlineFromStroke(s) })),
+        onPickPath: (id) => pickPathById(id),
         onChange(next) {
           const prev = currentStroke();
           drawing = withActiveStroke(drawing, {
             ...next,
+            id: prev.id,
             stroke: prev.stroke,
             width: prev.width,
             fill: prev.fill,
@@ -318,6 +386,11 @@
       }
 
       function renderStrokes() {
+        const strokeRole = document.getElementById("strokeRole");
+        const fillRole = document.getElementById("fillRole");
+        const cur = currentStroke();
+        if (strokeRole) strokeRole.value = cur.stroke || "ink";
+        if (fillRole) fillRole.value = cur.fill || "";
         strokesEl.innerHTML = "";
         drawing.paths.forEach((s, i) => {
           const row = document.createElement("button");
@@ -325,7 +398,7 @@
           row.className = "stroke-row" + (i === drawing.active ? " on" : "");
           const color =
             s.stroke === "accent" ? "#7a9e96" : s.stroke === "danger" ? "#e07070" : s.stroke === "muted" ? "#9a9488" : "#ece7dc";
-          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${i + 1}. ${s.name || s.stroke} · ${s.turtlePath.length} arcs</span>`;
+          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${s.id || i + 1} · ${s.name || s.stroke} · ${s.turtlePath.length} arcs</span>`;
           row.addEventListener("click", () => {
             drawing.active = i;
             pushStrokeToEditor({ fit: true });
@@ -420,9 +493,19 @@
         copyText(serializeDrawing(drawing), "copied JSON");
       };
       document.getElementById("undo").onclick = () => editor.undo();
+      document.getElementById("strokeRole")?.addEventListener("change", (e) => {
+        drawing = withActiveStroke(drawing, { stroke: e.target.value });
+        persist();
+        renderAll();
+      });
+      document.getElementById("fillRole")?.addEventListener("change", (e) => {
+        drawing = withActiveStroke(drawing, { fill: e.target.value || null });
+        persist();
+        renderAll();
+      });
 
       window.addEventListener("keydown", (e) => {
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
         if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
           editor.undo();
@@ -440,6 +523,49 @@
       window.addEventListener("error", (e) => {
         editor?.noteFromHost?.("err", e.message || String(e.error || e));
       });
+
+      const tapeEl = document.getElementById("tape");
+      tapeEl.value = TAPE_HELP + "\n" + TAPE_PAN + "\n";
+
+      function applyEmitted(path) {
+        drawing = withActiveStroke(drawing, {
+          ...path,
+          id: currentStroke().id,
+          name: currentStroke().name || path.name,
+        });
+        pushStrokeToEditor({ fit: true, commit: "tape" });
+        persist();
+        renderAll();
+      }
+
+      function runTape(src) {
+        try {
+          const st = new TurtleStack({
+            onEmit: applyEmitted,
+            onLog: (msg) => editor.noteFromHost?.("edit", msg),
+          });
+          st.eval(src);
+          if (!/\bemit\b/i.test(src) && st.stack.length) {
+            const top = st.peek();
+            if (top && top.turtlePath) applyEmitted(top);
+          }
+          editor.noteFromHost?.("edit", "tape · stack " + st.dump().join(" "));
+        } catch (err) {
+          editor.noteFromHost?.("err", err.message || String(err));
+        }
+      }
+
+      document.getElementById("tapeRun").onclick = () => runTape(tapeEl.value);
+      document.getElementById("tapePan").onclick = () => {
+        tapeEl.value = TAPE_HELP + "\n" + TAPE_PAN + "\n";
+      };
+      document.getElementById("tapeWords").onclick = () => runTape("words");
+      document.getElementById("tapeCopy").onclick = () => {
+        navigator.clipboard.writeText(tapeEl.value).then(
+          () => editor.noteFromHost?.("edit", "copied tape"),
+          (err) => editor.noteFromHost?.("err", err.message || String(err)),
+        );
+      };
 
       editor.fit();
       renderAll();

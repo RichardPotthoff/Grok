@@ -111,6 +111,22 @@ One path in the list is the active stroke. Select / Move / Tan / Close already w
 
 Icons are a first cut — edit them in the drawing app (Reset icon restores the catalog). Select / Undo glyphs are the ones most worth a second pass.
 
+## Stack tape (CLI next to the GUI)
+
+`es6/turtle-cmd.js` — Forth-like stack. Numbers and path objects push; words pop and push.
+
+Same generators as the Python sketch: `ah` is `AH(w,l)`, `loop` is `TL(arcs,n)`, `seg` is one `(s, Δθ°)`.
+
+```
+1 0 seg  0.25 -0.5 ah cat  0 180 seg cat  1 0 seg cat  0 90 seg cat  4 loop  emit
+```
+
+is `TL(((1,0), *AH(w=0.25,l=-0.5), (0,π), (1,0), (0,π/2)), 4)`.
+
+Tape panel lives on `drawing.html`. Run / Pan example / Words / Copy tape. `emit` writes the top path into the active stroke. GUI drag-to-tape is not recorded yet; Flip / 90° in the rail are the same words as `mirror` / `rot`.
+
+SW `cutter-offline-v6-20260915`.
+
 ### Service worker
 
 Safari was serving `cutter-offline-v1` cache-first, and HTTP-caching `sw.js`, so a normal refresh never saw new modules. Private mode has no SW, which is why it looked “fine”. `sw.js` is now `cutter-offline-v3-20260914`, HTML/JS are network-first, register uses `updateViaCache: "none"`. Header **Update app** appears when a new worker is waiting; click → `skipWaiting` → reload. After this deploy, open the Pages URL once, tap Update app if the button shows.

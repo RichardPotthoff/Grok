@@ -13,6 +13,7 @@ export const STROKE_ROLES = ["ink", "accent", "muted", "danger"];
 
 export function normalizeStroke(s = {}) {
   return {
+    id: s.id || "",
     name: s.name || "",
     startPoint: (s.startPoint || [0, 0]).map(Number),
     startAngle: s.startAngle ?? 0,
@@ -24,11 +25,12 @@ export function normalizeStroke(s = {}) {
 }
 
 export function normalizeDrawing(d = {}) {
-  const paths = Array.isArray(d.paths)
+  const paths = (Array.isArray(d.paths)
     ? d.paths.map(normalizeStroke)
     : d.turtlePath
       ? [normalizeStroke(d)]
-      : [];
+      : []
+  ).map((s, i) => (s.id ? s : { ...s, id: `p${i + 1}` }));
   return {
     name: d.name || "Untitled",
     id: d.id || null,
@@ -100,6 +102,7 @@ export function serializeDrawing(d) {
       name: doc.name,
       id: doc.id,
       paths: doc.paths.map((s) => ({
+        id: s.id || undefined,
         name: s.name || undefined,
         startPoint: s.startPoint,
         startAngle: s.startAngle,
