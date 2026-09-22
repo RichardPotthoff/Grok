@@ -1,0 +1,39 @@
+<html>
+<head>
+
+</head>
+<body>
+<script type="module">
+import {transpileTypeScriptToForthTool} from "./es6/ts.js";
+import {JSForthBridge} from "./es6/forth.js"
+    // A raw text string mimicking a .ts file or user tool code definition
+const inputTypeScriptString = `
+function circle(x: number, y: number, radius: number, fillColor: string): void {
+    console.log("Drawing a " + fillColor + " circle with radius " + radius);
+}
+`;
+alert(transpileTypeScriptToForthTool)
+// 1. Convert and extract metadata instantly with zero dependencies
+const compiledResult = transpileTypeScriptToForthTool(inputTypeScriptString);
+
+// 2. Register the resulting clean JS function straight to your Forth bridge
+const forth = new JSForthBridge(); // Uses the bridge from our previous message
+forth.registerTool(compiledResult.name, compiledResult.executableFunction);
+
+// 3. Inspect what the UI registry looks like now
+console.log(forth.uiRegistry["circle"]);
+/* Output:
+{
+  types: ["number", "number", "number", "string"],
+  hints: ["X", "Y", "Radius", "Fill Color"],
+  argCount: 4
+}
+*/
+
+// 4. Safely replay or run your human-readable Forth log strings!
+forth.run('50 100 25 "red" circle'); 
+// Output -> [Canvas Engine Log] "Drawing a red circle with radius 25"
+
+</script>
+</body>
+</html>
