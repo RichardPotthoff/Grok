@@ -201,6 +201,83 @@ Suggested `*` clauses if we go there: `float*float → float`, `cplx*cplx → cp
 
 Still no code for this until the current tape has been used on the iPad.
 
+### Forth vs Lisp vs JS, and UI → tape (2026-09-22)
+
+Two different texts people call “the tape”:
+
+1. **Generative source** — how the figure is *built* (`AH`, `TL`, `scale`). Compact, authored, replayable from empty.
+2. **UI journal** — what the editor *did* (Flip, a biarc drag, delete #3). Good for undo titles and “what just happened.”
+
+They are not the same program. AutoCAD mixed them too: AutoLISP was for programs; undo was not “the LISP of every grip drag.”
+
+**What undo actually stores today.** Not a command list.
+
+- `_hist[]` is a **snapshot** of the whole outline after each `_commit` (`load`, `split`, `close`, `insert`, `delete`, `mirror`, `rot 90`, `add`, tool name). Undo copies that outline back.
+- `_notes[]` is a short human log (`tool`, `joint`, `summary`). Live rows collapse while a pointer is down. Cap 80.
+- `_describeChange` diffs `[s, Δθ]` rows for the log. Pointer coordinates of a drag are **not** kept.
+
+So we already log *that* an action happened, and we keep enough geometry to undo it, but we do not log a replayable word. A 40-sample Move drag has no small Forth/Lisp form; the snapshot *is* the result.
+
+**If the UI is to emit tape**, add a structured event next to the snapshot, then pretty-print it. Do not try to infer the word from the before/after arrays.
+
+| Commit | Event that could print |
+| --- | --- |
+| Flip / 90° | `path 90 mirror` or `(mirror path 90)` |
+| Close / Split / Ins / Del | `close ends` / `split 2` / `del 3` |
+| Add (if we record the new `[s, Δθ]`) | `4 0 seg +` |
+| Biarc / Move / Tan drag | no honest one-liner; journal `biarc j=2` and keep the snapshot |
+
+**Language for which role**
+
+- **Forth** — best fit we have for authored icons. Concatenative, matches HP-21 / Hysim, already started. Awkward for `biarc(v0, v1, p)` and names.
+- **Lisp** — better *journal* syntax: `(mirror p1 90)`, `(biarc v2 v3 1)`. Lists and `defun` are natural. AutoLISP precedent is CAD programs, not grip-undo. Prefix, not stack.
+- **JavaScript** — already the implementation (`mirrorPath`, `computeBiarc`). A tape of `editor.mirrorPath(90)` is easy to replay and bad to author on an iPad. Do not eval user JS as the document.
+
+Recommendation: keep **Forth as the authored tape**. If a second spelling is wanted for journals, print the same structured event as an s-expression. JS stays under the hood. Undo stays snapshot-based even after events exist — a drag is not a word.
+
+### Logo / HPGL / CXF as a custom format (2026-09-22)
+
+A custom prefix format does not have to be Lisp. Logo is prefix without the parentheses: `fd 1  rt 90  repeat 4 [fd 1 rt 90]`. That is already closer to HPGL (`PD;PR 10,0;`) and to QCAD CXF than either Forth or AutoLISP.
+
+**What those formats actually are**
+
+| | State | Primitive | Composition |
+| --- | --- | --- | --- |
+| **Logo** | implicit turtle (pose + pen) | `fd` `rt` `arc` | `repeat n [ … ]`, `to name … end` |
+| **HPGL** | implicit pen + abs/rel mode | `PU`/`PD` + `PA`/`PR` points; `AA`/`AR` center+sweep | none (a job is a stream) |
+| **CXF** | none (each line is independent) | `L x1,y1,x2,y2` and `A cx,cy,r,a1,a2` (deg; `AR` = CW) | none; glyph box height 9, scale at use |
+
+CXF is the “small integers + one scale” idea in coordinate form. A capital is drawn in a 9-unit box; QCAD scales it to text height. There is no turtle, no loop, no names. Fine as an **export** of a finished stroke. Poor as the thing you type to *build* a pan icon.
+
+HPGL is a plotter journal: move the pen. Arcs are center + included angle, not `[s, Δθ]`. Also a good **export** (and close to nozzle travel), not a good authoring model for this app.
+
+Logo is the only one of the three that is a *turtle language*. A Logo spelling of the current tape is just the words in prefix order:
+
+```
+seg 1 0
+ah 1 -2
+seg 0 180
+seg 1 0
+seg 0 90
+loop 4
+scale 8
+```
+
+or, if we lean on implicit pose instead of `seg`:
+
+```
+repeat 4 [ fd 1  ah 1 -2  rt 180  fd 1  rt 90 ]
+scale 8
+```
+
+Same geometry, less stack noise. `repeat n [ … ]` is the list type we wanted, with brackets instead of Lisp parentheses. `to pan :w :l … end` is the definition form.
+
+**Forth vs Logo here.** The stack is great for `path 90 mirror` and for HP-21 habits. Logo is better for reading a procedure and for UI-emitted lines (`rt 90`, `mirror 90`). They can print the same structured event. They should not both be parsers in v1.
+
+**If we pick one custom format** after the current tape has been used: Logo-prefix over the existing words (`seg`, `ah`, `loop`, `mirror`, `scale`), brackets only for `repeat` / `to`, numbers in degrees, integer figures + `scale`. Export CXF/HPGL from the walked path; do not author in center-radius-angle.
+
+Still no parser work this pass.
+
 ### Service worker
 
 Safari was serving `cutter-offline-v1` cache-first, and HTTP-caching `sw.js`, so a normal refresh never saw new modules. Private mode has no SW, which is why it looked “fine”. `sw.js` is now `cutter-offline-v3-20260914`, HTML/JS are network-first, register uses `updateViaCache: "none"`. Header **Update app** appears when a new worker is waiting; click → `skipWaiting` → reload. After this deploy, open the Pages URL once, tap Update app if the button shows.
@@ -220,12 +297,43 @@ HTML apps, IIFE script, Carnets + Pages `_esm`, `cutter_widgets/`, Spin after dr
 7. Insert still plants `[4, 0]`.
 8. IIFE not regenerated.
 
+## Tool span + inspector (2026-09-23)
+
+Tape works. Next integration is not “GUI writes Forth,” it is **one selection shared by canvas, arc list, and inspector**.
+
+Each tool already names a consecutive span (`CurveEditor.span()`):
+
+| Tool | Arcs | Joints | What is free |
+| --- | --- | --- | --- |
+| Select / Arc | 1 | 2 ends of that arc | `s`, `Δθ` of that row |
+| p / Locus | 2 | 3 (pair around `joint`) | family `p`, or junction on the locus circle |
+| Move / Tan / Vertex | 4 | 5 | middle pose `(P, T)` only; two `p` values held or set separately |
+| Path | whole stroke | — | which path is active |
+| Pan / Fit | none | — | view |
+
+The list should highlight that span (not only `editIdx`). Raw `s`/`Δθ` on the four Move rows is the wrong inspector: typing them independently breaks G1. The inspector shows the tool’s coordinates:
+
+**Move / Tan (4 arcs, 5 vertices)**
+
+- Editable: middle vertex `P = x+iy` and heading `T` (angle or unit complex).
+- Shown, not freely typed as four `[s, Δθ]`: the four rows stay highlighted so you see the rewrite set.
+- The two leftover `p` values (`pL`, `pR`) are separate knobs, each with three equivalent views:
+  1. number `p` (current code)
+  2. radius of one of that pair’s arcs (solve `p` from `r`)
+  3. a through-point on that pair (Thru, still not in the rail)
+
+Same three views for the 2-arc tools (one `p` only). Switching view does not change the stored model — commit is still `[s, Δθ]` + start pose. `p` stays on-the-fly.
+
+**Tape’s job in this layout.** A tool commit can append a comment + a word when the word exists (`90 mirror`). The arc list is the live document; the tape is the generative script. Do not merge them into one widget. Do put them in the same bottom band so the list, a small inspector, and the tape share height.
+
+Layout note: tape controls were an unconstrained `auto` row under a `32vh` footer, so a short window clipped the bar. `#app` is now a 4-row grid with mins; **Fold** hides the textarea and keeps the buttons.
+
 ## Next conversation — pick one
 
-1. Live with the tape as it is (long names). Then, if it feels right: `+`/`*` aliases, integer icon tapes, `scale`, optional `tape` field on a drawing.
-2. Redraw weak icons in `drawing.html` (Select, Undo) and keep the catalog in `tool-icons.js` in sync — or treat the gallery JSON / tape as source and codegen the catalog.
-3. **Thru bead** on the two-arc span.
-4. **Arc Len / Turn**.
+1. Inspector fields for Move/Tan (`P`, `T`, `pL`/`pR` + radius / through).
+2. `+` / `*` / `scale` on the tape now that the long names work.
+3. Redraw weak icons.
+4. Thru bead on the two-arc span.
 5. Only then IIFE / anyui / Marimo.
 
 Keep `standalone.html` as the cutter reference and `drawing.html` as the drawing reference.
