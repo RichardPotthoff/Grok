@@ -324,13 +324,32 @@ The list should highlight that span (not only `editIdx`). Raw `s`/`Δθ` on the 
 
 Same three views for the 2-arc tools (one `p` only). Switching view does not change the stored model — commit is still `[s, Δθ]` + start pose. `p` stays on-the-fly.
 
+### Interleaved path table (2026-09-24)
+
+One list, vertices between arcs. `walkExact` already produces `v0 … vN` for `a1 … aN`.
+
+```
+v0  start     x     y     θ°
+a1  arc       s     Δθ    R     κ
+v1  joint     x     y     θ°
+a2  biarc     s     Δθ    R     κ
+```
+
+Redundant on purpose. Edit one field → rewrite stored `[s, Δθ]` (and start pose if the seam moves) → recompute the rest.
+
+Vertex role is a view of the current tool, not a stored tag: start / end / joint / junction (p, Locus) / vertex (Move, Tan). Move types `x,y` on the middle vertex (`applyVertexStable`, keep heading and both `p`). Tan types `θ`. Select / Arc type `s`, `Δθ`, `R` (`s = R·Δθ_rad`), or `κ` (`Δθ = κ·s`). Under Move / Tan / p / Locus the arc numbers are shown and locked.
+
+Span highlight; tool or selection change scrolls the selected row into view. Canvas drags refresh numbers without scrolling.
+
+`p` columns and Thru are still next.
+
 **Tape’s job in this layout.** A tool commit can append a comment + a word when the word exists (`90 mirror`). The arc list is the live document; the tape is the generative script. Do not merge them into one widget. Do put them in the same bottom band so the list, a small inspector, and the tape share height.
 
 Layout note: tape controls were an unconstrained `auto` row under a `32vh` footer, so a short window clipped the bar. `#app` is now a 4-row grid with mins; **Fold** hides the textarea and keeps the buttons.
 
 ## Next conversation — pick one
 
-1. Inspector fields for Move/Tan (`P`, `T`, `pL`/`pR` + radius / through).
+1. `p` / radius / through on the interleaved table (junction rows). The `P`/`θ` fields for Move/Tan are already in the table.
 2. `+` / `*` / `scale` on the tape now that the long names work.
 3. Redraw weak icons.
 4. Thru bead on the two-arc span.

@@ -116,7 +116,7 @@
       footer {
         border-top: 1px solid var(--border); background: var(--surface);
         max-height: none; padding: 8px 12px 16px;
-        display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(10rem, 14rem) 1fr;
+        display: grid; grid-template-columns: minmax(22rem, 1.4fr) minmax(9rem, 12rem) minmax(8rem, 1fr);
         gap: 12px; min-height: 0; overflow: auto;
       }
       @media (max-width: 800px) {
@@ -142,17 +142,19 @@
       #log .row.edit { color: var(--fg); }
       #log .row.live { color: #7a9e96; }
       #log .row.err { color: #e07070; }
-      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
-      th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; }
-      td { padding: 2px 6px; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12px; }
+      th { text-align: left; color: var(--muted); font-weight: 500; padding: 3px 4px; white-space: nowrap; }
+      td { padding: 1px 4px; }
+      td.kind { color: var(--muted); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
       td input {
-        width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
-        border-radius: 6px; padding: 6px 8px; font: inherit;
+        width: 100%; min-width: 3.2rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 6px; padding: 5px 6px; font: inherit;
       }
       tr.sel td { background: color-mix(in oklab, var(--primary) 18%, transparent); }
       tr.span td { background: color-mix(in oklab, var(--primary) 8%, transparent); }
       tr.span.sel td { background: color-mix(in oklab, var(--primary) 22%, transparent); }
-      td input:disabled { opacity: 0.45; }
+      tr.vtx td { font-variant-numeric: tabular-nums; }
+      td input:disabled { opacity: 0.4; }
       #strokes { display: flex; flex-direction: column; gap: 4px; }
       .stroke-row {
         display: flex; align-items: center; gap: 6px;
@@ -204,9 +206,9 @@
       </div>
       <footer>
         <div class="dock">
-          <h2>Arcs</h2>
+          <h2>Path</h2>
           <table>
-            <thead><tr><th>#</th><th>Length</th><th>Angle (deg)</th></tr></thead>
+            <thead><tr><th></th><th></th><th>s / x</th><th>Δθ / y</th><th>R / θ</th><th>κ</th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
@@ -255,6 +257,8 @@
       } from "./es6/drawing-doc.js";
       import { TOOL_ICONS, iconDrawing, drawingToSvg } from "./es6/tool-icons.js";
       import { TurtleStack, TAPE_HELP, TAPE_PAN } from "./es6/turtle-cmd.js";
+      import { walkExact } from "./es6/close-path.js";
+      import { applyVertexStable, recoverP, quadIdx } from "./es6/biarc.js";
 
       const STORE = "arc-drawing-app-v3";
       const nameIn = document.getElementById("docName");
@@ -364,10 +368,10 @@
           renderStrokes();
         },
         onSelect() {
-          renderTable();
+          renderTable({ scroll: true });
         },
         onTool() {
-          renderTable();
+          renderTable({ scroll: true });
         },
         onLog: renderLog,
       });
@@ -427,29 +431,111 @@
         });
       }
 
-      function renderTable() {
+      const DEG = Math.PI / 180;
+      function fmtCell(n, d) {
+        if (!Number.isFinite(n)) return "";
+        const v = Number(n);
+        if (Math.abs(v) >= 1e5) return "";
+        return v.toFixed(d);
+      }
+      function radiusOf(s, daDeg) {
+        const a = daDeg * DEG;
+        if (Math.abs(a) < 1e-10) return Infinity;
+        return s / a;
+      }
+      function kappaOf(s, daDeg) {
+        if (Math.abs(s) < 1e-10) return 0;
+        return (daDeg * DEG) / s;
+      }
+      function vertexRole(j, n, tool, joint) {
+        const mid = joint === n ? 0 : joint;
+        if (j === 0) return "start";
+        if (j === n) return "end";
+        if ((tool === "move" || tool === "tan") && j === mid) return "vertex";
+        if ((tool === "p" || tool === "locus") && j === mid) return "junction";
+        return "joint";
+      }
+      function arcRole(i, tool, span) {
+        if (span.has(i) && (tool === "move" || tool === "tan")) return "dual";
+        if (span.has(i) && (tool === "p" || tool === "locus")) return "biarc";
+        return "arc";
+      }
+      function canEdit(tool, kind, field, { inSpan, focusVtx }) {
+        if (tool === "pan" || tool === "path" || tool === "fit") return false;
+        if (kind === "arc") {
+          if (!inSpan) return false;
+          if (tool === "move" || tool === "tan" || tool === "p" || tool === "locus") return false;
+          return field === "s" || field === "da" || field === "R" || field === "k";
+        }
+        if (!focusVtx) return false;
+        if (tool === "move") return field === "x" || field === "y";
+        if (tool === "tan") return field === "th";
+        if (tool === "select" && kind === "vtx" && field === "th") return false;
+        return false;
+      }
+      function inputCell(opts) {
+        const { enabled, value, digits, step, data } = opts;
+        const shown = fmtCell(value, digits);
+        const dis = enabled ? "" : " disabled";
+        const attrs = Object.entries(data).map(([k, v]) => `data-${k}="${v}"`).join(" ");
+        return `<input ${attrs} type="number" step="${step}" value="${shown}"${dis} />`;
+      }
+
+      function renderTable({ scroll = false } = {}) {
         const selected = editor.getSelected();
         const span = new Set(editor.span?.() || (selected >= 0 ? [selected] : []));
-        const path = currentStroke().turtlePath;
+        const stroke = currentStroke();
+        const path = stroke.turtlePath;
+        const n = path.length;
         const tool = editor.getTool?.() || "select";
-        const lock = tool === "move" || tool === "tan" || tool === "p" || tool === "locus";
+        const joint = editor.joint ?? (selected >= 0 ? selected + 1 : 0);
+        const mid = joint === n ? 0 : joint;
+        const poses = walkExact(outlineFromStroke(stroke));
         rows.innerHTML = "";
-        path.forEach(([len, ang], i) => {
-          const tr = document.createElement("tr");
-          const inSpan = span.has(i);
-          tr.className = [i === selected ? "sel" : "", inSpan ? "span" : ""].filter(Boolean).join(" ");
-          const freeze = lock && !inSpan;
-          const dis = freeze ? " disabled" : "";
-          tr.innerHTML = `<td>${i + 1}</td>
-            <td><input data-i="${i}" data-f="len" type="number" step="0.01" value="${len}"${dis} /></td>
-            <td><input data-i="${i}" data-f="ang" type="number" step="0.1" value="${ang}"${dis} /></td>`;
-          tr.addEventListener("click", (e) => {
+        for (let j = 0; j <= n; j++) {
+          const pose = poses[j] || { point: [0, 0], heading: 0 };
+          const θ = pose.heading / DEG;
+          const inSpanV = (j > 0 && span.has(j - 1)) || (j < n && span.has(j));
+          const focusVtx = inSpanV && j === mid && (tool === "move" || tool === "tan");
+          const trv = document.createElement("tr");
+          trv.className = ["vtx", inSpanV ? "span" : "", focusVtx ? "sel" : ""].filter(Boolean).join(" ");
+          const role = vertexRole(j, n, tool, joint);
+          trv.innerHTML = `<td>v${j}</td><td class="kind">${role}</td>
+            <td>${inputCell({ enabled: canEdit(tool, "vtx", "x", { inSpan: inSpanV, focusVtx }), value: pose.point[0], digits: 3, step: 0.01, data: { kind: "vtx", j, f: "x" } })}</td>
+            <td>${inputCell({ enabled: canEdit(tool, "vtx", "y", { inSpan: inSpanV, focusVtx }), value: pose.point[1], digits: 3, step: 0.01, data: { kind: "vtx", j, f: "y" } })}</td>
+            <td>${inputCell({ enabled: canEdit(tool, "vtx", "th", { inSpan: inSpanV, focusVtx }), value: θ, digits: 2, step: 0.1, data: { kind: "vtx", j, f: "th" } })}</td>
+            <td></td>`;
+          trv.addEventListener("click", (e) => {
             if (e.target.tagName === "INPUT") return;
-            editor.setSelected(i);
-            renderTable();
+            if (j < n) editor.setSelected(j);
+            else if (n) editor.setSelected(n - 1);
+            renderTable({ scroll: true });
           });
-          rows.appendChild(tr);
-        });
+          rows.appendChild(trv);
+          if (j === n) break;
+          const [s, da] = path[j];
+          const inSpan = span.has(j);
+          const tra = document.createElement("tr");
+          tra.className = ["arc", inSpan ? "span" : "", j === selected ? "sel" : ""].filter(Boolean).join(" ");
+          const R = radiusOf(s, da);
+          const k = kappaOf(s, da);
+          const ae = (field) => canEdit(tool, "arc", field, { inSpan, focusVtx: false });
+          tra.innerHTML = `<td>a${j + 1}</td><td class="kind">${arcRole(j, tool, span)}</td>
+            <td>${inputCell({ enabled: ae("s"), value: s, digits: 3, step: 0.01, data: { kind: "arc", i: j, f: "s" } })}</td>
+            <td>${inputCell({ enabled: ae("da"), value: da, digits: 2, step: 0.1, data: { kind: "arc", i: j, f: "da" } })}</td>
+            <td>${inputCell({ enabled: ae("R") && Number.isFinite(R), value: R, digits: 3, step: 0.01, data: { kind: "arc", i: j, f: "R" } })}</td>
+            <td>${inputCell({ enabled: ae("k"), value: k, digits: 4, step: 0.001, data: { kind: "arc", i: j, f: "k" } })}</td>`;
+          tra.addEventListener("click", (e) => {
+            if (e.target.tagName === "INPUT") return;
+            editor.setSelected(j);
+            renderTable({ scroll: true });
+          });
+          rows.appendChild(tra);
+        }
+        if (scroll) {
+          const hit = rows.querySelector("tr.sel") || rows.querySelector("tr.span");
+          hit?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
       }
 
       function renderAll() {
@@ -461,14 +547,47 @@
       rows.addEventListener("change", (e) => {
         const t = e.target;
         if (!(t instanceof HTMLInputElement)) return;
-        const i = Number(t.dataset.i);
-        const f = t.dataset.f;
         const v = Number(t.value);
-        const next = currentStroke().turtlePath.map((s) => s.slice());
-        next[i][f === "len" ? 0 : 1] = v;
-        drawing = withActiveStroke(drawing, { turtlePath: next });
-        editor.setOutline(outlineFromStroke(currentStroke()), { commit: "table" });
-        editor.setSelected(i);
+        if (!Number.isFinite(v)) return;
+        const kind = t.dataset.kind;
+        const outline = outlineFromStroke(currentStroke());
+        const tool = editor.getTool?.() || "select";
+
+        if (kind === "arc") {
+          const i = Number(t.dataset.i);
+          const f = t.dataset.f;
+          const next = outline.turtlePath.map((s) => s.slice());
+          let [s, da] = next[i];
+          if (f === "s") s = v;
+          else if (f === "da") da = v;
+          else if (f === "R") s = v * da * DEG;
+          else if (f === "k") da = (v * s) / DEG;
+          next[i] = [s, da];
+          drawing = withActiveStroke(drawing, { turtlePath: next });
+          editor.setOutline(outlineFromStroke(currentStroke()), { commit: "table" });
+          editor.setSelected(i);
+        } else if (kind === "vtx" && (tool === "move" || tool === "tan")) {
+          const j = Number(t.dataset.j);
+          const n = outline.turtlePath.length;
+          const joint = editor.joint ?? j;
+          const mid = joint === n ? 0 : joint;
+          if (j !== mid) return;
+          const poses = walkExact(outline);
+          const pose = poses[j];
+          let P = pose.point.slice();
+          let θ = pose.heading;
+          if (t.dataset.f === "x") P[0] = v;
+          if (t.dataset.f === "y") P[1] = v;
+          if (t.dataset.f === "th") θ = v * DEG;
+          const q = quadIdx(joint, n);
+          const pL = q ? recoverP(outline, q[1], editor._pL) : 1;
+          const pR = q ? recoverP(outline, q[3], editor._pR) : 1;
+          const next = applyVertexStable(outline, joint, P, θ, pL, pR);
+          if (next && next !== outline) {
+            drawing = withActiveStroke(drawing, next);
+            editor.setOutline(outlineFromStroke(currentStroke()), { commit: "table" });
+          }
+        }
         persist();
         renderAll();
       });
