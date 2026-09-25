@@ -343,6 +343,36 @@ Span highlight; tool or selection change scrolls the selected row into view. Can
 
 `p` columns and Thru are still next.
 
+### Move wrap + pole `p` (2026-09-25)
+
+Log from Move on the 44-arc pan at `j=1`:
+
+```
+move j=1 · start (0,0) θ=… · #1 #2 #3 #44 · pL -0.00 pR 1e6
+```
+
+That is the correct four-arc span. `quadIdx(1, 44) = [43, 0, 1, 2]` — last arc plus the first three — because vertex 1 sits next to the seam. Only those four `[s, Δθ]` rows change. The rest of the path is unchanged as data. What *looks* like the whole shape moving is:
+
+1. Arc 0 is in the span, so `commitSpan` rewrites **start heading** (start point stayed at the origin in the log).
+2. `vN.θ` was shown as `3960°` instead of `0°` — display, not a split. Table now wraps headings.
+3. Neighbors of that vertex are **hinges** (`s = 0` turns: the spoke’s `90°` and the arrowhead’s opening spin). `recoverP` on those pairs lands on a pole (`p ≈ 0` or `|p| → ∞`). Keeping that `p` turns the next arc into a huge loop (`s 0.52 → 29`, `Δθ 166 → 353`).
+
+`recoverP` / `applyVertexStable` now run `saneP`, so those poles snap to `p = 1` and a collapsed rewrite is rejected instead of committed.
+
+Move still does nothing useful on a hinge vertex until we have a hinge-aware rewrite (keep `s = 0` rows, only retarget the lengthful neighbors). That is the same idea as the block note below.
+
+### Blocks, hinges, transforms (ideas)
+
+An interleaved row is already a block of one arc. A **block** is a chain whose interface is the same as one vertex-to-vertex step:
+
+- incoming pose, outgoing pose
+- net `Δθ` and net Δ-vector (the two numbers a hinge constrains)
+- inside: any `[s, Δθ]` list, or a transform of another block
+
+`repeat 4`, `mirror`, `scale`, `scale to fit`, Möbius are blocks that *produce* a chain, not extra primitives. A **hinge** is a block whose interface is fixed (`s = 0` turn is the smallest; a thicker hinge can be a short arc with locked `Δθ / |Δz|`). Move across a hinge should not invent a dual-biarc `p` for the zero-length side.
+
+Do not store a scene graph yet. The commit form stays a flat `[s, Δθ]` list. Blocks belong on the tape / a later outline tree.
+
 **Tape’s job in this layout.** A tool commit can append a comment + a word when the word exists (`90 mirror`). The arc list is the live document; the tape is the generative script. Do not merge them into one widget. Do put them in the same bottom band so the list, a small inspector, and the tape share height.
 
 Layout note: tape controls were an unconstrained `auto` row under a `32vh` footer, so a short window clipped the bar. `#app` is now a 4-row grid with mins; **Fold** hides the textarea and keeps the buttons.

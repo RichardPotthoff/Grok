@@ -294,8 +294,8 @@ export function applyVertexStable(outline, j, P, θ, pL, pR) {
   const n = (outline.turtlePath || []).length;
   const q = quadIdx(j, n);
   if (!q) return outline;
-  const aKeep = Number.isFinite(pL) ? pL : 1;
-  const bKeep = Number.isFinite(pR) ? pR : 1;
+  const aKeep = saneP(Number.isFinite(pL) ? pL : 1);
+  const bKeep = saneP(Number.isFinite(pR) ? pR : 1);
   const next = applyVertex(outline, j, P, θ, aKeep, bKeep);
   if (next === outline || spanCollapsed(outline, next, q)) return outline;
   if (next._biarc) {
@@ -396,7 +396,7 @@ export function recoverP(outline, j, preferP = null) {
     if (![a0.s, a0.Δθ, a1.s, a1.Δθ].every(Number.isFinite)) continue;
     cands.push({ p: cand.p, g: scorePair(a0, a1, hint) });
   }
-  if (!cands.length) return Number.isFinite(preferP) ? preferP : 1;
+  if (!cands.length) return Number.isFinite(preferP) ? saneP(preferP) : 1;
   const bestG = Math.min(...cands.map((c) => c.g));
   const viable = cands.filter((c) => c.g <= bestG + 0.35);
   const pref = Number.isFinite(preferP) ? preferP : null;
@@ -408,7 +408,7 @@ export function recoverP(outline, j, preferP = null) {
     }
     return a.g - b.g;
   });
-  return viable[0].p;
+  return saneP(viable[0].p);
 }
 
 export function pairPoses(outline, j) {

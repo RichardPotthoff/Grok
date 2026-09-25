@@ -257,7 +257,7 @@
       } from "./es6/drawing-doc.js";
       import { TOOL_ICONS, iconDrawing, drawingToSvg } from "./es6/tool-icons.js";
       import { TurtleStack, TAPE_HELP, TAPE_PAN } from "./es6/turtle-cmd.js";
-      import { walkExact } from "./es6/close-path.js";
+      import { walkExact, wrapPi } from "./es6/close-path.js";
       import { applyVertexStable, recoverP, quadIdx } from "./es6/biarc.js";
 
       const STORE = "arc-drawing-app-v3";
@@ -494,7 +494,7 @@
         rows.innerHTML = "";
         for (let j = 0; j <= n; j++) {
           const pose = poses[j] || { point: [0, 0], heading: 0 };
-          const θ = pose.heading / DEG;
+          const θ = wrapPi(pose.heading) / DEG;
           const inSpanV = (j > 0 && span.has(j - 1)) || (j < n && span.has(j));
           const focusVtx = inSpanV && j === mid && (tool === "move" || tool === "tan");
           const trv = document.createElement("tr");
