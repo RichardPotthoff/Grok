@@ -33,7 +33,7 @@
         height: 100%;
         height: 100dvh;
         display: grid;
-        grid-template-rows: auto minmax(10rem, 1fr) minmax(2.75rem, auto) minmax(5rem, 28vh);
+        grid-template-rows: auto minmax(10rem, 1fr) minmax(10rem, 38vh);
         min-height: 0;
         overflow: hidden;
       }
@@ -115,16 +115,25 @@
       #tape-strip.collapsed #tape { display: none; }
       footer {
         border-top: 1px solid var(--border); background: var(--surface);
-        max-height: none; padding: 8px 12px 16px;
-        display: grid; grid-template-columns: minmax(22rem, 1.4fr) minmax(9rem, 12rem) minmax(8rem, 1fr);
-        gap: 12px; min-height: 0; overflow: auto;
+        display: flex; flex-direction: column; min-height: 0; overflow: hidden;
       }
-      @media (max-width: 800px) {
-        footer { grid-template-columns: 1fr; }
+      .tabs {
+        display: flex; gap: 0; flex: 0 0 auto;
+        border-bottom: 1px solid var(--border);
       }
+      .tabs button {
+        background: transparent; color: var(--muted); border: 0;
+        border-bottom: 2px solid transparent; border-radius: 0;
+        padding: 8px 14px; font: inherit; min-height: 36px;
+      }
+      .tabs button.on { color: var(--fg); border-bottom-color: var(--primary); }
+      .tab-panels { flex: 1; min-height: 0; overflow: hidden; }
+      .dock { display: none; height: 100%; min-height: 0; overflow: auto; padding: 8px 12px 12px; }
+      .dock.on { display: flex; flex-direction: column; }
+      #tape-strip { padding: 0; max-height: none; overflow: hidden; }
+      #tape { min-height: 8rem; }
       @media (max-height: 640px) {
-        #app { grid-template-rows: auto minmax(8rem, 1fr) minmax(2.75rem, auto) minmax(4.5rem, 26vh); }
-        #tape-strip { max-height: 26vh; }
+        #app { grid-template-rows: auto minmax(8rem, 1fr) minmax(8rem, 34vh); }
       }
       .dock { min-height: 0; overflow: auto; }
       .dock h2 {
@@ -178,7 +187,7 @@
         <button id="copyJson" type="button">Copy JSON</button>
         <button id="undo" type="button">Undo</button>
         <a class="btn" href="./standalone.html">Cutter</a>
-        <p class="hint">Path picks a whole stroke; Select only picks an arc on the current path. Tape is a stack language — Run the Pan example to see AH + TL.</p>
+        <p class="hint">Path / Tape / Strokes / Log are tabs under the canvas. Path picks a stroke; Select picks an arc. Tape is still postfix — prefix is next.</p>
       </header>
       <div class="stage">
         <div class="panel">
@@ -193,50 +202,54 @@
           <div id="gallery"></div>
         </div>
       </div>
-      <div id="tape-strip">
-        <div class="tape-head">
-          <span>Tape</span>
-          <button id="tapeRun" type="button">Run</button>
-          <button id="tapePan" type="button">Pan example</button>
-          <button id="tapeWords" type="button">Words</button>
-          <button id="tapeCopy" type="button">Copy tape</button>
-          <button id="tapeFold" type="button" title="Hide or show the tape text">Fold</button>
-        </div>
-        <textarea id="tape" spellcheck="false" aria-label="Command tape"></textarea>
-      </div>
       <footer>
-        <div class="dock">
-          <h2>Path</h2>
-          <table>
-            <thead><tr><th></th><th></th><th>s / x</th><th>Δθ / y</th><th>R / θ</th><th>κ</th></tr></thead>
-            <tbody id="rows"></tbody>
-          </table>
+        <div class="tabs" role="tablist">
+          <button type="button" data-tab="path" class="on">Path</button>
+          <button type="button" data-tab="tape">Tape</button>
+          <button type="button" data-tab="strokes">Strokes</button>
+          <button type="button" data-tab="log">Log</button>
         </div>
-        <div class="dock">
-          <h2>Strokes</h2>
-          <div style="display:flex;gap:6px;margin-bottom:6px">
-            <label style="font-size:11px;color:var(--muted)">Stroke
-              <select id="strokeRole">
-                <option value="ink">ink</option>
-                <option value="accent">accent</option>
-                <option value="muted">muted</option>
-                <option value="danger">danger</option>
-              </select>
-            </label>
-            <label style="font-size:11px;color:var(--muted)">Fill
-              <select id="fillRole">
-                <option value="">none</option>
-                <option value="ink">ink</option>
-                <option value="accent">accent</option>
-                <option value="paper">paper</option>
-              </select>
-            </label>
+        <div class="tab-panels">
+          <div class="dock on" data-tab="path">
+            <table>
+              <thead><tr><th></th><th></th><th>s / x</th><th>Δθ / y</th><th>R / θ</th><th>κ</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
           </div>
-          <div id="strokes"></div>
-        </div>
-        <div class="dock">
-          <h2>Log</h2>
-          <div id="log"></div>
+          <div class="dock" data-tab="tape" id="tape-strip">
+            <div class="tape-head">
+              <span>Tape</span>
+              <button id="tapeRun" type="button">Run</button>
+              <button id="tapePan" type="button">Pan example</button>
+              <button id="tapeWords" type="button">Words</button>
+              <button id="tapeCopy" type="button">Copy tape</button>
+            </div>
+            <textarea id="tape" spellcheck="false" aria-label="Command tape"></textarea>
+          </div>
+          <div class="dock" data-tab="strokes">
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <label style="font-size:11px;color:var(--muted)">Stroke
+                <select id="strokeRole">
+                  <option value="ink">ink</option>
+                  <option value="accent">accent</option>
+                  <option value="muted">muted</option>
+                  <option value="danger">danger</option>
+                </select>
+              </label>
+              <label style="font-size:11px;color:var(--muted)">Fill
+                <select id="fillRole">
+                  <option value="">none</option>
+                  <option value="ink">ink</option>
+                  <option value="accent">accent</option>
+                  <option value="paper">paper</option>
+                </select>
+              </label>
+            </div>
+            <div id="strokes"></div>
+          </div>
+          <div class="dock" data-tab="log">
+            <div id="log"></div>
+          </div>
         </div>
       </footer>
     </div>
@@ -709,9 +722,13 @@
           (err) => editor.noteFromHost?.("err", err.message || String(err)),
         );
       };
-      document.getElementById("tapeFold").onclick = () => {
-        document.getElementById("tape-strip").classList.toggle("collapsed");
-      };
+      document.querySelectorAll(".tabs [data-tab]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.dataset.tab;
+          document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.classList.toggle("on", b === btn));
+          document.querySelectorAll(".dock[data-tab]").forEach((p) => p.classList.toggle("on", p.dataset.tab === id));
+        };
+      });
 
       editor.fit();
       renderAll();

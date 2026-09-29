@@ -377,13 +377,24 @@ Do not store a scene graph yet. The commit form stays a flat `[s, Δθ]` list. B
 
 Layout note: tape controls were an unconstrained `auto` row under a `32vh` footer, so a short window clipped the bar. `#app` is now a 4-row grid with mins; **Fold** hides the textarea and keeps the buttons.
 
-## Next conversation — pick one
+## Next steps (2026-09-28)
 
-1. `p` / radius / through on the interleaved table (junction rows). The `P`/`θ` fields for Move/Tan are already in the table.
-2. `+` / `*` / `scale` on the tape now that the long names work.
-3. Redraw weak icons.
-4. Thru bead on the two-arc span.
-5. Only then IIFE / anyui / Marimo.
+Workspace synced from `RichardPotthoff/Grok` @ `8a18f35` (“add blocks”). That commit is `es6/forth.js` + `es6/ts.js` + `ts.html` — a Forth bridge that registers JS functions. It is **not** wired to `drawing.html` and is **not** a geometric block. That is why the canvas shows no blocks.
+
+**Do not build a scene graph yet.** A block is a *view* of a span: start pose, end pose, net `Δθ`, net Δ-vector, plus the `[s, Δθ]` rows inside. Highlight = current `CurveEditor.span()` (already in the table; still weak on the canvas). Tools enable/disable from that span’s kind (1 arc / 2-arc biarc / 4-arc vertex / hinge if any row has `s ≈ 0`).
+
+**UI.** Footer is now tabs: Path | Tape | Strokes | Log. One pane at a time so the tape can use the full band. Gallery stays beside the canvas.
+
+**Tape language.** Keep the current postfix evaluator working. Next parser should be **prefix / Logo** (`repeat 4 [ fd 1 rt 90 ]`) because that is what you want to type and what the UI can emit. Same words; different token order. Do not eval TypeScript as the document (`ts.html` stays a sketch).
+
+Suggested order:
+
+1. Ship the tabbed footer (this pass) and confirm it on the iPad.
+2. Dim or hide tools that the current span cannot use (Move off when `n < 4` or the span is a hinge).
+3. Prefix tape beside the postfix one (`logo` words, same `emit`).
+4. Only then: name a multi-arc span a block on the tape (`to spoke … end`).
+5. Hinge-aware Move (keep `s = 0` rows).
+6. IIFE / anyui last.
 
 Keep `standalone.html` as the cutter reference and `drawing.html` as the drawing reference.
 
