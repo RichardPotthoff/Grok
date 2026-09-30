@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" class="drawing-anyui">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Arc REPL" />
+    <meta name="theme-color" content="#12110f" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./drawing_anyui.css" />
+    <title>Arc Drawing · REPL</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Arc REPL</h1>
+        <button type="button" id="btn-run" class="primary">Run</button>
+        <button type="button" id="btn-fit">Fit</button>
+        <button type="button" id="btn-example">Example</button>
+        <button type="button" id="btn-copy">Copy script</button>
+        <button type="button" id="btn-help">Help</button>
+        <a class="btn" href="./drawing.html">drawing.html</a>
+        <p class="hint">Script is the document. define() names a block; show() places it. Flatten only to paint.</p>
+      </header>
+      <div class="stage">
+        <div class="panel canvas-panel">
+          <div class="label">Page</div>
+          <canvas id="stage"></canvas>
+        </div>
+        <aside class="panel objects-panel">
+          <div class="objects-head">Objects</div>
+          <div id="objects"></div>
+        </aside>
+      </div>
+      <div class="dock">
+        <div class="script-pane">
+          <div class="pane-head">Script</div>
+          <textarea id="script" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        </div>
+        <div class="log-pane">
+          <div class="pane-head">Log</div>
+          <pre id="log"></pre>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./drawing_anyui_main.js"></script>
+  </body>
+</html>

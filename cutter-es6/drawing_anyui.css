@@ -1,0 +1,207 @@
+:root {
+  --bg: #12110f;
+  --surface: #1c1b18;
+  --fg: #ece7dc;
+  --muted: #9a9488;
+  --primary: #7a9e96;
+  --paper: #f3ead8;
+  --ink: #2a241c;
+  --border: color-mix(in oklab, #ece7dc 12%, transparent);
+  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "ui-monospace", "SFMono-Regular", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+input, textarea, select, #log, #log *, #script {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+button:not(:disabled), [role="button"]:not(:disabled), a.btn { cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+
+#app {
+  height: 100%;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(8rem, 1fr) minmax(9rem, 36vh);
+  min-height: 0;
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+header h1 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 10px 0 0;
+  letter-spacing: -0.02em;
+}
+
+header button, header a.btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  min-height: 40px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+header button.primary {
+  background: var(--primary);
+  color: #12110f;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.hint {
+  width: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: 1fr minmax(11rem, 16rem);
+  min-height: 0;
+}
+
+@media (max-width: 800px) {
+  .stage {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr minmax(6rem, 28%);
+  }
+}
+
+.panel { position: relative; min-height: 120px; min-width: 0; }
+
+.canvas-panel { background: var(--paper); }
+
+canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+.label, .objects-head, .pane-head {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.label {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.objects-panel {
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.objects-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+#objects {
+  flex: 1;
+  overflow: auto;
+  padding: 6px;
+}
+
+.obj {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 0 0 6px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.obj .nm { font-weight: 600; }
+.obj .meta { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.dock {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+@media (max-width: 800px) {
+  .dock { grid-template-columns: 1fr; grid-template-rows: 1fr 7rem; }
+}
+
+.script-pane, .log-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.log-pane { border-left: 1px solid var(--border); }
+
+.pane-head { padding: 6px 10px 0; flex: 0 0 auto; }
+
+#script, #log {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 6px 10px 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#script { resize: none; width: calc(100% - 20px); }
+
+#log {
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#log .err { color: #e07070; }

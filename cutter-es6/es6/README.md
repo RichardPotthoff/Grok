@@ -14,6 +14,8 @@ Vanilla modules — no React, no bundler. GitHub Pages can serve them as-is.
 | `tool-icons.js` | Icon drawings + exact SVG `A` renderer |
 | `path-xform.js` | Exact rotate / mirror / stitch |
 | `turtle-cmd.js` | Stack tape (`ah`, `loop`, `seg`, `emit`, …) |
+| `blocks.js` | Lazy block classes (`Arc`, `Seq`, `Repeat`, …) + relative `interface()` |
+| `drawing-repl.js` | Constrained JS REPL (`define`, `show`) over blocks |
 | `webgl-cutter.js` | `WebGLCutter` 3D preview |
 | `curve-editor-widget.js` | anywidget `_esm` render |
 | `webgl-cutter-widget.js` | anywidget `_esm` render |

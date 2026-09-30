@@ -1,10 +1,52 @@
 # Cookie cutter designer — progress
 
-Handoff for the next chat. Last updated 2026-09-15 (drawing app + turtle-drawn tool icons).
+Handoff for the next chat. Last updated 2026-09-30.
 
-**Goal:** a turtle-path editor + WebGL blade preview. Only geometric primitive is the circular arc. Paths are `turtlePath = [[length, angleDegrees], …]` plus `startPoint`, `startAngle`, `name`.
+**Goal:** arc-only turtle editor. Primitive is the circular arc. Live *geometry walk* is still `[[s, Δθ], …]` plus start pose. The long-term *document* is a tree of **blocks** (stream operators); flatten only to draw, hit-test, or export.
 
-**Source of truth:** this folder (`cutter-es6/`), also `RichardPotthoff/Grok` on `main`. Test in modular `standalone.html`. IIFE `index*.html` is stale until regenerated.
+**Source of truth:** `cutter-es6/` in this workspace and `RichardPotthoff/Grok` on `main`. Drawing reference: `drawing.html`. Cutter reference: `standalone.html`. Cutter anyui twin: `cutter_anyui.html`. IIFE `index*.html` is stale.
+
+## Next conversation (2026-09-30)
+
+Started the CLI twin instead of a full anyui chrome port.
+
+- `drawing_anyui.html` + `drawing_anyui_main.js` + `drawing_anyui.css` — script pane, canvas flatten, object list, log. No edit tools.
+- `es6/blocks.js` — `Arc` `Seq` `Repeat` `Scale` `Mirror` `Ah` `Orbit` `Ref`. `interface()` = relative `(dx, dy, Δθ°)`; `arcs()` is a restartable generator.
+- `es6/drawing-repl.js` — `new Function` API (`seg`, `ah`, `seq`, `repeat`, `define`, `show`, …). Script is the document. Storage key `arc-drawing-repl-v1` (not `arc-drawing-app-v1`).
+- SW `cutter-offline-v12-20260930`. Keep `drawing.html` as the grip-edit reference.
+
+Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
+
+Still later: anyui chrome around this, prefix Logo, block inspector dialogs, write-back from canvas tools.
+
+### Handoff summary (this thread)
+
+**Drawing app exists.** Multi-stroke page, gallery of tool icons + Duck, `es6/drawing-doc.js`, exact SVG arcs, Path vs Select, fill/stroke roles. Tape is postfix (`es6/turtle-cmd.js`: `seg`, `ah`, `loop`, `cat`, `join`, `rot`, `mirror`, `orbit`, `emit`). Pan icon is one path via `path-xform.js` symmetries.
+
+**UI this pass.** Footer tabs Path | Tape | Strokes | Log. Early bug: `#tape-strip { display:flex }` beat `.dock { display:none }` so every tab showed Tape. Fixed with dock-only display. Interleaved Path table: `v0, a1, v1, …` with `s/Δθ/R/κ` and `x/y/θ`; tool span highlights; Move/Tan type the middle pose.
+
+**Move on pan `j=1`.** Correct 4-arc wrap `[43,0,1,2]`. Start point stayed; start heading changed (arc 0 in span). Pole `p` from `s=0` hinges exploded a pair. `saneP` now in `recoverP` / `applyVertexStable`. Hinge-aware Move still open.
+
+**anyui vs plain HTML.** `drawing.html` was never on anyui (speed, not a revert). Cutter already has `cutter_anyui.html`. Port issues: `CurveEditorWidget` is one outline (need backdrop / Path tool); `PathTableWidget` is the old two-column table; anyui `Tab` remounts children — tape/log must live on the **model**. Do not merge `anyui/` into `es6/`.
+
+**NiceGUI** (looked at, do not adopt): Python + FastAPI + Socket.IO + Vue/Quasar. `ui.anywidget` embeds an anywidget over that socket. Kills static Pages / iPad preview. Steal the discipline (tree chrome, state on the model), not the server.
+
+**Blocks = geonodes, not baked spans.**
+
+- Block: stream in → params → stream out. Stream of blocks; arc is the leaf `{s, Δθ}`.
+- Stroke: pose + paint + `root` (tree or `ref`). Named blocks are shared (`repeat 4 [ spoke ]` is one `spoke`).
+- Flatten row: `[s, Δθ]` or `[s, Δθ, { block, k, stroke, width, id }]`. Pick → `block` + instance `k`.
+- External interface: Δ-vector + net `Δθ` (3 numbers). One more than an arc, one less than a biarc (needs `p`). Closed block is a black box; hinge locks the interface. Stand-in biarc uses `p=1` if you want a curve.
+- Tape / prefix Logo *is* the tree text. `emit` bakes for export. `es6/forth.js` + `ts.html` are a JS-Forth sketch, not geometry.
+
+**Prefix** still planned for authored tape (`repeat 4 [ fd 1 spoke ]`). Postfix evaluator stays until the anyui page exists.
+
+### anyui port checklist
+
+- Toolbar, stage (editor | gallery), Tab(Path, Tape, Strokes, Log).
+- Traits: `tape` string, log rows, `selected_index`, active stroke — so Tab remount does not wipe them.
+- Lift interleaved table and multi-stroke editor options after the chrome works.
+- Leave blocks as a following conversation.
 
 ## What we achieved
 
@@ -361,42 +403,54 @@ That is the correct four-arc span. `quadIdx(1, 44) = [43, 0, 1, 2]` — last arc
 
 Move still does nothing useful on a hinge vertex until we have a hinge-aware rewrite (keep `s = 0` rows, only retarget the lengthful neighbors). That is the same idea as the block note below.
 
-### Blocks, hinges, transforms (ideas)
+### Blocks as stream operators (2026-09-30)
 
-An interleaved row is already a block of one arc. A **block** is a chain whose interface is the same as one vertex-to-vertex step:
+Flatten-after-eval is **not** the document. A block is a geonode: input stream → parameters → output stream. Flatten only when drawing, hitting, or exporting a baked path.
 
-- incoming pose, outgoing pose
-- net `Δθ` and net Δ-vector (the two numbers a hinge constrains)
-- inside: any `[s, Δθ]` list, or a transform of another block
+The stream is a sequence of blocks. An arc is the leaf block `{ type: "arc", s, dθ }`. A sequence is a block. `repeat`, `mirror`, `rot`, `scale`, Möbius, `ah` are blocks that rewrite their input. A hinge is a block whose interface (net `Δθ`, net Δ-vector) is locked.
 
-`repeat 4`, `mirror`, `scale`, `scale to fit`, Möbius are blocks that *produce* a chain, not extra primitives. A **hinge** is a block whose interface is fixed (`s = 0` turn is the smallest; a thicker hinge can be a short arc with locked `Δθ / |Δz|`). Move across a hinge should not invent a dual-biarc `p` for the zero-length side.
+**Stroke vs block.** Today a stroke mixes three jobs: start pose, paint (`stroke`/`fill`/`width`/`id`), and a baked `turtlePath`. Split that:
 
-Do not store a scene graph yet. The commit form stays a flat `[s, Δθ]` list. Blocks belong on the tape / a later outline tree.
+- **Block** — named or inline operator / leaf (the geonode).
+- **Stroke** — one *use* on the page: pose + paint + `root` (inline tree or `ref` to a named block).
 
-**Tape’s job in this layout.** A tool commit can append a comment + a word when the word exists (`90 mirror`). The arc list is the live document; the tape is the generative script. Do not merge them into one widget. Do put them in the same bottom band so the list, a small inspector, and the tape share height.
+Named blocks are shared. Edit `spoke` once; every `repeat` / every stroke that `ref`s it updates. That is why we do not store four copied shafts.
 
-Layout note: tape controls were an unconstrained `auto` row under a `32vh` footer, so a short window clipped the bar. `#app` is now a 4-row grid with mins; **Fold** hides the textarea and keeps the buttons.
+```
+Block =
+  { type: "arc", s, dθ }
+| { type: "seq", items: Block[] }
+| { type: "ref", name }
+| { type: "repeat", n, of: Block }
+| { type: "xform", kind: "mirror"|"rot"|"scale"|"mobius", of: Block, … }
 
-## Next steps (2026-09-28)
+Stroke = { id, name, startPoint, startAngle, stroke, fill, width, root }
+Drawing = { name, blocks: { spoke: Block, … }, paths: Stroke[] }
+```
 
-Workspace synced from `RichardPotthoff/Grok` @ `8a18f35` (“add blocks”). That commit is `es6/forth.js` + `es6/ts.js` + `ts.html` — a Forth bridge that registers JS functions. It is **not** wired to `drawing.html` and is **not** a geometric block. That is why the canvas shows no blocks.
+`walkExact` / SVG / hit-test flatten `root` from the stroke pose. The Path table is that flatten, tagged with `(block, local i, instance k)` so a pick can edit the definition or this use.
 
-**Do not build a scene graph yet.** A block is a *view* of a span: start pose, end pose, net `Δθ`, net Δ-vector, plus the `[s, Δθ]` rows inside. Highlight = current `CurveEditor.span()` (already in the table; still weak on the canvas). Tools enable/disable from that span’s kind (1 arc / 2-arc biarc / 4-arc vertex / hinge if any row has `s ≈ 0`).
+**Arc extras (optional, on the flatten).** Geometry stays `[s, Δθ]`. A third slot may carry paint and provenance:
 
-**UI.** Footer is now tabs: Path | Tape | Strokes | Log. One pane at a time so the tape can use the full band. Gallery stays beside the canvas.
+```
+[s, Δθ]
+[s, Δθ, { id, block, k, stroke, width }]
+```
 
-**Tape language.** Keep the current postfix evaluator working. Next parser should be **prefix / Logo** (`repeat 4 [ fd 1 rt 90 ]`) because that is what you want to type and what the UI can emit. Same words; different token order. Do not eval TypeScript as the document (`ts.html` stays a sketch).
+- `block` — name or id of the block that emitted this arc (the object to open for parameter edits).
+- `k` — which instance inside `repeat` / `orbit` (same `block` can appear many times).
+- `stroke` / `width` — optional override; missing means inherit the stroke’s paint.
+- `id` — optional stable id for this flattened row (selection / aliases).
 
-Suggested order:
+Eval writes these as it walks. Pick an arc → read `block` → edit that block’s parameters. Same `block` on four copies of `spoke` is edit-once-update-everywhere.
 
-1. Ship the tabbed footer (this pass) and confirm it on the iPad.
-2. Dim or hide tools that the current span cannot use (Move off when `n < 4` or the span is a hinge).
-3. Prefix tape beside the postfix one (`logo` words, same `emit`).
-4. Only then: name a multi-arc span a block on the tape (`to spoke … end`).
-5. Hinge-aware Move (keep `s = 0` rows).
-6. IIFE / anyui last.
+**Block interface = pose step.** Outside, a block is three numbers from the incoming pose: Δ-vector (end − start) and net `Δθ`. That is one more than a single arc `(s, Δθ)` and one less than a biarc (two poses + `p`). You cannot in general replace a block by one arc. You can stand in for it with a biarc if you choose `p` (default 1), or treat it as a black box whose only handles are the two end poses. A hinge locks that interface. `repeat` / `join` / Move-the-box use the interface only; opening the block edits children. Flatten is still for pixels. A closed block hit-tests via inner arcs (`block` id) but highlights the box.
 
-Keep `standalone.html` as the cutter reference and `drawing.html` as the drawing reference.
+CurveEditor still *edits* a flatten. Committing a Move inside `repeat 4 [ spoke ]` must write back into `spoke` (or detach this use). Do not implement the tree yet; stop treating baked `turtlePath` as the long-term store.
+
+**Tape.** Postfix `turtle-cmd.js` works. Authored form should become prefix/Logo later. Tape text is the tree; the Path table is the flatten of the active stroke. Do not merge those widgets. Footer tabs already give the tape a full pane.
+
+**Tab bug (fixed).** `#tape-strip { display:flex }` overrode `.dock { display:none }`. Display now follows `.dock.on` only. SW `cutter-offline-v11-20260929`.
 
 ## Layout (do not merge)
 
