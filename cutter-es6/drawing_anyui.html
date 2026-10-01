@@ -17,13 +17,10 @@
     <div id="app">
       <header>
         <h1>Arc REPL</h1>
-        <button type="button" id="btn-run" class="primary">Run</button>
         <button type="button" id="btn-fit">Fit</button>
-        <button type="button" id="btn-example">Example</button>
-        <button type="button" id="btn-copy">Copy script</button>
         <button type="button" id="btn-help">Help</button>
         <a class="btn" href="./drawing.html">drawing.html</a>
-        <p class="hint">Script is the document. define() names a block; show() places it. Flatten only to paint.</p>
+        <p class="hint">store() keeps a named block. Run only this script — the object list stays. reverse() is last-to-first leaves; mirror() flips handedness.</p>
       </header>
       <div class="stage">
         <div class="panel canvas-panel">
@@ -31,13 +28,25 @@
           <canvas id="stage"></canvas>
         </div>
         <aside class="panel objects-panel">
-          <div class="objects-head">Objects</div>
+          <div class="objects-head">
+            <span>Objects</span>
+            <button type="button" id="btn-reset-store">Clear store</button>
+          </div>
           <div id="objects"></div>
         </aside>
       </div>
       <div class="dock">
         <div class="script-pane">
-          <div class="pane-head">Script</div>
+          <div class="pane-head">
+            <div id="script-tabs" class="script-tabs"></div>
+            <div class="script-actions">
+              <button type="button" id="btn-run" class="primary">Run</button>
+              <button type="button" id="btn-copy">Copy script</button>
+              <button type="button" id="btn-new-script">+ Script</button>
+              <button type="button" id="btn-example">Spoke</button>
+              <button type="button" id="btn-star">Star6</button>
+            </div>
+          </div>
           <textarea id="script" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
         </div>
         <div class="log-pane">

@@ -14,13 +14,14 @@ import {
   Orbit,
   Ref,
   Repeat,
+  Reverse,
   Scale,
   Seq,
   asBlock,
   isBlock,
 } from "./blocks.js";
 
-export const STORAGE_KEY = "arc-drawing-repl-v1";
+export const STORAGE_KEY = "arc-drawing-repl-v2";
 
 export const DEFAULT_SCRIPT = `// Spoke × 4  (same moves as the Forth pan example)
 const spoke = seq(
@@ -30,8 +31,20 @@ const spoke = seq(
   seg(1, 0),
   seg(0, 90),
 );
-define("spoke", spoke);
+store("spoke", spoke);
 show(repeat(spoke, 4));
+`;
+
+export const STAR6_SCRIPT = `// 1/12 of the outline, then reverse + repeat 6
+const star6_ray = seq(
+  seg(3, -30),
+  seg(15, 0),
+  seg(4, 60),
+);
+store("star6_ray", star6_ray);
+const star6 = repeat(seq(star6_ray, reverse(star6_ray)), 6);
+store("star6", star6);
+show(star6);
 `;
 
 export const API_HELP = [
@@ -41,13 +54,17 @@ export const API_HELP = [
   "seq(a, b, …) / cat   relative concatenate",
   "repeat(b, n) / loop  replay moves n times",
   "scale(b, k)          scale lengths",
-  "mirror(b, axisDeg?)  flip handedness",
+  "reverse(b)           leaf arcs last-to-first, same turns",
+  "mirror(b, axisDeg?)  flip handedness across start axis",
   "orbit(b, n, deg)     n rotated copies, joined",
-  "ref(name)            named block",
-  "define(name, b)      publish to the object list",
+  "ref(name)            block from the store",
+  "store(name, b)       keep in the global object list",
+  "define(name, b)      same as store",
+  "forget(name)         drop one stored name",
   "show(b, {at, heading, stroke, width, fill, name})",
-  "clear()              remove page uses",
-  "list()               defined names",
+  "clear()              remove page uses (store stays)",
+  "resetStore()         drop all stored names",
+  "list()               stored names",
   "print(...)           log pane",
 ].join("\n");
 
@@ -74,13 +91,28 @@ export class DrawingRepl {
    * @param {string} name
    * @param {Block} block
    */
-  define(name, block) {
+  store(name, block) {
     const key = String(name);
-    if (!key) throw new Error("define: empty name");
+    if (!key) throw new Error("store: empty name");
     const b = asBlock(block);
     b.name = key;
     this.dict.set(key, b);
     return b;
+  }
+
+  define(name, block) {
+    return this.store(name, block);
+  }
+
+  forget(name) {
+    const key = String(name);
+    const ok = this.dict.delete(key);
+    if (!ok) this.note("forget: no " + key);
+    return ok;
+  }
+
+  resetStore() {
+    this.dict = new Map();
   }
 
   /**
@@ -142,6 +174,9 @@ export class DrawingRepl {
       scale(b, k) {
         return new Scale(b, k);
       },
+      reverse(b) {
+        return new Reverse(b);
+      },
       mirror(b, axisDeg) {
         return new Mirror(b, axisDeg ?? 0);
       },
@@ -151,14 +186,24 @@ export class DrawingRepl {
       ref(name) {
         return new Ref(name, (n) => self.dict.get(n));
       },
+      store(name, b) {
+        return self.store(name, b);
+      },
       define(name, b) {
-        return self.define(name, b);
+        return self.store(name, b);
+      },
+      forget(name) {
+        return self.forget(name);
       },
       show(b, opts) {
         return self.show(b, opts);
       },
       clear() {
         self.uses = [];
+      },
+      resetStore() {
+        self.resetStore();
+        self.note("store cleared");
       },
       list() {
         const names = [...self.dict.keys()];
@@ -176,20 +221,27 @@ export class DrawingRepl {
   }
 
   /**
-   * Run `src` from an empty dictionary and page.
-   * On throw, restore the previous dict/uses and rethrow.
+   * Run `src` against the existing store.
+   * Uses previously shown by this scriptId are replaced.
+   * On throw, restore dict and uses.
    */
-  run(src) {
-    const prevDict = this.dict;
-    const prevUses = this.uses;
-    this.reset();
+  run(src, { scriptId = "" } = {}) {
+    const prevDict = new Map(this.dict);
+    const prevUses = this.uses.slice();
+    if (scriptId) this.uses = this.uses.filter((u) => u.scriptId !== scriptId);
     const api = this.api();
     const names = Object.keys(api);
+    const markedFrom = this.uses.length;
     try {
       const fn = new Function(...names, `"use strict";\n${src}\n`);
       fn(...names.map((k) => api[k]));
+      if (scriptId) {
+        for (let i = markedFrom; i < this.uses.length; i++) {
+          this.uses[i].scriptId = scriptId;
+        }
+      }
       this.note(
-        `ok · ${this.dict.size} named · ${this.uses.length} shown · ${this.totalArcs()} arcs`,
+        `ok · ${this.dict.size} stored · ${this.uses.length} shown · ${this.totalArcs()} arcs`,
       );
     } catch (err) {
       this.dict = prevDict;
@@ -254,22 +306,61 @@ export function describe(v) {
   return String(v);
 }
 
+export function newScript(name = "Script", text = "") {
+  return {
+    id: "s" + Math.random().toString(36).slice(2, 8),
+    name,
+    text,
+  };
+}
+
 export function loadSession() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { script: DEFAULT_SCRIPT };
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("arc-drawing-repl-v1");
+    if (!raw) {
+      return {
+        scripts: [newScript("spoke", DEFAULT_SCRIPT)],
+        active: 0,
+      };
+    }
     const data = JSON.parse(raw);
-    if (data && typeof data.script === "string") return { script: data.script };
+    if (data && Array.isArray(data.scripts) && data.scripts.length) {
+      return {
+        scripts: data.scripts.map((s, i) => ({
+          id: s.id || "s" + i,
+          name: s.name || "Script " + (i + 1),
+          text: String(s.text || ""),
+        })),
+        active: clampIndex(data.active, data.scripts.length),
+      };
+    }
+    if (data && typeof data.script === "string") {
+      return { scripts: [newScript("Script", data.script)], active: 0 };
+    }
   } catch {
     /* ignore */
   }
-  return { script: DEFAULT_SCRIPT };
+  return { scripts: [newScript("spoke", DEFAULT_SCRIPT)], active: 0 };
 }
 
-export function saveSession(script) {
+export function saveSession(session) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ script: String(script), saved: Date.now() }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        scripts: session.scripts.map((s) => ({ id: s.id, name: s.name, text: s.text })),
+        active: session.active,
+        saved: Date.now(),
+      }),
+    );
   } catch {
     /* quota / private mode */
   }
+}
+
+function clampIndex(i, n) {
+  const v = Number(i);
+  if (!n) return 0;
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(n - 1, v | 0));
 }

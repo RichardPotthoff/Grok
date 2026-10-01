@@ -257,6 +257,38 @@ export class Mirror extends Block {
   }
 }
 
+/**
+ * Play the child's leaf arcs last-to-first, keeping each (s, Δθ).
+ * For attaching a continuation to the end of a motif:
+ *   seq(ray, reverse(ray))
+ * Net Δθ doubles; handedness does not flip. Contrast `mirror`, which
+ * negates every turn and reflects across the start heading.
+ */
+export class Reverse extends Block {
+  /** @param {Block} of */
+  constructor(of, fields = {}) {
+    super("reverse", fields);
+    this.of = asBlock(of);
+  }
+
+  computeInterface() {
+    const segs = this.of.turtlePath();
+    let acc = { ...IFACE0 };
+    for (let i = segs.length - 1; i >= 0; i--) {
+      acc = composeIface(acc, arcIface(segs[i][0], segs[i][1]));
+    }
+    return acc;
+  }
+
+  *arcs(ctx = {}) {
+    const segs = this.of.turtlePath();
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const [s, da] = segs[i];
+      yield [s, da, { ...this.extra(), k: ctx.k ?? i }];
+    }
+  }
+}
+
 /** Parametric arrowhead — same geometry as `turtle-cmd` / Python AH. */
 export class Ah extends Block {
   /**

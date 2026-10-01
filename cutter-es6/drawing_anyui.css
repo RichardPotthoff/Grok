@@ -134,6 +134,82 @@ canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 .objects-head {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.objects-head button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  min-height: 28px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.pane-head {
+  padding: 6px 10px 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.script-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.script-tabs button {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  min-height: 32px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.script-tabs button.on {
+  color: var(--fg);
+  border-color: var(--primary);
+}
+
+.script-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.script-actions button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  min-height: 36px;
+}
+
+.script-actions button.primary {
+  background: var(--primary);
+  color: #12110f;
+  border-color: transparent;
+  font-weight: 600;
 }
 
 #objects {
@@ -179,8 +255,6 @@ canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 }
 
 .log-pane { border-left: 1px solid var(--border); }
-
-.pane-head { padding: 6px 10px 0; flex: 0 0 auto; }
 
 #script, #log {
   flex: 1 1 auto;

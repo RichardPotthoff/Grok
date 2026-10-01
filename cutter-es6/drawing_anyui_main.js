@@ -7,8 +7,10 @@ import { walkPath, boundsOf } from "./es6/path-utils.js";
 import {
   API_HELP,
   DEFAULT_SCRIPT,
+  STAR6_SCRIPT,
   DrawingRepl,
   loadSession,
+  newScript,
   saveSession,
 } from "./es6/drawing-repl.js";
 
@@ -24,11 +26,16 @@ const canvas = document.getElementById("stage");
 const scriptEl = document.getElementById("script");
 const logEl = document.getElementById("log");
 const objectsEl = document.getElementById("objects");
+const tabsEl = document.getElementById("script-tabs");
 
 const repl = new DrawingRepl();
 const cam = { x: 0, y: 0, scale: 24 };
 let flattened = [];
 let dragging = null;
+
+const session = loadSession();
+let scripts = session.scripts;
+let active = session.active;
 
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -126,7 +133,7 @@ function renderObjects() {
   if (!rows.length) {
     const empty = document.createElement("div");
     empty.className = "obj";
-    empty.innerHTML = `<div class="nm">(none)</div><div class="meta">define("name", block)</div>`;
+    empty.innerHTML = `<div class="nm">(none)</div><div class="meta">store("name", block)</div>`;
     objectsEl.appendChild(empty);
     return;
   }
@@ -157,11 +164,37 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
+function persist() {
+  if (scripts[active]) scripts[active].text = scriptEl.value;
+  saveSession({ scripts, active });
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = "";
+  scripts.forEach((s, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = i === active ? "on" : "";
+    btn.textContent = s.name || "Script " + (i + 1);
+    btn.addEventListener("click", () => selectScript(i));
+    tabsEl.appendChild(btn);
+  });
+}
+
+function selectScript(i) {
+  if (scripts[active]) scripts[active].text = scriptEl.value;
+  active = Math.max(0, Math.min(scripts.length - 1, i));
+  scriptEl.value = scripts[active].text;
+  persist();
+  renderTabs();
+}
+
 function runScript() {
+  persist();
   const src = scriptEl.value;
-  saveSession(src);
+  const id = scripts[active] && scripts[active].id;
   try {
-    repl.run(src);
+    repl.run(src, { scriptId: id });
     flattened = repl.flattened();
   } catch {
     /* last good flatten kept; error already logged */
@@ -172,9 +205,23 @@ function runScript() {
   else paint();
 }
 
-function loadExample() {
-  scriptEl.value = DEFAULT_SCRIPT;
+function loadIntoCurrent(name, text) {
+  if (!scripts.length) scripts.push(newScript(name, text));
+  scripts[active].name = name;
+  scripts[active].text = text;
+  scriptEl.value = text;
+  persist();
+  renderTabs();
   runScript();
+}
+
+function addScript(name, text) {
+  persist();
+  scripts.push(newScript(name, text));
+  active = scripts.length - 1;
+  scriptEl.value = text;
+  persist();
+  renderTabs();
 }
 
 canvas.addEventListener("pointerdown", (ev) => {
@@ -207,12 +254,28 @@ canvas.addEventListener(
 
 document.getElementById("btn-run").addEventListener("click", runScript);
 document.getElementById("btn-fit").addEventListener("click", fit);
-document.getElementById("btn-example").addEventListener("click", loadExample);
+document.getElementById("btn-example").addEventListener("click", () => {
+  loadIntoCurrent("spoke", DEFAULT_SCRIPT);
+});
+document.getElementById("btn-star").addEventListener("click", () => {
+  addScript("star6", STAR6_SCRIPT);
+  runScript();
+});
+document.getElementById("btn-new-script").addEventListener("click", () => {
+  addScript("Script " + (scripts.length + 1), "");
+});
+document.getElementById("btn-reset-store").addEventListener("click", () => {
+  repl.resetStore();
+  repl.note("store cleared");
+  renderObjects();
+  renderLog();
+});
 document.getElementById("btn-help").addEventListener("click", () => {
   repl.note(API_HELP);
   renderLog();
 });
 document.getElementById("btn-copy").addEventListener("click", async () => {
+  persist();
   const text = scriptEl.value;
   try {
     await navigator.clipboard.writeText(text);
@@ -229,16 +292,16 @@ scriptEl.addEventListener("keydown", (ev) => {
     runScript();
   }
 });
+scriptEl.addEventListener("change", persist);
 
 window.addEventListener("resize", resizeCanvas);
 
-const session = loadSession();
-scriptEl.value = session.script || DEFAULT_SCRIPT;
-
+scriptEl.value = (scripts[active] && scripts[active].text) || DEFAULT_SCRIPT;
+renderTabs();
 resizeCanvas();
 runScript();
 
-window.drawingRepl = { repl, cam, runScript, fit };
+window.drawingRepl = { repl, cam, runScript, fit, scripts };
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
