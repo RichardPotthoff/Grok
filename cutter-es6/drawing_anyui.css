@@ -34,7 +34,10 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  width: 100%;
+  align-self: stretch;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .anyui-tab-content {
@@ -68,11 +71,14 @@ html, body, #app {
 }
 
 .panel-label {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.stage-slot .panel-label {
   position: absolute;
   top: 0.4rem;
   left: 0.6rem;
-  font-size: 0.75rem;
-  opacity: 0.6;
   pointer-events: none;
 }
 

@@ -1,8 +1,16 @@
 
 function render({ model, el }) {
   el.innerHTML = "";
+  el.style.display = "flex";
+  el.style.flexDirection = "column";
+  el.style.alignItems = "stretch";
+  el.style.width = "100%";
+  el.style.minWidth = "0";
   const container = document.createElement("div");
   container.className = "anyui-tab";
+  container.style.width = "100%";
+  container.style.minWidth = "0";
+  container.style.flex = "1 1 auto";
   const header = document.createElement("div");
   header.className = "anyui-tab-header";
   const contentArea = document.createElement("div");

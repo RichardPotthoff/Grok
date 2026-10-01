@@ -68,6 +68,7 @@ const btnHelp = new Button({ description: "Help" });
 const btnRun = new Button({ description: "Run", button_style: "primary" });
 const btnCopy = new Button({ description: "Copy script" });
 const btnNew = new Button({ description: "+ Script" });
+const btnClose = new Button({ description: "Close" });
 const btnSpoke = new Button({ description: "Spoke" });
 const btnStar = new Button({ description: "Star6" });
 const btnClear = new Button({ description: "Clear store" });
@@ -94,7 +95,7 @@ const objects = new ObjectsWidget({
 const objectsHead = new HBox({
   gap: "8px",
   children: [
-    new Html({ value: `<div class="panel-label">Objects</div>` }),
+    new Html({ value: `<span class="panel-label">Objects</span>` }),
     btnClear,
   ],
   layout: {
@@ -121,7 +122,7 @@ const stageRow = new HBox({
 const scriptActions = new HBox({
   wrap: true,
   gap: "6px",
-  children: [btnRun, btnCopy, btnNew, btnSpoke, btnStar],
+  children: [btnRun, btnCopy, btnNew, btnClose, btnSpoke, btnStar],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -259,18 +260,60 @@ btnCopy.onClick(async () => {
   }
   publishLog();
 });
-btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
-btnSpoke.onClick(() => {
+function closeScript() {
   const idx = scriptTabs.get("selected_index") ?? 0;
-  editors[idx].set("name", "spoke");
-  editors[idx].set("value", DEFAULT_SCRIPT);
-  editors[idx].save_changes();
-  scripts[idx].name = "spoke";
+  const id = scripts[idx] && scripts[idx].id;
+  if (editors.length <= 1) {
+    editors[0].set("name", "Script");
+    editors[0].set("value", "");
+    editors[0].save_changes();
+    scripts[0].name = "Script";
+    scripts[0].text = "";
+    if (id) repl.uses = repl.uses.filter((u) => u.scriptId !== id);
+    syncTabTitles();
+    persist();
+    publishStrokes();
+    if (stage.fit) stage.fit();
+    repl.note("last script cleared — store kept");
+    publishLog();
+    return;
+  }
+  scripts.splice(idx, 1);
+  editors.splice(idx, 1);
+  if (id) repl.uses = repl.uses.filter((u) => u.scriptId !== id);
+  const next = Math.max(0, Math.min(idx, editors.length - 1));
+  scriptTabs.set("selected_index", next);
   syncTabTitles();
+  persist();
+  publishStrokes();
+  if (stage.fit) stage.fit();
+  repl.note("closed script — store kept");
+  publishLog();
+}
+
+function openNamed(name, text) {
+  const idx = scripts.findIndex((s) => s.name === name);
+  if (idx >= 0) {
+    editors[idx].set("name", name);
+    editors[idx].set("value", text);
+    editors[idx].save_changes();
+    scripts[idx].name = name;
+    scripts[idx].text = text;
+    scriptTabs.set("selected_index", idx);
+    syncTabTitles();
+    return;
+  }
+  addScript(name, text);
+}
+
+btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
+btnClose.onClick(() => closeScript());
+btnSpoke.onClick(() => {
+  openNamed("spoke", DEFAULT_SCRIPT);
   runScript();
 });
 btnStar.onClick(() => {
-  addScript("star6", STAR6_SCRIPT);
+  openNamed("star6", STAR6_SCRIPT);
   runScript();
 });
 btnClear.onClick(() => {
