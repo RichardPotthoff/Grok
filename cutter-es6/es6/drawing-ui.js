@@ -19,6 +19,7 @@ function fmt(n) {
 }
 
 export function renderStage({ model, el }) {
+  el.replaceChildren();
   el.classList.add("stage-slot");
   el.style.display = "flex";
   el.style.flex = "1 1 auto";
@@ -27,7 +28,6 @@ export function renderStage({ model, el }) {
   el.style.width = "100%";
   el.style.height = "100%";
   el.style.position = "relative";
-  el.style.background = INK.paper;
 
   const label = document.createElement("div");
   label.className = "panel-label";
@@ -49,7 +49,7 @@ export function renderStage({ model, el }) {
 
   function syncSize() {
     const r = canvas.getBoundingClientRect();
-    if (r.width < 8 || r.height < 8) return false;
+    if (r.width < 8 || r.height < 8) return canvas.width > 8 && canvas.height > 8;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const w = Math.max(1, Math.floor(r.width * dpr));
     const h = Math.max(1, Math.floor(r.height * dpr));
@@ -57,7 +57,7 @@ export function renderStage({ model, el }) {
       canvas.width = w;
       canvas.height = h;
     }
-    return true;
+    return canvas.width > 8 && canvas.height > 8;
   }
 
   function paint() {
@@ -65,12 +65,11 @@ export function renderStage({ model, el }) {
     const ctx = canvas.getContext("2d");
     const { width: W, height: H } = canvas;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = INK.paper;
-    ctx.fillRect(0, 0, W, H);
+    ctx.clearRect(0, 0, W, H);
     ctx.setTransform(cam.scale, 0, 0, -cam.scale, W / 2 - cam.x * cam.scale, H / 2 + cam.y * cam.scale);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(42,36,28,0.12)";
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
     ctx.lineWidth = 1 / cam.scale;
     ctx.beginPath();
     ctx.moveTo(-200, 0);
@@ -84,7 +83,7 @@ export function renderStage({ model, el }) {
       ctx.beginPath();
       ctx.moveTo(samples[0].point[0], samples[0].point[1]);
       for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].point[0], samples[i].point[1]);
-      ctx.strokeStyle = INK[use.stroke] || INK.ink;
+      ctx.strokeStyle = INK[use.stroke] || "#111";
       ctx.lineWidth = (use.width || 1.6) / cam.scale;
       if (use.fill && INK[use.fill]) {
         ctx.fillStyle = INK[use.fill];
@@ -178,6 +177,7 @@ export function renderStage({ model, el }) {
 }
 
 export function renderScript({ model, el }) {
+  el.replaceChildren();
   el.style.display = "flex";
   el.style.flex = "1 1 auto";
   el.style.minHeight = "0";

@@ -11,27 +11,28 @@ function render({ model, el }) {
   el.appendChild(container);
 
   let currentCleanup = null;
+  let showGen = 0;
 
-  // --- Named Listeners (so they can be detached) ---
-  const onTitlesChange = () => { 
-    buildHeader(); 
-    showTab(model.get("selected_index") ?? 0); 
+  const onTitlesChange = () => {
+    buildHeader();
+    showTab(model.get("selected_index") ?? 0);
   };
-  
+
   const onChildrenChange = () => {
     showTab(model.get("selected_index") ?? 0);
   };
-  
+
   const onSelectionChange = (idx) => {
     showTab(idx);
   };
 
   async function showTab(index) {
+    const gen = ++showGen;
     if (currentCleanup) {
       try { currentCleanup(); } catch (e) {}
       currentCleanup = null;
     }
-    contentArea.innerHTML = "";
+    contentArea.replaceChildren();
 
     const children = model.get("children") || [];
     const childModel = children[index];
@@ -39,19 +40,23 @@ function render({ model, el }) {
     header.querySelectorAll("button").forEach((b, i) => b.classList.toggle("active", i === index));
 
     if (!childModel) {
-      contentArea.innerHTML = "<p>(no child model)</p>";
+      if (gen !== showGen) return;
+      contentArea.textContent = "(no child model)";
       return;
     }
 
     try {
       const view = await model.widget_manager.create_view(childModel);
-      contentArea.appendChild(view.el);
-      if (typeof view.cleanup === "function") {
-        currentCleanup = view.cleanup;
+      if (gen !== showGen) {
+        if (view.cleanup) view.cleanup();
+        return;
       }
+      contentArea.replaceChildren(view.el);
+      if (typeof view.cleanup === "function") currentCleanup = view.cleanup;
     } catch (err) {
+      if (gen !== showGen) return;
       console.error("Failed to render child:", err.message);
-      contentArea.innerHTML = `<p style="color:red">Render error</p>`;
+      contentArea.textContent = "Render error";
     }
   }
 

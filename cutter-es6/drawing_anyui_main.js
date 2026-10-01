@@ -76,22 +76,13 @@ const toolbar = new HBox({
   wrap: true,
   gap: "8px",
   children: [title, btnFit, btnHelp, compare, hint],
-  layout: {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    padding: "10px 14px",
-    borderBottom: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
-    background: "#1c1b18",
-    width: "100%",
-    flex: "0 0 auto",
-  },
+  layout: { display: "flex", flexWrap: "wrap", alignItems: "center", width: "100%", flex: "0 0 auto" },
 });
 
 const stage = new StageWidget({
   id: "drawing-stage",
   strokes: [],
-  layout: { ...fill, minHeight: "180px", background: "#f3ead8" },
+  layout: { ...fill, minHeight: "180px" },
 });
 
 const objects = new ObjectsWidget({
@@ -112,21 +103,13 @@ const objectsHead = new HBox({
     justifyContent: "space-between",
     width: "100%",
     flex: "0 0 auto",
-    padding: "8px 10px",
-    borderBottom: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
   },
 });
 
 const objectsPanel = new VBox({
   gap: "0px",
   children: [objectsHead, objects],
-  layout: {
-    ...fill,
-    minWidth: "11rem",
-    maxWidth: "16rem",
-    background: "#1c1b18",
-    borderLeft: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
-  },
+  layout: { ...fill, minWidth: "11rem", maxWidth: "16rem" },
 });
 
 const stageRow = new HBox({
@@ -175,29 +158,13 @@ const dock = new Tab({
     }),
     log,
   ],
-  layout: {
-    display: "flex",
-    flexDirection: "column",
-    width: "100%",
-    flex: "0 0 36vh",
-    minHeight: "9rem",
-    background: "#1c1b18",
-    borderTop: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
-  },
+  layout: { display: "flex", flexDirection: "column", width: "100%", flex: "0 0 34vh", minHeight: "9rem" },
 });
 
 const root = new VBox({
   gap: "0px",
   children: [toolbar, stageRow, dock],
-  layout: {
-    display: "flex",
-    flexDirection: "column",
-    width: "100%",
-    height: "100%",
-    minHeight: "100dvh",
-    background: "#12110f",
-    color: "#ece7dc",
-  },
+  layout: { display: "flex", flexDirection: "column", width: "100%", height: "100%", minHeight: "100dvh" },
 });
 
 function publishObjects() {
@@ -250,6 +217,7 @@ function runScript() {
   publishObjects();
   publishLog();
   publishStrokes();
+  if (stage.fit) stage.fit();
 }
 
 function addScript(name, text) {

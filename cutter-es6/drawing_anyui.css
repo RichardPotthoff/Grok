@@ -1,187 +1,49 @@
-:root {
-  --bg: #12110f;
-  --surface: #1c1b18;
-  --fg: #ece7dc;
-  --muted: #9a9488;
-  --primary: #7a9e96;
-  --paper: #f3ead8;
-  --ink: #2a241c;
-  --border: color-mix(in oklab, #ece7dc 12%, transparent);
-  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", "ui-monospace", "SFMono-Regular", Menlo, monospace;
-}
+/* Layout only. Colors and controls stay at the browser / anyui default. */
 
-* { box-sizing: border-box; }
-
-html.drawing-anyui,
-html.drawing-anyui body {
+html, body, #app {
   margin: 0;
   height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font);
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
 }
 
-html.drawing-anyui textarea,
-html.drawing-anyui .log-field,
-html.drawing-anyui .log-field * {
-  -webkit-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: default;
-}
-
-html.drawing-anyui #app {
-  height: 100%;
+#app {
   height: 100dvh;
-  min-height: 0;
-  background: var(--bg);
-  color: var(--fg);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-html.drawing-anyui #app > div {
+#app > div {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   height: 100%;
-  min-height: 0;
-  flex: 1 1 auto;
   display: flex !important;
   flex-direction: column;
   align-items: stretch;
 }
 
-html.drawing-anyui .anyui-box {
-  color: var(--fg);
+.anyui-box,
+.anyui-tab,
+.anyui-tab-content,
+.stage-slot {
   min-width: 0;
   min-height: 0;
 }
 
-html.drawing-anyui button,
-html.drawing-anyui .anyui-btn,
-html.drawing-anyui .anyui-tab-header button {
-  font-family: inherit;
-  font-size: inherit;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  min-height: 36px;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-html.drawing-anyui .anyui-btn-primary,
-html.drawing-anyui button.anyui-btn-primary {
-  background: var(--primary);
-  color: #12110f;
-  border-color: transparent;
-  font-weight: 600;
-}
-
-html.drawing-anyui .toolbar-title {
-  margin: 0 8px 0 0;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--fg);
-}
-
-html.drawing-anyui .hint {
-  width: 100%;
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-html.drawing-anyui .compare {
-  font-size: 12px;
-  color: var(--muted);
-  margin-left: auto;
-}
-
-html.drawing-anyui .compare a {
-  color: var(--primary);
-  text-decoration: none;
-  margin-left: 8px;
-}
-
-html.drawing-anyui .panel-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
-  pointer-events: none;
-}
-
-html.drawing-anyui .stage-slot canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-html.drawing-anyui .stage-slot .panel-label {
-  position: absolute;
-  top: 10px;
-  left: 12px;
-  z-index: 2;
-}
-
-html.drawing-anyui .anyui-tab {
-  border: 0;
-  border-radius: 0;
-  margin: 0;
-  background: var(--surface);
-  color: var(--fg);
+.anyui-tab {
   display: flex;
   flex-direction: column;
-  min-height: 0;
   flex: 1 1 auto;
-  width: 100%;
   height: 100%;
 }
 
-html.drawing-anyui .anyui-tab-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 6px 8px 0;
-}
-
-html.drawing-anyui .anyui-tab-header button {
-  border-bottom: 3px solid transparent;
-  border-radius: 8px 8px 0 0;
-  background: var(--bg);
-  color: var(--muted);
-}
-
-html.drawing-anyui .anyui-tab-header button.active {
-  color: var(--fg);
-  border-bottom-color: var(--primary);
-  font-weight: 600;
-  background: var(--bg);
-}
-
-html.drawing-anyui .anyui-tab-content {
-  padding: 0;
-  background: var(--surface);
+.anyui-tab-content {
   flex: 1 1 auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-html.drawing-anyui .anyui-tab-content > div {
+.anyui-tab-content > div {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
@@ -190,57 +52,56 @@ html.drawing-anyui .anyui-tab-content > div {
   align-items: stretch;
 }
 
-html.drawing-anyui .script-field,
-html.drawing-anyui .log-field {
+.stage-slot {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+}
+
+.stage-slot canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
   flex: 1 1 auto;
   min-height: 0;
-  width: calc(100% - 20px);
-  margin: 6px 10px 10px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.35;
 }
 
-html.drawing-anyui .script-field { resize: none; }
+.panel-label {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.6rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
 
-html.drawing-anyui .log-field {
+.script-field,
+.log-field {
+  flex: 1 1 auto;
+  min-height: 8rem;
+  width: calc(100% - 1rem);
+  margin: 0.4rem;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.log-field {
   overflow: auto;
   white-space: pre-wrap;
-  word-break: break-word;
+  margin: 0.4rem;
 }
 
-html.drawing-anyui .log-field .err { color: #e07070; }
+.log-field .err { color: #a33c3c; }
 
-html.drawing-anyui .object-list {
-  padding: 6px;
-}
+.object-list { overflow: auto; padding: 0.4rem; }
 
-html.drawing-anyui .obj {
+.obj {
   display: block;
   width: 100%;
   text-align: left;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
-  margin: 0 0 6px;
-  font: inherit;
-  font-size: 12px;
-  min-height: 0;
+  margin: 0 0 0.4rem;
 }
 
-html.drawing-anyui .obj .nm { font-weight: 600; }
-html.drawing-anyui .obj .meta { color: var(--muted); font-variant-numeric: tabular-nums; }
-
-@media (max-width: 800px) {
-  html.drawing-anyui .stage-row,
-  html.drawing-anyui #app .anyui-box {
-    min-width: 0;
-  }
-}
+.hint, .compare { font-size: 0.8rem; opacity: 0.75; }
+.toolbar-title { font-size: 1.05rem; margin: 0 0.5rem 0 0; }
