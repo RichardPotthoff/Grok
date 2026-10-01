@@ -13,7 +13,7 @@ Started the CLI twin instead of a full anyui chrome port.
 - `drawing_anyui.html` + `drawing_anyui_main.js` + `drawing_anyui.css` — script pane, canvas flatten, object list, log. No edit tools.
 - `es6/blocks.js` — `Arc` `Seq` `Repeat` `Scale` `Mirror` `Ah` `Orbit` `Ref`. `interface()` = relative `(dx, dy, Δθ°)`; `arcs()` is a restartable generator.
 - `es6/drawing-repl.js` — `new Function` API (`seg`, `ah`, `seq`, `repeat`, `reverse`, `store`/`define`, `show`, …). Scripts persist; store is global across Run. Storage key `arc-drawing-repl-v2`.
-- SW `cutter-offline-v12-20260930`. Keep `drawing.html` as the grip-edit reference.
+- SW `cutter-offline-v14-20261001`. Chrome is anyui (`Tab` / `Button` / `HBox`). Script text, log, and strokes live on widget models. Canvas fits only after it has a real size.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 

@@ -56,12 +56,15 @@ function render({ model, el }) {
   }
 
   function buildHeader() {
-    header.innerHTML = "";
-    const titles = (Array.isArray(model.get("titles")) ? model.get("titles") : []);
+    const titles = Array.isArray(model.get("titles")) ? model.get("titles") : [];
+    header.replaceChildren();
     titles.forEach((title, i) => {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.textContent = title;
-      btn.onclick = () => {
+      btn.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
         model.set("selected_index", i);
         model.save_changes();
       };

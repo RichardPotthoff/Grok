@@ -1,9 +1,13 @@
 /**
- * CLI-first drawing twin. Script pane + canvas flatten of lazy blocks.
- * drawing.html stays the direct-manipulation reference.
+ * Drawing REPL chrome from anyui widgets.
+ * Compare with cutter_anyui.html. drawing.html stays the grip-edit reference.
  */
 
-import { walkPath, boundsOf } from "./es6/path-utils.js";
+import VBox from "./anyui/v-box-cls.js";
+import HBox from "./anyui/h-box-cls.js";
+import Button from "./anyui/button-cls.js";
+import Html from "./anyui/html-cls.js";
+import Tab from "./anyui/tab-cls.js";
 import {
   API_HELP,
   DEFAULT_SCRIPT,
@@ -13,295 +17,332 @@ import {
   newScript,
   saveSession,
 } from "./es6/drawing-repl.js";
+import { LogWidget, ObjectsWidget, ScriptWidget, StageWidget } from "./es6/drawing-ui-cls.js";
 
-const INK = {
-  ink: "#2a241c",
-  accent: "#3d6b64",
-  muted: "#8a8478",
-  danger: "#a33c3c",
-  paper: "#f3ead8",
+const fill = {
+  display: "flex",
+  flex: "1 1 auto",
+  width: "100%",
+  minHeight: "0",
+  minWidth: "0",
+  alignItems: "stretch",
 };
 
-const canvas = document.getElementById("stage");
-const scriptEl = document.getElementById("script");
-const logEl = document.getElementById("log");
-const objectsEl = document.getElementById("objects");
-const tabsEl = document.getElementById("script-tabs");
-
 const repl = new DrawingRepl();
-const cam = { x: 0, y: 0, scale: 24 };
-let flattened = [];
-let dragging = null;
-
 const session = loadSession();
-let scripts = session.scripts;
-let active = session.active;
+const scripts = session.scripts.length ? session.scripts : [newScript("spoke", DEFAULT_SCRIPT)];
+let active = Math.max(0, Math.min(scripts.length - 1, session.active || 0));
 
-function resizeCanvas() {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const r = canvas.getBoundingClientRect();
-  const w = Math.max(1, Math.floor(r.width * dpr));
-  const h = Math.max(1, Math.floor(r.height * dpr));
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
-  paint();
-}
+const editors = scripts.map(
+  (s, i) =>
+    new ScriptWidget({
+      id: "script-" + s.id,
+      value: s.text || "",
+      name: s.name || "Script " + (i + 1),
+      layout: { ...fill, height: "100%" },
+    }),
+);
 
-function canvasPx(ev) {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const r = canvas.getBoundingClientRect();
-  return [(ev.clientX - r.left) * dpr, (ev.clientY - r.top) * dpr];
-}
-
-function paint() {
-  const ctx = canvas.getContext("2d");
-  const { width: W, height: H } = canvas;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = INK.paper;
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.setTransform(cam.scale, 0, 0, -cam.scale, W / 2 - cam.x * cam.scale, H / 2 + cam.y * cam.scale);
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-
-  // axes
-  ctx.strokeStyle = "rgba(42,36,28,0.12)";
-  ctx.lineWidth = 1 / cam.scale;
-  ctx.beginPath();
-  ctx.moveTo(-200, 0);
-  ctx.lineTo(200, 0);
-  ctx.moveTo(0, -200);
-  ctx.lineTo(0, 200);
-  ctx.stroke();
-
-  for (const use of flattened) {
-    const samples = walkPath(use, { scale: 1, tol: 0.04, returnStart: true });
-    if (!samples.length) continue;
-    ctx.beginPath();
-    ctx.moveTo(samples[0].point[0], samples[0].point[1]);
-    for (let i = 1; i < samples.length; i++) {
-      ctx.lineTo(samples[i].point[0], samples[i].point[1]);
-    }
-    ctx.strokeStyle = INK[use.stroke] || INK.ink;
-    ctx.lineWidth = (use.width || 1.6) / cam.scale;
-    if (use.fill && INK[use.fill]) {
-      ctx.fillStyle = INK[use.fill];
-      ctx.fill();
-    }
-    ctx.stroke();
-  }
-}
-
-function allPoints() {
-  const pts = [];
-  for (const use of flattened) {
-    const samples = walkPath(use, { scale: 1, tol: 0.2, returnStart: true });
-    for (const row of samples) pts.push(row.point);
-    if (!samples.length) pts.push((use.startPoint || [0, 0]).slice());
-  }
-  return pts;
-}
-
-function fit() {
-  const pts = allPoints();
-  const b = boundsOf(pts);
-  const pad = 0.18;
-  const sx = canvas.width / (b.w * (1 + pad));
-  const sy = canvas.height / (b.h * (1 + pad));
-  cam.scale = Math.max(4, Math.min(sx, sy) || 24);
-  cam.x = b.cx;
-  cam.y = b.cy;
-  paint();
-}
-
-function renderLog() {
-  logEl.innerHTML = "";
-  for (const line of repl.log) {
-    const div = document.createElement("div");
-    if (line.startsWith("err ")) div.className = "err";
-    div.textContent = line;
-    logEl.appendChild(div);
-  }
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function renderObjects() {
-  objectsEl.innerHTML = "";
-  const rows = repl.namedList();
-  if (!rows.length) {
-    const empty = document.createElement("div");
-    empty.className = "obj";
-    empty.innerHTML = `<div class="nm">(none)</div><div class="meta">store("name", block)</div>`;
-    objectsEl.appendChild(empty);
-    return;
-  }
-  for (const row of rows) {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = "obj";
-    const I = row.interface;
-    el.innerHTML = `<div class="nm">${escapeHtml(row.name)}</div>
-      <div class="meta">${escapeHtml(row.type)} · ${row.arcs} arcs<br>Δ (${fmt(I.dx)}, ${fmt(I.dy)})  Δθ ${fmt(I.dtheta)}°</div>`;
-    el.addEventListener("click", () => {
-      repl.note(row.text);
-      renderLog();
-    });
-    objectsEl.appendChild(el);
-  }
-}
-
-function fmt(n) {
-  if (!Number.isFinite(n)) return "?";
-  return Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2);
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function editorText(i) {
+  return editors[i] ? editors[i].get("value") || "" : "";
 }
 
 function persist() {
-  if (scripts[active]) scripts[active].text = scriptEl.value;
-  saveSession({ scripts, active });
-}
-
-function renderTabs() {
-  tabsEl.innerHTML = "";
   scripts.forEach((s, i) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = i === active ? "on" : "";
-    btn.textContent = s.name || "Script " + (i + 1);
-    btn.addEventListener("click", () => selectScript(i));
-    tabsEl.appendChild(btn);
+    s.text = editorText(i);
+    s.name = editors[i].get("name") || s.name;
   });
+  saveSession({ scripts, active: scriptTabs.get("selected_index") ?? active });
 }
 
-function selectScript(i) {
-  if (scripts[active]) scripts[active].text = scriptEl.value;
-  active = Math.max(0, Math.min(scripts.length - 1, i));
-  scriptEl.value = scripts[active].text;
-  persist();
-  renderTabs();
+const title = new Html({ value: `<h1 class="toolbar-title">Arc REPL</h1>` });
+const hint = new Html({
+  value: `<p class="hint">store() keeps a named block. Run only this script — the object list stays. reverse() is last-to-first leaves.</p>`,
+});
+const compare = new Html({
+  value: `<span class="compare">anyui <a href="./drawing.html">drawing.html</a></span>`,
+});
+
+const btnFit = new Button({ description: "Fit" });
+const btnHelp = new Button({ description: "Help" });
+const btnRun = new Button({ description: "Run", button_style: "primary" });
+const btnCopy = new Button({ description: "Copy script" });
+const btnNew = new Button({ description: "+ Script" });
+const btnSpoke = new Button({ description: "Spoke" });
+const btnStar = new Button({ description: "Star6" });
+const btnClear = new Button({ description: "Clear store" });
+
+const toolbar = new HBox({
+  wrap: true,
+  gap: "8px",
+  children: [title, btnFit, btnHelp, compare, hint],
+  layout: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    padding: "10px 14px",
+    borderBottom: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
+    background: "#1c1b18",
+    width: "100%",
+    flex: "0 0 auto",
+  },
+});
+
+const stage = new StageWidget({
+  id: "drawing-stage",
+  strokes: [],
+  layout: { ...fill, minHeight: "180px", background: "#f3ead8" },
+});
+
+const objects = new ObjectsWidget({
+  id: "drawing-objects",
+  items: [],
+  layout: { ...fill, overflow: "auto" },
+});
+
+const objectsHead = new HBox({
+  gap: "8px",
+  children: [
+    new Html({ value: `<div class="panel-label">Objects</div>` }),
+    btnClear,
+  ],
+  layout: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    flex: "0 0 auto",
+    padding: "8px 10px",
+    borderBottom: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
+  },
+});
+
+const objectsPanel = new VBox({
+  gap: "0px",
+  children: [objectsHead, objects],
+  layout: {
+    ...fill,
+    minWidth: "11rem",
+    maxWidth: "16rem",
+    background: "#1c1b18",
+    borderLeft: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
+  },
+});
+
+const stageRow = new HBox({
+  gap: "0px",
+  children: [stage, objectsPanel],
+  layout: { ...fill, minHeight: "180px" },
+});
+
+const scriptActions = new HBox({
+  wrap: true,
+  gap: "6px",
+  children: [btnRun, btnCopy, btnNew, btnSpoke, btnStar],
+  layout: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    width: "100%",
+    flex: "0 0 auto",
+    padding: "6px 10px 0",
+  },
+});
+
+const scriptTabs = new Tab({
+  id: "script-tabs",
+  titles: scripts.map((s, i) => s.name || "Script " + (i + 1)),
+  selected_index: active,
+  children: editors,
+  layout: { ...fill, minHeight: "8rem" },
+});
+
+const log = new LogWidget({
+  id: "drawing-log",
+  lines: [],
+  layout: { ...fill, minHeight: "6rem" },
+});
+
+const dock = new Tab({
+  id: "dock-tabs",
+  titles: ["Script", "Log"],
+  selected_index: 0,
+  children: [
+    new VBox({
+      gap: "0px",
+      children: [scriptActions, scriptTabs],
+      layout: { ...fill, minHeight: "8rem" },
+    }),
+    log,
+  ],
+  layout: {
+    display: "flex",
+    flexDirection: "column",
+    width: "100%",
+    flex: "0 0 36vh",
+    minHeight: "9rem",
+    background: "#1c1b18",
+    borderTop: "1px solid color-mix(in oklab, #ece7dc 12%, transparent)",
+  },
+});
+
+const root = new VBox({
+  gap: "0px",
+  children: [toolbar, stageRow, dock],
+  layout: {
+    display: "flex",
+    flexDirection: "column",
+    width: "100%",
+    height: "100%",
+    minHeight: "100dvh",
+    background: "#12110f",
+    color: "#ece7dc",
+  },
+});
+
+function publishObjects() {
+  objects.set("items", repl.namedList());
+  objects.save_changes();
+}
+
+function publishLog() {
+  log.set("lines", repl.log.slice());
+  log.save_changes();
+}
+
+function publishStrokes() {
+  let strokes = [];
+  try {
+    strokes = repl.flattened().map((u) => ({
+      startPoint: u.startPoint,
+      startAngle: u.startAngle,
+      turtlePath: u.turtlePath,
+      stroke: u.stroke,
+      width: u.width,
+      fill: u.fill,
+    }));
+  } catch (err) {
+    repl.note("err " + (err.message || String(err)));
+  }
+  stage.set("strokes", strokes);
+  stage.save_changes();
+}
+
+function syncTabTitles() {
+  scriptTabs.set(
+    "titles",
+    editors.map((ed, i) => ed.get("name") || scripts[i].name || "Script " + (i + 1)),
+  );
+  scriptTabs.set("children", editors);
+  scriptTabs.save_changes();
 }
 
 function runScript() {
   persist();
-  const src = scriptEl.value;
-  const id = scripts[active] && scripts[active].id;
+  const idx = scriptTabs.get("selected_index") ?? 0;
+  const src = editorText(idx);
+  const id = scripts[idx] && scripts[idx].id;
   try {
     repl.run(src, { scriptId: id });
-    flattened = repl.flattened();
   } catch {
-    /* last good flatten kept; error already logged */
+    /* logged */
   }
-  renderLog();
-  renderObjects();
-  if (flattened.length) fit();
-  else paint();
-}
-
-function loadIntoCurrent(name, text) {
-  if (!scripts.length) scripts.push(newScript(name, text));
-  scripts[active].name = name;
-  scripts[active].text = text;
-  scriptEl.value = text;
-  persist();
-  renderTabs();
-  runScript();
+  publishObjects();
+  publishLog();
+  publishStrokes();
 }
 
 function addScript(name, text) {
   persist();
-  scripts.push(newScript(name, text));
-  active = scripts.length - 1;
-  scriptEl.value = text;
+  const s = newScript(name, text);
+  scripts.push(s);
+  const ed = new ScriptWidget({
+    id: "script-" + s.id,
+    value: text,
+    name,
+    layout: { ...fill, height: "100%" },
+  });
+  ed.on("msg:custom", (msg) => {
+    if (msg && msg.event === "run") runScript();
+  });
+  editors.push(ed);
+  scriptTabs.set("selected_index", editors.length - 1);
+  syncTabTitles();
   persist();
-  renderTabs();
 }
 
-canvas.addEventListener("pointerdown", (ev) => {
-  canvas.setPointerCapture(ev.pointerId);
-  const [px, py] = canvasPx(ev);
-  dragging = { id: ev.pointerId, px, py, cx: cam.x, cy: cam.y };
-});
-canvas.addEventListener("pointermove", (ev) => {
-  if (!dragging || dragging.id !== ev.pointerId) return;
-  const [px, py] = canvasPx(ev);
-  cam.x = dragging.cx - (px - dragging.px) / cam.scale;
-  cam.y = dragging.cy + (py - dragging.py) / cam.scale;
-  paint();
-});
-function endDrag(ev) {
-  if (dragging && dragging.id === ev.pointerId) dragging = null;
-}
-canvas.addEventListener("pointerup", endDrag);
-canvas.addEventListener("pointercancel", endDrag);
-canvas.addEventListener(
-  "wheel",
-  (ev) => {
-    ev.preventDefault();
-    const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
-    cam.scale = Math.max(4, Math.min(240, cam.scale * factor));
-    paint();
-  },
-  { passive: false },
-);
-
-document.getElementById("btn-run").addEventListener("click", runScript);
-document.getElementById("btn-fit").addEventListener("click", fit);
-document.getElementById("btn-example").addEventListener("click", () => {
-  loadIntoCurrent("spoke", DEFAULT_SCRIPT);
-});
-document.getElementById("btn-star").addEventListener("click", () => {
-  addScript("star6", STAR6_SCRIPT);
-  runScript();
-});
-document.getElementById("btn-new-script").addEventListener("click", () => {
-  addScript("Script " + (scripts.length + 1), "");
-});
-document.getElementById("btn-reset-store").addEventListener("click", () => {
-  repl.resetStore();
-  repl.note("store cleared");
-  renderObjects();
-  renderLog();
-});
-document.getElementById("btn-help").addEventListener("click", () => {
+btnRun.onClick(() => runScript());
+btnFit.onClick(() => stage.fit());
+btnHelp.onClick(() => {
   repl.note(API_HELP);
-  renderLog();
+  publishLog();
+  dock.set("selected_index", 1);
+  dock.save_changes();
 });
-document.getElementById("btn-copy").addEventListener("click", async () => {
+btnCopy.onClick(async () => {
   persist();
-  const text = scriptEl.value;
+  const idx = scriptTabs.get("selected_index") ?? 0;
+  const text = editorText(idx);
   try {
     await navigator.clipboard.writeText(text);
     repl.note("copied script");
   } catch {
-    repl.note("err clipboard unavailable — select the script pane");
+    repl.note("err clipboard unavailable — select the script");
   }
-  renderLog();
+  publishLog();
+});
+btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
+btnSpoke.onClick(() => {
+  const idx = scriptTabs.get("selected_index") ?? 0;
+  editors[idx].set("name", "spoke");
+  editors[idx].set("value", DEFAULT_SCRIPT);
+  editors[idx].save_changes();
+  scripts[idx].name = "spoke";
+  syncTabTitles();
+  runScript();
+});
+btnStar.onClick(() => {
+  addScript("star6", STAR6_SCRIPT);
+  runScript();
+});
+btnClear.onClick(() => {
+  repl.resetStore();
+  repl.note("store cleared");
+  publishObjects();
+  publishLog();
 });
 
-scriptEl.addEventListener("keydown", (ev) => {
-  if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
-    ev.preventDefault();
-    runScript();
-  }
+objects.on("msg:custom", (msg) => {
+  if (!msg || msg.event !== "pick") return;
+  const row = repl.namedList().find((r) => r.name === msg.name);
+  if (row) repl.note(row.text);
+  publishLog();
 });
-scriptEl.addEventListener("change", persist);
 
-window.addEventListener("resize", resizeCanvas);
+editors.forEach((ed) => {
+  ed.on("msg:custom", (msg) => {
+    if (msg && msg.event === "run") runScript();
+  });
+});
 
-scriptEl.value = (scripts[active] && scripts[active].text) || DEFAULT_SCRIPT;
-renderTabs();
-resizeCanvas();
-runScript();
+scriptTabs.on("change:selected_index", (idx) => {
+  active = idx;
+  persist();
+});
 
-window.drawingRepl = { repl, cam, runScript, fit, scripts };
+const mount = document.getElementById("app");
+
+async function boot() {
+  await root.create_view({ el: mount });
+  runScript();
+  requestAnimationFrame(() => requestAnimationFrame(() => stage.fit()));
+  window.drawingRepl = { repl, stage, scriptTabs, editors, runScript };
+}
+
+boot().catch((err) => {
+  console.error(err);
+  mount.textContent = err.message || String(err);
+});
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
