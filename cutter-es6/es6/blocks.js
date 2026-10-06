@@ -78,16 +78,26 @@ export function ctxKey(ctx) {
   return `${c.reverse ? 1 : 0}${c.mirror ? 1 : 0}:${c.scale}:${c.offset}`;
 }
 
-/** Leaf row after the walk flags. Null if the offset arc vanishes. */
+/** Leaf row after the walk flags. A hinge (s = 0, Δθ ≠ 0) is kept. */
 export function emitArc(s, dtheta, ctx) {
   const c = walkCtx(ctx);
   const ss = (Number(s) || 0) * c.scale;
-  const da = c.mirror ? -(Number(dtheta) || 0) : Number(dtheta) || 0;
+  let da = c.mirror ? -(Number(dtheta) || 0) : Number(dtheta) || 0;
   const d = c.mirror ? -c.offset : c.offset;
   const th = da * DEG;
   if (Math.abs(th) < 1e-12) return { s: ss, dtheta: da };
-  const sOff = ss - d * th;
-  if (Math.abs(sOff) < 1e-9) return null;
+  let sOff = ss - d * th;
+  if (sOff < 0) {
+    const R = sOff / th;
+    const loop = Math.abs(R) * 2 * Math.PI;
+    const turn = da < 0 ? -360 : 360;
+    if (loop > 1e-12) {
+      while (sOff < 0) {
+        sOff += loop;
+        da += turn;
+      }
+    }
+  }
   return { s: sOff, dtheta: da };
 }
 
@@ -253,27 +263,24 @@ export class Arc extends Block {
 
   computeInterface(ctx) {
     const row = emitArc(this.s, this.dtheta, ctx);
-    if (!row) return { ...IFACE0 };
     return arcIface(row.s, row.dtheta);
   }
 
   computeLength(ctx) {
-    const row = emitArc(this.s, this.dtheta, ctx);
-    return row ? Math.abs(row.s) : 0;
+    return Math.abs(emitArc(this.s, this.dtheta, ctx).s);
   }
 
   computeArea(ctx) {
     const row = emitArc(this.s, this.dtheta, ctx);
-    return row ? arcArea(row.s, row.dtheta) : 0;
+    return arcArea(row.s, row.dtheta);
   }
 
-  computeArcCount(ctx) {
-    return emitArc(this.s, this.dtheta, ctx) ? 1 : 0;
+  computeArcCount(_ctx) {
+    return 1;
   }
 
   *arcs(ctx = {}) {
     const row = emitArc(this.s, this.dtheta, ctx);
-    if (!row) return;
     yield [row.s, row.dtheta, { ...this.extra(), k: walkCtx(ctx).k }];
   }
 }
