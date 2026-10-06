@@ -255,7 +255,7 @@ export class DrawingRepl {
     let n = 0;
     for (const use of this.uses) {
       try {
-        n += use.root.turtlePath().length;
+        n += use.root.arcCount();
       } catch {
         /* ignore */
       }
@@ -289,7 +289,8 @@ export class DrawingRepl {
       type: block.type,
       id: block.id,
       interface: block.interface(),
-      arcs: block.turtlePath().length,
+      arcs: block.arcCount(),
+      length: block.length(),
       text: block.describe(),
     }));
   }

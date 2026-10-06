@@ -1,10 +1,12 @@
 /**
  * Lazy turtle blocks.
  *
- * A block is an operator. The stored model is the tree, not a baked
- * turtlePath. `interface()` is the relative pose step in the incoming-
- * heading-0 frame: { dx, dy, dtheta } with Δθ in degrees.
- * `arcs()` is a restartable generator of leaf [s, Δθ, extra].
+ * The stored model is the tree. `arcs(ctx)` is a restartable generator of
+ * leaf [s, Δθ, extra]. Reverse, mirror, scale, and offset are walk flags,
+ * not baked copies. `flatten` drains the generator; it is not the model.
+ *
+ * `interface`, `length`, and `area` are lazy and keyed by the walk context.
+ * Shortcuts stay on the node: a repeat does not expand to count its length.
  *
  * World start pose lives on a page use, not on a shared definition.
  */
@@ -52,10 +54,66 @@ export function composeIface(A, B) {
   };
 }
 
-export function foldIface(blocks) {
-  let acc = { ...IFACE0 };
-  for (const b of blocks) acc = composeIface(acc, asBlock(b).interface());
-  return acc;
+/**
+ * Walk flags. Reverse reorders. Mirror negates Δθ and the offset side.
+ * Scale multiplies lengths. Offset is to the right of the walked heading,
+ * applied at the leaf after scale: s' = s − d·θ for a curved arc, and a
+ * hinge becomes the corner fillet of radius d.
+ * @param {object} [ctx]
+ */
+export function walkCtx(ctx = {}) {
+  const scale = Number(ctx.scale);
+  const offset = Number(ctx.offset);
+  return {
+    reverse: !!ctx.reverse,
+    mirror: !!ctx.mirror,
+    scale: Number.isFinite(scale) ? scale : 1,
+    offset: Number.isFinite(offset) ? offset : 0,
+    k: ctx.k ?? 0,
+  };
+}
+
+export function ctxKey(ctx) {
+  const c = walkCtx(ctx);
+  return `${c.reverse ? 1 : 0}${c.mirror ? 1 : 0}:${c.scale}:${c.offset}`;
+}
+
+/** Leaf row after the walk flags. Null if the offset arc vanishes. */
+export function emitArc(s, dtheta, ctx) {
+  const c = walkCtx(ctx);
+  const ss = (Number(s) || 0) * c.scale;
+  const da = c.mirror ? -(Number(dtheta) || 0) : Number(dtheta) || 0;
+  const d = c.mirror ? -c.offset : c.offset;
+  const th = da * DEG;
+  if (Math.abs(th) < 1e-12) return { s: ss, dtheta: da };
+  const sOff = ss - d * th;
+  if (Math.abs(sOff) < 1e-9) return null;
+  return { s: sOff, dtheta: da };
+}
+
+/**
+ * Algebraic area of one arc drawn from the origin, heading 0.
+ * ½ ∫ x dy − y dx. A straight move along +x contributes 0.
+ */
+export function arcArea(s, dtheta) {
+  const th = (Number(dtheta) || 0) * DEG;
+  if (Math.abs(th) < 1e-12 || Math.abs(s) < 1e-12) return 0;
+  const R = s / th;
+  let acc = 0;
+  const n = Math.max(1, Math.ceil(Math.abs(th) / (Math.PI / 32)));
+  let x = 0;
+  let y = 0;
+  let phi = 0;
+  for (let i = 1; i <= n; i++) {
+    const phi2 = th * (i / n);
+    const x2 = R * Math.sin(phi2);
+    const y2 = R * (1 - Math.cos(phi2));
+    acc += x * y2 - x2 * y;
+    x = x2;
+    y = y2;
+    phi = phi2;
+  }
+  return 0.5 * acc;
 }
 
 export class Block {
@@ -67,38 +125,78 @@ export class Block {
     this.type = type;
     this.id = fields.id || uid(type);
     this.name = fields.name || "";
-    this._iface = null;
-    this._ver = 0;
+    this._memo = new Map();
   }
 
   invalidate() {
-    this._iface = null;
-    this._ver += 1;
+    this._memo = new Map();
+  }
+
+  _remember(kind, ctx, compute) {
+    const key = kind + ":" + ctxKey(ctx);
+    if (this._memo.has(key)) return this._memo.get(key);
+    const value = compute(walkCtx(ctx));
+    this._memo.set(key, value);
+    return value;
   }
 
   /** @returns {{dx: number, dy: number, dtheta: number}} */
-  interface() {
-    if (this._iface) return this._iface;
-    this._iface = this.computeInterface();
-    return this._iface;
+  interface(ctx = {}) {
+    return this._remember("i", ctx, (c) => this.computeInterface(c));
   }
 
-  computeInterface() {
+  computeInterface(_ctx) {
     return { ...IFACE0 };
   }
 
+  /** Path length. Lazy; repeat and scale use shortcuts. */
+  length(ctx = {}) {
+    return this._remember("L", ctx, (c) => this.computeLength(c));
+  }
+
+  computeLength(_ctx) {
+    let n = 0;
+    for (const [s] of this.arcs(_ctx)) n += Math.abs(s);
+    return n;
+  }
+
   /**
-   * @param {{k?: number, name?: string}} [_ctx]
+   * Algebraic area of the walked path (open or closed). Lazy.
+   * Scale contributes k², mirror and reverse contribute a sign,
+   * a closed repeat contributes n times. Not asked for on every paint.
+   */
+  area(ctx = {}) {
+    return this._remember("A", ctx, (c) => this.computeArea(c));
+  }
+
+  computeArea(_ctx) {
+    return foldArea(this.arcs(_ctx));
+  }
+
+  /** Leaf count without retaining the rows. */
+  arcCount(ctx = {}) {
+    return this._remember("n", ctx, (c) => this.computeArcCount(c));
+  }
+
+  computeArcCount(_ctx) {
+    let n = 0;
+    for (const _row of this.arcs(_ctx)) n += 1;
+    return n;
+  }
+
+  /**
+   * @param {{reverse?: boolean, mirror?: boolean, scale?: number, offset?: number, k?: number}} [_ctx]
    * @returns {Generator<[number, number, object]>}
    */
   *arcs(_ctx = {}) {}
 
+  /** Drain. Prefer arcs() for a long path. */
   flatten(ctx = {}) {
     return [...this.arcs(ctx)];
   }
 
-  turtlePath() {
-    return this.flatten().map(([s, da]) => [s, da]);
+  turtlePath(ctx = {}) {
+    return this.flatten(ctx).map(([s, da]) => [s, da]);
   }
 
   extra() {
@@ -108,7 +206,7 @@ export class Block {
   describe() {
     const I = this.interface();
     const nm = this.name ? ` ${this.name}` : "";
-    return `${this.type}${nm}  Δ=(${fmt(I.dx)}, ${fmt(I.dy)})  Δθ=${fmt(I.dtheta)}°`;
+    return `${this.type}${nm}  Δ=(${fmt(I.dx)}, ${fmt(I.dy)})  Δθ=${fmt(I.dtheta)}°  L=${fmt(this.length())}`;
   }
 }
 
@@ -118,6 +216,27 @@ function fmt(n) {
   if (a >= 100) return n.toFixed(1);
   if (a >= 1) return n.toFixed(2);
   return n.toFixed(3);
+}
+
+function foldArea(rows) {
+  let acc = { dx: 0, dy: 0, dtheta: 0, area: 0 };
+  for (const [s, da] of rows) {
+    const I = arcIface(s, da);
+    const area = arcArea(s, da);
+    acc = appendArea(acc, I, area);
+  }
+  return acc.area;
+}
+
+function appendArea(acc, iface, area) {
+  const th = acc.dtheta * DEG;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  const dx = c * iface.dx - s * iface.dy;
+  const dy = s * iface.dx + c * iface.dy;
+  const cross = 0.5 * (acc.dx * dy - acc.dy * dx);
+  const next = composeIface(acc, iface);
+  return { ...next, area: acc.area + area + cross };
 }
 
 /** Leaf arc. Straight when Δθ = 0; hinge when s = 0. */
@@ -132,16 +251,30 @@ export class Arc extends Block {
     this.dtheta = Number(dtheta) || 0;
   }
 
-  computeInterface() {
-    return arcIface(this.s, this.dtheta);
+  computeInterface(ctx) {
+    const row = emitArc(this.s, this.dtheta, ctx);
+    if (!row) return { ...IFACE0 };
+    return arcIface(row.s, row.dtheta);
+  }
+
+  computeLength(ctx) {
+    const row = emitArc(this.s, this.dtheta, ctx);
+    return row ? Math.abs(row.s) : 0;
+  }
+
+  computeArea(ctx) {
+    const row = emitArc(this.s, this.dtheta, ctx);
+    return row ? arcArea(row.s, row.dtheta) : 0;
+  }
+
+  computeArcCount(ctx) {
+    return emitArc(this.s, this.dtheta, ctx) ? 1 : 0;
   }
 
   *arcs(ctx = {}) {
-    yield [
-      this.s,
-      this.dtheta,
-      { ...this.extra(), k: ctx.k ?? 0 },
-    ];
+    const row = emitArc(this.s, this.dtheta, ctx);
+    if (!row) return;
+    yield [row.s, row.dtheta, { ...this.extra(), k: walkCtx(ctx).k }];
   }
 }
 
@@ -153,16 +286,44 @@ export class Seq extends Block {
     this.items = items.map(asBlock);
   }
 
-  computeInterface() {
-    return foldIface(this.items);
+  _kids(ctx) {
+    const c = walkCtx(ctx);
+    return c.reverse ? this.items.slice().reverse() : this.items;
+  }
+
+  computeInterface(ctx) {
+    let acc = { ...IFACE0 };
+    for (const child of this._kids(ctx)) acc = composeIface(acc, child.interface(ctx));
+    return acc;
+  }
+
+  computeLength(ctx) {
+    let n = 0;
+    for (const child of this._kids(ctx)) n += child.length(ctx);
+    return n;
+  }
+
+  computeArea(ctx) {
+    let acc = { dx: 0, dy: 0, dtheta: 0, area: 0 };
+    for (const child of this._kids(ctx)) {
+      acc = appendArea(acc, child.interface(ctx), child.area(ctx));
+    }
+    return acc.area;
+  }
+
+  computeArcCount(ctx) {
+    let n = 0;
+    for (const child of this._kids(ctx)) n += child.arcCount(ctx);
+    return n;
   }
 
   *arcs(ctx = {}) {
-    for (const child of this.items) yield* child.arcs(ctx);
+    const c = walkCtx(ctx);
+    for (const child of this._kids(c)) yield* child.arcs(c);
   }
 }
 
-/** Replay the child n times (Python TL / tape `loop`). */
+/** Replay the child n times. A reversed repeat is the reversed child, n times. */
 export class Repeat extends Block {
   /**
    * @param {Block} of
@@ -174,21 +335,38 @@ export class Repeat extends Block {
     this.n = Math.max(0, Math.floor(Number(n) || 0));
   }
 
-  computeInterface() {
-    const one = this.of.interface();
+  computeInterface(ctx) {
+    const one = this.of.interface(ctx);
     let acc = { ...IFACE0 };
     for (let i = 0; i < this.n; i++) acc = composeIface(acc, one);
     return acc;
   }
 
+  computeLength(ctx) {
+    return this.n * this.of.length(ctx);
+  }
+
+  computeArea(ctx) {
+    const one = this.of.interface(ctx);
+    const closed = Math.hypot(one.dx, one.dy) < 1e-9;
+    if (closed) return this.n * this.of.area(ctx);
+    let acc = { dx: 0, dy: 0, dtheta: 0, area: 0 };
+    const area = this.of.area(ctx);
+    for (let i = 0; i < this.n; i++) acc = appendArea(acc, one, area);
+    return acc.area;
+  }
+
+  computeArcCount(ctx) {
+    return this.n * this.of.arcCount(ctx);
+  }
+
   *arcs(ctx = {}) {
-    for (let k = 0; k < this.n; k++) {
-      yield* this.of.arcs({ ...ctx, k });
-    }
+    const c = walkCtx(ctx);
+    for (let k = 0; k < this.n; k++) yield* this.of.arcs({ ...c, k });
   }
 }
 
-/** Multiply lengths; leave turns. */
+/** Multiply lengths. The child sees scale and offset already multiplied. */
 export class Scale extends Block {
   /**
    * @param {Block} of
@@ -201,21 +379,36 @@ export class Scale extends Block {
     if (!Number.isFinite(this.k)) this.k = 1;
   }
 
-  computeInterface() {
-    const I = this.of.interface();
-    return { dx: I.dx * this.k, dy: I.dy * this.k, dtheta: I.dtheta };
+  _ctx(ctx) {
+    const c = walkCtx(ctx);
+    return { ...c, scale: c.scale * this.k, offset: c.offset * this.k };
+  }
+
+  computeInterface(ctx) {
+    return this.of.interface(this._ctx(ctx));
+  }
+
+  computeLength(ctx) {
+    return this.of.length(this._ctx(ctx));
+  }
+
+  computeArea(ctx) {
+    return this.of.area(this._ctx(ctx));
+  }
+
+  computeArcCount(ctx) {
+    return this.of.arcCount(this._ctx(ctx));
   }
 
   *arcs(ctx = {}) {
-    for (const [s, da, extra] of this.of.arcs(ctx)) {
-      yield [s * this.k, da, extra];
-    }
+    yield* this.of.arcs(this._ctx(ctx));
   }
 }
 
 /**
- * Mirror content across the incoming heading axis, then rotate that
- * axis by `axisDeg` in the local frame. Leaf rows get Δθ → −Δθ.
+ * Mirror across the incoming heading. XOR the mirror flag and flip the
+ * offset side. axisDeg is a local rotation of that axis, emitted as hinges
+ * so the child walk stays a stream.
  */
 export class Mirror extends Block {
   /**
@@ -228,41 +421,40 @@ export class Mirror extends Block {
     this.axisDeg = Number(axisDeg) || 0;
   }
 
-  computeInterface() {
-    const I = this.of.interface();
-    const a = this.axisDeg * DEG;
-    const c = Math.cos(-a);
-    const s = Math.sin(-a);
-    let x = c * I.dx - s * I.dy;
-    let y = s * I.dx + c * I.dy;
-    y = -y;
-    const c2 = Math.cos(a);
-    const s2 = Math.sin(a);
-    return {
-      dx: c2 * x - s2 * y,
-      dy: s2 * x + c2 * y,
-      dtheta: -I.dtheta,
-    };
+  _ctx(ctx) {
+    const c = walkCtx(ctx);
+    return { ...c, mirror: c.mirror !== true, offset: -c.offset };
+  }
+
+  computeInterface(ctx) {
+    if (Math.abs(this.axisDeg) < 1e-12) return this.of.interface(this._ctx(ctx));
+    return new Seq([new Arc(0, this.axisDeg), new Mirror(this.of, 0), new Arc(0, -this.axisDeg)]).interface(ctx);
+  }
+
+  computeLength(ctx) {
+    return this.of.length(this._ctx(ctx));
+  }
+
+  computeArea(ctx) {
+    return this.of.area(this._ctx(ctx));
+  }
+
+  computeArcCount(ctx) {
+    return this.of.arcCount(this._ctx(ctx));
   }
 
   *arcs(ctx = {}) {
-    const axis = this.axisDeg;
-    if (Math.abs(axis) < 1e-12) {
-      for (const [s, da, extra] of this.of.arcs(ctx)) {
-        yield [s, -da, extra];
-      }
+    if (Math.abs(this.axisDeg) < 1e-12) {
+      yield* this.of.arcs(this._ctx(ctx));
       return;
     }
-    yield* new Seq([new Arc(0, axis), new Mirror(this.of, 0), new Arc(0, -axis)]).arcs(ctx);
+    yield* new Seq([new Arc(0, this.axisDeg), new Mirror(this.of, 0), new Arc(0, -this.axisDeg)]).arcs(ctx);
   }
 }
 
 /**
- * Play the child's leaf arcs last-to-first, keeping each (s, Δθ).
- * For attaching a continuation to the end of a motif:
- *   seq(ray, reverse(ray))
- * Net Δθ doubles; handedness does not flip. Contrast `mirror`, which
- * negates every turn and reflects across the start heading.
+ * Play children last-to-first. The child walk receives the XOR-ed reverse
+ * flag. Leaf arcs are unchanged. Does not build the leaf array.
  */
 export class Reverse extends Block {
   /** @param {Block} of */
@@ -271,21 +463,29 @@ export class Reverse extends Block {
     this.of = asBlock(of);
   }
 
-  computeInterface() {
-    const segs = this.of.turtlePath();
-    let acc = { ...IFACE0 };
-    for (let i = segs.length - 1; i >= 0; i--) {
-      acc = composeIface(acc, arcIface(segs[i][0], segs[i][1]));
-    }
-    return acc;
+  _ctx(ctx) {
+    const c = walkCtx(ctx);
+    return { ...c, reverse: !c.reverse };
+  }
+
+  computeInterface(ctx) {
+    return this.of.interface(this._ctx(ctx));
+  }
+
+  computeLength(ctx) {
+    return this.of.length(this._ctx(ctx));
+  }
+
+  computeArea(ctx) {
+    return this.of.area(this._ctx(ctx));
+  }
+
+  computeArcCount(ctx) {
+    return this.of.arcCount(this._ctx(ctx));
   }
 
   *arcs(ctx = {}) {
-    const segs = this.of.turtlePath();
-    for (let i = segs.length - 1; i >= 0; i--) {
-      const [s, da] = segs[i];
-      yield [s, da, { ...this.extra(), k: ctx.k ?? i }];
-    }
+    yield* this.of.arcs(this._ctx(ctx));
   }
 }
 
@@ -316,7 +516,7 @@ export class Ah extends Block {
       ω += Math.PI;
     }
     const RAD = 180 / Math.PI;
-    return [
+    return new Seq([
       new Arc(0, α * RAD),
       new Arc(h, 0),
       new Arc(0, θ * RAD),
@@ -324,21 +524,34 @@ export class Ah extends Block {
       new Arc(0, θ * RAD),
       new Arc(h, 0),
       new Arc(0, ω * RAD),
-    ];
+    ]);
   }
 
-  computeInterface() {
-    return foldIface(this.leaves());
+  computeInterface(ctx) {
+    return this.leaves().interface(ctx);
+  }
+
+  computeLength(ctx) {
+    return this.leaves().length(ctx);
+  }
+
+  computeArea(ctx) {
+    return this.leaves().area(ctx);
+  }
+
+  computeArcCount(ctx) {
+    return this.leaves().arcCount(ctx);
   }
 
   *arcs(ctx = {}) {
-    for (const leaf of this.leaves()) yield* leaf.arcs(ctx);
+    yield* this.leaves().arcs(ctx);
   }
 }
 
 /**
  * n copies rotated in the plane and joined (tape `orbit`).
- * Flatten uses path-xform; the node still stores (of, n, deg).
+ * Still bakes one child — joining needs the end pose, which interface()
+ * could supply. Flags are applied to the child before that bake.
  */
 export class Orbit extends Block {
   /**
@@ -351,36 +564,37 @@ export class Orbit extends Block {
     this.of = asBlock(of);
     this.n = Math.max(0, Math.floor(Number(n) || 0));
     this.deg = Number(deg) || 0;
-    this._baked = null;
   }
 
-  invalidate() {
-    super.invalidate();
-    this._baked = null;
-  }
-
-  baked() {
-    if (this._baked) return this._baked;
-    const segs = this.of.turtlePath();
+  baked(ctx) {
+    const segs = this.of.turtlePath(ctx);
     const stroke = { startPoint: [0, 0], startAngle: 0, turtlePath: segs };
     const out = repeatRotate(stroke, this.n, this.deg, [0, 0]);
-    this._baked = (out.turtlePath || []).map((seg) => [Number(seg[0]), Number(seg[1])]);
-    return this._baked;
+    return (out.turtlePath || []).map((seg) => [Number(seg[0]), Number(seg[1])]);
   }
 
-  computeInterface() {
-    return this.baked().reduce((acc, [s, da]) => composeIface(acc, arcIface(s, da)), { ...IFACE0 });
+  computeInterface(ctx) {
+    return this.baked(ctx).reduce((acc, [s, da]) => composeIface(acc, arcIface(s, da)), { ...IFACE0 });
+  }
+
+  computeLength(ctx) {
+    return this.baked(ctx).reduce((n, [s]) => n + Math.abs(s), 0);
+  }
+
+  computeArcCount(ctx) {
+    return this.baked(ctx).length;
   }
 
   *arcs(ctx = {}) {
+    const c = walkCtx(ctx);
     let i = 0;
-    for (const [s, da] of this.baked()) {
-      yield [s, da, { ...this.extra(), k: ctx.k ?? i++ }];
+    for (const [s, da] of this.baked(c)) {
+      yield [s, da, { ...this.extra(), k: c.k ?? i++ }];
     }
   }
 }
 
-/** Look up a named definition at eval time. */
+/** Look up a named definition at eval time. Forwards the walk context. */
 export class Ref extends Block {
   /**
    * @param {string} refName
@@ -399,8 +613,20 @@ export class Ref extends Block {
     return asBlock(b);
   }
 
-  computeInterface() {
-    return this.target().interface();
+  computeInterface(ctx) {
+    return this.target().interface(ctx);
+  }
+
+  computeLength(ctx) {
+    return this.target().length(ctx);
+  }
+
+  computeArea(ctx) {
+    return this.target().area(ctx);
+  }
+
+  computeArcCount(ctx) {
+    return this.target().arcCount(ctx);
   }
 
   *arcs(ctx = {}) {

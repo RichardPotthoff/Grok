@@ -185,6 +185,7 @@ function publishStrokes() {
       startPoint: u.startPoint,
       startAngle: u.startAngle,
       turtlePath: u.turtlePath,
+      root: u.root,
       stroke: u.stroke,
       width: u.width,
       fill: u.fill,

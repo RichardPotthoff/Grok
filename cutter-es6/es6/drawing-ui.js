@@ -13,6 +13,37 @@ const INK = {
   paper: "#f3ead8",
 };
 
+function iterPoints(use, tol) {
+  const pts = [];
+  const start = use.startPoint || [0, 0];
+  if (use.root && typeof use.root.arcs === "function") {
+    let x = start[0];
+    let y = start[1];
+    let hd = use.startAngle || 0;
+    pts.push([x, y]);
+    for (const [s, da] of use.root.arcs()) {
+      const step = walkPath(
+        { startPoint: [x, y], startAngle: hd, turtlePath: [[s, da]] },
+        { scale: 1, tol, returnStart: false },
+      );
+      for (const row of step) pts.push(row.point);
+      const th = (hd * Math.PI) / 180;
+      const ang = (da * Math.PI) / 180;
+      const half = ang / 2;
+      const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
+      const mid = th + half;
+      x += chord * Math.cos(mid);
+      y += chord * Math.sin(mid);
+      hd += da;
+    }
+    return pts;
+  }
+  const samples = walkPath(use, { scale: 1, tol, returnStart: true });
+  for (const row of samples) pts.push(row.point);
+  if (!pts.length) pts.push(start.slice());
+  return pts;
+}
+
 function fmt(n) {
   if (!Number.isFinite(n)) return "?";
   return Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2);
@@ -78,11 +109,15 @@ export function renderStage({ model, el }) {
     ctx.lineTo(0, 200);
     ctx.stroke();
     for (const use of strokes()) {
-      const samples = walkPath(use, { scale: 1, tol: 0.04, returnStart: true });
-      if (!samples.length) continue;
       ctx.beginPath();
-      ctx.moveTo(samples[0].point[0], samples[0].point[1]);
-      for (let i = 1; i < samples.length; i++) ctx.lineTo(samples[i].point[0], samples[i].point[1]);
+      let moved = false;
+      for (const p of iterPoints(use, 0.04)) {
+        if (!moved) {
+          ctx.moveTo(p[0], p[1]);
+          moved = true;
+        } else ctx.lineTo(p[0], p[1]);
+      }
+      if (!moved) continue;
       ctx.strokeStyle = INK[use.stroke] || "#111";
       ctx.lineWidth = (use.width || 1.6) / cam.scale;
       if (use.fill && INK[use.fill]) {
@@ -96,9 +131,8 @@ export function renderStage({ model, el }) {
   function allPoints() {
     const pts = [];
     for (const use of strokes()) {
-      const samples = walkPath(use, { scale: 1, tol: 0.2, returnStart: true });
-      for (const row of samples) pts.push(row.point);
-      if (!samples.length) pts.push((use.startPoint || [0, 0]).slice());
+      for (const p of iterPoints(use, 0.2)) pts.push(p);
+      if (!pts.length) pts.push((use.startPoint || [0, 0]).slice());
     }
     return pts;
   }
