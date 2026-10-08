@@ -103,27 +103,14 @@ export function emitArc(s, dtheta, ctx) {
 
 /**
  * Algebraic area of one arc drawn from the origin, heading 0.
- * ½ ∫ x dy − y dx. A straight move along +x contributes 0.
+ * ½ ∫ x dy − y dx = (R²/2) (θ − sin θ), with R = s/θ.
+ * A straight move or a hinge contributes 0.
  */
 export function arcArea(s, dtheta) {
   const th = (Number(dtheta) || 0) * DEG;
   if (Math.abs(th) < 1e-12 || Math.abs(s) < 1e-12) return 0;
   const R = s / th;
-  let acc = 0;
-  const n = Math.max(1, Math.ceil(Math.abs(th) / (Math.PI / 32)));
-  let x = 0;
-  let y = 0;
-  let phi = 0;
-  for (let i = 1; i <= n; i++) {
-    const phi2 = th * (i / n);
-    const x2 = R * Math.sin(phi2);
-    const y2 = R * (1 - Math.cos(phi2));
-    acc += x * y2 - x2 * y;
-    x = x2;
-    y = y2;
-    phi = phi2;
-  }
-  return 0.5 * acc;
+  return 0.5 * R * R * (th - Math.sin(th));
 }
 
 export class Block {
