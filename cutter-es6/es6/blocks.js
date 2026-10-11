@@ -588,6 +588,105 @@ export class Orbit extends Block {
   }
 }
 
+/**
+ * Parallel curve. Positive d is to the right of the walked heading.
+ * A hinge becomes the corner fillet. A negative offset length grows a loop.
+ */
+export class Offset extends Block {
+  /**
+   * @param {Block} of
+   * @param {number} d
+   */
+  constructor(of, d, fields = {}) {
+    super("offset", fields);
+    this.of = asBlock(of);
+    this.d = Number(d) || 0;
+  }
+
+  _ctx(ctx) {
+    const c = walkCtx(ctx);
+    return { ...c, offset: c.offset + this.d * c.scale };
+  }
+
+  computeInterface(ctx) {
+    return this.of.interface(this._ctx(ctx));
+  }
+
+  computeLength(ctx) {
+    return this.of.length(this._ctx(ctx));
+  }
+
+  computeArea(ctx) {
+    return this.of.area(this._ctx(ctx));
+  }
+
+  computeArcCount(ctx) {
+    return this.of.arcCount(this._ctx(ctx));
+  }
+
+  *arcs(ctx = {}) {
+    yield* this.of.arcs(this._ctx(ctx));
+  }
+}
+
+/**
+ * Sub-path of `of` from arc length `from` to `to`.
+ * Boundary arcs are split exactly: [v − u, Δθ·(v − u)/s].
+ * A hinge has no length and is kept when the mark lands on it.
+ */
+export class Slice extends Block {
+  /**
+   * @param {Block} of
+   * @param {number} from
+   * @param {number} to
+   */
+  constructor(of, from, to, fields = {}) {
+    super("slice", fields);
+    this.of = asBlock(of);
+    this.from = Math.max(0, Number(from) || 0);
+    this.to = Number(to);
+    if (!Number.isFinite(this.to)) this.to = Infinity;
+  }
+
+  computeLength(ctx) {
+    const total = this.of.length(ctx);
+    const a = Math.min(this.from, total);
+    const b = Math.min(Math.max(this.to, a), total);
+    return b - a;
+  }
+
+  computeInterface(ctx) {
+    let acc = { ...IFACE0 };
+    for (const [s, da] of this.arcs(ctx)) acc = composeIface(acc, arcIface(s, da));
+    return acc;
+  }
+
+  computeArea(ctx) {
+    return foldArea(this.arcs(ctx));
+  }
+
+  *arcs(ctx = {}) {
+    const a = this.from;
+    const b = this.to;
+    if (b <= a) return;
+    let acc = 0;
+    for (const [s, da, extra] of this.of.arcs(ctx)) {
+      const len = Math.abs(s);
+      const next = acc + len;
+      if (len < 1e-12) {
+        if (acc >= a && acc <= b) yield [0, da, extra];
+      } else if (next > a && acc < b) {
+        const u = Math.max(0, a - acc);
+        const v = Math.min(len, b - acc);
+        const f = (v - u) / len;
+        if (f > 1e-12) yield [s * f, da * f, extra];
+      }
+      acc = next;
+      if (acc >= b) break;
+    }
+  }
+}
+
 /** Look up a named definition at eval time. Forwards the walk context. */
 export class Ref extends Block {
   /**

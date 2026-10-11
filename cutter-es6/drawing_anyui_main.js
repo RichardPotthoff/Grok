@@ -12,6 +12,7 @@ import {
   API_HELP,
   DEFAULT_SCRIPT,
   STAR6_SCRIPT,
+  SLICE_SCRIPT,
   DrawingRepl,
   loadSession,
   newScript,
@@ -71,6 +72,7 @@ const btnNew = new Button({ description: "+ Script" });
 const btnClose = new Button({ description: "Close" });
 const btnSpoke = new Button({ description: "Spoke" });
 const btnStar = new Button({ description: "Star6" });
+const btnSlice = new Button({ description: "Slice" });
 const btnClear = new Button({ description: "Clear store" });
 
 const toolbar = new HBox({
@@ -122,7 +124,7 @@ const stageRow = new HBox({
 const scriptActions = new HBox({
   wrap: true,
   gap: "6px",
-  children: [btnRun, btnCopy, btnNew, btnClose, btnSpoke, btnStar],
+  children: [btnRun, btnCopy, btnNew, btnClose, btnSpoke, btnStar, btnSlice],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -315,6 +317,10 @@ btnSpoke.onClick(() => {
 });
 btnStar.onClick(() => {
   openNamed("star6", STAR6_SCRIPT);
+  runScript();
+});
+btnSlice.onClick(() => {
+  openNamed("slice", SLICE_SCRIPT);
   runScript();
 });
 btnClear.onClick(() => {

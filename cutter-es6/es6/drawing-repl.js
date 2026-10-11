@@ -17,6 +17,8 @@ import {
   Reverse,
   Scale,
   Seq,
+  Slice,
+  Offset,
   asBlock,
   isBlock,
 } from "./blocks.js";
@@ -47,6 +49,25 @@ store("star6", star6);
 show(star6);
 `;
 
+export const SLICE_SCRIPT = `// Rounded square, a slice of it, and a parallel offset.
+const side = seq(seg(20, 0), seg(2 * Math.PI, 90));
+const roundSq = repeat(side, 4);
+store("roundSq", roundSq);
+print("roundSq", roundSq);
+
+show(roundSq, { name: "roundSq", stroke: "ink" });
+
+const part = slice(roundSq, 10, 40);
+store("slice", part);
+print("slice", part);
+show(part, { at: [36, 0], name: "slice", stroke: "accent" });
+
+const rim = offset(roundSq, 3);
+store("offset", rim);
+print("offset", rim);
+show(rim, { at: [0, -36], name: "offset", stroke: "danger" });
+`;
+
 export const API_HELP = [
   "seg(s, dθ)           one arc — degrees",
   "turn(dθ)             hinge, s = 0",
@@ -54,6 +75,8 @@ export const API_HELP = [
   "seq(a, b, …) / cat   relative concatenate",
   "repeat(b, n) / loop  replay moves n times",
   "scale(b, k)          scale lengths",
+  "offset(b, d)         parallel curve, d to the right",
+  "slice(b, from, to)   sub-path by arc length",
   "reverse(b)           leaf arcs last-to-first, same turns",
   "mirror(b, axisDeg?)  flip handedness across start axis",
   "orbit(b, n, deg)     n rotated copies, joined",
@@ -173,6 +196,12 @@ export class DrawingRepl {
       },
       scale(b, k) {
         return new Scale(b, k);
+      },
+      offset(b, d) {
+        return new Offset(b, d);
+      },
+      slice(b, from, to) {
+        return new Slice(b, from, to);
       },
       reverse(b) {
         return new Reverse(b);
