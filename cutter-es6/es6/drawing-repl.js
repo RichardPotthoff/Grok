@@ -66,6 +66,11 @@ const rim = offset(roundSq, 3);
 store("offset", rim);
 print("offset", rim);
 show(rim, { at: [0, -36], name: "offset", stroke: "danger" });
+
+const c = circle(roundSq);
+print("bound", c.cx, c.cy, c.r);
+show(c.path, { at: c.at, name: "bound", stroke: "muted" });
+print("nearest", nearest(roundSq, 8, 6));
 `;
 
 export const API_HELP = [
@@ -76,7 +81,8 @@ export const API_HELP = [
   "repeat(b, n) / loop  replay moves n times",
   "scale(b, k)          scale lengths",
   "offset(b, d)         parallel curve, d to the right",
-  "slice(b, from, to)   sub-path by arc length",
+  "circle(b)            bounding circle {cx, cy, r, path, at}",
+  "nearest(b, x, y)     nearest point on the path",
   "reverse(b)           leaf arcs last-to-first, same turns",
   "mirror(b, axisDeg?)  flip handedness across start axis",
   "orbit(b, n, deg)     n rotated copies, joined",
@@ -202,6 +208,20 @@ export class DrawingRepl {
       },
       slice(b, from, to) {
         return new Slice(b, from, to);
+      },
+      circle(b) {
+        const block = asBlock(b);
+        const bound = block.bound();
+        return {
+          cx: bound.cx,
+          cy: bound.cy,
+          r: bound.r,
+          path: new Arc(2 * Math.PI * bound.r, 360),
+          at: [bound.cx, bound.cy - bound.r],
+        };
+      },
+      nearest(b, x, y) {
+        return asBlock(b).nearest(Number(x) || 0, Number(y) || 0);
       },
       reverse(b) {
         return new Reverse(b);

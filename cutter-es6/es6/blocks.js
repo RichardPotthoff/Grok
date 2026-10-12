@@ -106,6 +106,122 @@ export function emitArc(s, dtheta, ctx) {
  * ½ ∫ x dy − y dx = (R²/2) (θ − sin θ), with R = s/θ.
  * A straight move or a hinge contributes 0.
  */
+/**
+ * Smallest circle around one arc, in the arc's own frame (start at origin, heading 0).
+ * A turn of 180° or more uses the arc's circle. A shorter arc uses the chord diameter.
+ */
+export function arcBound(s, dtheta) {
+  const th = (Number(dtheta) || 0) * DEG;
+  const len = Number(s) || 0;
+  if (Math.abs(th) < 1e-12) {
+    return { cx: len / 2, cy: 0, r: Math.abs(len) / 2 };
+  }
+  const R = len / th;
+  if (Math.abs(th) >= Math.PI - 1e-9) return { cx: 0, cy: R, r: Math.abs(R) };
+  const end = arcIface(len, dtheta);
+  return {
+    cx: end.dx / 2,
+    cy: end.dy / 2,
+    r: Math.hypot(end.dx, end.dy) / 2,
+  };
+}
+
+/** Smallest circle around two circles. Never smaller than either. */
+export function encloseCircles(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist + a.r <= b.r + 1e-12) return { cx: b.cx, cy: b.cy, r: b.r };
+  if (dist + b.r <= a.r + 1e-12) return { cx: a.cx, cy: a.cy, r: a.r };
+  const r = (dist + a.r + b.r) / 2;
+  const t = dist > 1e-12 ? (r - a.r) / dist : 0;
+  return { cx: a.cx + dx * t, cy: a.cy + dy * t, r };
+}
+
+/** Place a circle that is expressed in a frame whose origin is `pose`. */
+export function placeCircle(circle, pose) {
+  const th = (pose.dtheta || 0) * DEG;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  return {
+    cx: pose.dx + c * circle.cx - s * circle.cy,
+    cy: pose.dy + s * circle.cx + c * circle.cy,
+    r: circle.r,
+  };
+}
+
+/**
+ * Enclosing circle of n identical copies. One step is displacement t and turn θ.
+ * Copies that span more than a half turn use the rotation center.
+ */
+export function repeatBound(circle, iface, n) {
+  if (n <= 0) return { cx: 0, cy: 0, r: 0 };
+  if (n === 1) return { cx: circle.cx, cy: circle.cy, r: circle.r };
+  const th = (iface.dtheta || 0) * DEG;
+  const tx = iface.dx || 0;
+  const ty = iface.dy || 0;
+  if (Math.abs(Math.sin(th / 2)) < 1e-9) {
+    const lastCx = circle.cx + (n - 1) * tx;
+    const lastCy = circle.cy + (n - 1) * ty;
+    return {
+      cx: (circle.cx + lastCx) / 2,
+      cy: (circle.cy + lastCy) / 2,
+      r: Math.hypot(lastCx - circle.cx, lastCy - circle.cy) / 2 + circle.r,
+    };
+  }
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
+  const a = 1 - cos;
+  const det = a * a + sin * sin;
+  const ox = (a * tx - sin * ty) / det;
+  const oy = (sin * tx + a * ty) / det;
+  const vx = circle.cx - ox;
+  const vy = circle.cy - oy;
+  const rad = Math.hypot(vx, vy);
+  if ((n - 1) * Math.abs(th) >= Math.PI - 1e-9) return { cx: ox, cy: oy, r: rad + circle.r };
+  const last = (n - 1) * th;
+  const lc = Math.cos(last);
+  const ls = Math.sin(last);
+  const lastCx = ox + lc * vx - ls * vy;
+  const lastCy = oy + ls * vx + lc * vy;
+  return {
+    cx: (circle.cx + lastCx) / 2,
+    cy: (circle.cy + lastCy) / 2,
+    r: Math.hypot(lastCx - circle.cx, lastCy - circle.cy) / 2 + circle.r,
+  };
+}
+
+const EMPTY_CIRCLE = { cx: 0, cy: 0, r: 0 };
+
+function toLocal(x, y, pose) {
+  const th = -(pose.dtheta || 0) * DEG;
+  const dx = x - pose.dx;
+  const dy = y - pose.dy;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  return { x: c * dx - s * dy, y: s * dx + c * dy };
+}
+
+function fromLocal(hit, pose, s0) {
+  const th = (pose.dtheta || 0) * DEG;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  return {
+    x: pose.dx + c * hit.x - s * hit.y,
+    y: pose.dy + s * hit.x + c * hit.y,
+    heading: (pose.dtheta || 0) + hit.heading,
+    s: s0 + hit.s,
+    dist: hit.dist,
+    block: hit.block,
+  };
+}
+
+/**
+ * Algebraic area of one arc drawn from the origin, heading 0.
+ * ½ ∫ x dy − y dx = (R²/2) (θ − sin θ), with R = s/θ.
+ */
 export function arcArea(s, dtheta) {
   const th = (Number(dtheta) || 0) * DEG;
   if (Math.abs(th) < 1e-12 || Math.abs(s) < 1e-12) return 0;
@@ -187,7 +303,55 @@ export class Block {
    */
   *arcs(_ctx = {}) {}
 
-  /** Drain. Prefer arcs() for a long path. */
+  /** Enclosing circle in this block's frame. `{ cx, cy, r }`. */
+  bound(ctx = {}) {
+    return this._remember("C", ctx, (c) => this.computeBound(c));
+  }
+
+  computeBound(ctx) {
+    let acc = null;
+    let pose = { ...IFACE0 };
+    for (const [s, da] of this.arcs(ctx)) {
+      const placed = placeCircle(arcBound(s, da), pose);
+      acc = encloseCircles(acc, placed);
+      pose = composeIface(pose, arcIface(s, da));
+    }
+    return acc || { ...EMPTY_CIRCLE };
+  }
+
+  get center() {
+    const b = this.bound();
+    return { x: b.cx, y: b.cy };
+  }
+
+  get radius() {
+    return this.bound().r;
+  }
+
+  /**
+   * Nearest point on the walked path. Prunes with the enclosing circle.
+   * @returns {{x: number, y: number, heading: number, s: number, dist: number, block: Block}}
+   */
+  nearest(x, y, ctx = {}) {
+    return this._nearest(x, y, walkCtx(ctx), 0);
+  }
+
+  _nearest(x, y, ctx, s0) {
+    const b = this.bound(ctx);
+    if (Math.hypot(x - b.cx, y - b.cy) - b.r >= 1e12) return null;
+    let best = null;
+    let pose = { ...IFACE0 };
+    let acc = s0;
+    for (const [s, da] of this.arcs(ctx)) {
+      const local = toLocal(x, y, pose);
+      const hit = nearestOnArc(s, da, local.x, local.y);
+      const placed = fromLocal({ ...hit, block: this }, pose, acc);
+      if (!best || placed.dist < best.dist) best = placed;
+      pose = composeIface(pose, arcIface(s, da));
+      acc += Math.abs(s);
+    }
+    return best;
+  }
   flatten(ctx = {}) {
     return [...this.arcs(ctx)];
   }
@@ -213,6 +377,36 @@ function fmt(n) {
   if (a >= 100) return n.toFixed(1);
   if (a >= 1) return n.toFixed(2);
   return n.toFixed(3);
+}
+
+function nearestOnArc(s, dtheta, x, y) {
+  const th = (Number(dtheta) || 0) * DEG;
+  const len = Number(s) || 0;
+  if (Math.abs(th) < 1e-12) {
+    const denom = Math.abs(len) < 1e-12 ? 1 : len;
+    let t = x / denom;
+    t = Math.max(0, Math.min(1, t));
+    const px = t * len;
+    return { x: px, y: 0, heading: 0, s: Math.abs(px), dist: Math.hypot(x - px, y) };
+  }
+  const R = len / th;
+  let a = Math.atan2(-(y - R), x) + Math.PI / 2;
+  const turns = Math.round((th / 2 - a) / (2 * Math.PI));
+  a += turns * 2 * Math.PI;
+  const lo = Math.min(0, th);
+  const hi = Math.max(0, th);
+  if (a < lo) a = lo;
+  if (a > hi) a = hi;
+  const px = R * Math.sin(a);
+  const py = R * (1 - Math.cos(a));
+  const f = th === 0 ? 0 : a / th;
+  return {
+    x: px,
+    y: py,
+    heading: f * (Number(dtheta) || 0),
+    s: Math.abs(f * len),
+    dist: Math.hypot(x - px, y - py),
+  };
 }
 
 function foldArea(rows) {
@@ -266,6 +460,17 @@ export class Arc extends Block {
     return 1;
   }
 
+  computeBound(ctx) {
+    const row = emitArc(this.s, this.dtheta, ctx);
+    return arcBound(row.s, row.dtheta);
+  }
+
+  _nearest(x, y, ctx, s0) {
+    const row = emitArc(this.s, this.dtheta, ctx);
+    const hit = nearestOnArc(row.s, row.dtheta, x, y);
+    return { ...hit, s: s0 + hit.s, block: this };
+  }
+
   *arcs(ctx = {}) {
     const row = emitArc(this.s, this.dtheta, ctx);
     yield [row.s, row.dtheta, { ...this.extra(), k: walkCtx(ctx).k }];
@@ -315,6 +520,38 @@ export class Seq extends Block {
     const c = walkCtx(ctx);
     for (const child of this._kids(c)) yield* child.arcs(c);
   }
+
+  computeBound(ctx) {
+    let acc = null;
+    let pose = { ...IFACE0 };
+    for (const child of this._kids(ctx)) {
+      acc = encloseCircles(acc, placeCircle(child.bound(ctx), pose));
+      pose = composeIface(pose, child.interface(ctx));
+    }
+    return acc || { ...EMPTY_CIRCLE };
+  }
+
+  _nearest(x, y, ctx, s0) {
+    let best = null;
+    let pose = { ...IFACE0 };
+    let acc = s0;
+    for (const child of this._kids(ctx)) {
+      const b = placeCircle(child.bound(ctx), pose);
+      const bestDist = best ? best.dist : Infinity;
+      if (Math.hypot(x - b.cx, y - b.cy) - b.r < bestDist) {
+        const local = toLocal(x, y, pose);
+        const hit = child._nearest(local.x, local.y, walkCtx(ctx), acc);
+        if (hit) {
+          const placed = fromLocal(hit, pose, 0);
+          placed.s = hit.s;
+          if (!best || placed.dist < best.dist) best = placed;
+        }
+      }
+      pose = composeIface(pose, child.interface(ctx));
+      acc += child.length(ctx);
+    }
+    return best;
+  }
 }
 
 /** Replay the child n times. A reversed repeat is the reversed child, n times. */
@@ -358,6 +595,32 @@ export class Repeat extends Block {
     const c = walkCtx(ctx);
     for (let k = 0; k < this.n; k++) yield* this.of.arcs({ ...c, k });
   }
+
+  computeBound(ctx) {
+    return repeatBound(this.of.bound(ctx), this.of.interface(ctx), this.n);
+  }
+
+  _nearest(x, y, ctx, s0) {
+    const one = this.of.interface(ctx);
+    const childLen = this.of.length(ctx);
+    let best = null;
+    let pose = { ...IFACE0 };
+    for (let k = 0; k < this.n; k++) {
+      const b = placeCircle(this.of.bound(ctx), pose);
+      const bestDist = best ? best.dist : Infinity;
+      if (Math.hypot(x - b.cx, y - b.cy) - b.r < bestDist) {
+        const local = toLocal(x, y, pose);
+        const hit = this.of._nearest(local.x, local.y, { ...walkCtx(ctx), k }, s0 + k * childLen);
+        if (hit) {
+          const placed = fromLocal(hit, pose, 0);
+          placed.s = hit.s;
+          if (!best || placed.dist < best.dist) best = placed;
+        }
+      }
+      pose = composeIface(pose, one);
+    }
+    return best;
+  }
 }
 
 /** Multiply lengths. The child sees scale and offset already multiplied. */
@@ -396,6 +659,10 @@ export class Scale extends Block {
 
   *arcs(ctx = {}) {
     yield* this.of.arcs(this._ctx(ctx));
+  }
+
+  computeBound(ctx) {
+    return this.of.bound(this._ctx(ctx));
   }
 }
 
@@ -444,6 +711,14 @@ export class Mirror extends Block {
     }
     yield* new Seq([new Arc(0, this.axisDeg), new Mirror(this.of, 0), new Arc(0, -this.axisDeg)]).arcs(ctx);
   }
+
+  computeBound(ctx) {
+    if (Math.abs(this.axisDeg) < 1e-12) {
+      const b = this.of.bound(this._ctx(ctx));
+      return { cx: b.cx, cy: -b.cy, r: b.r };
+    }
+    return new Seq([new Arc(0, this.axisDeg), new Mirror(this.of, 0), new Arc(0, -this.axisDeg)]).bound(ctx);
+  }
 }
 
 /**
@@ -480,6 +755,10 @@ export class Reverse extends Block {
 
   *arcs(ctx = {}) {
     yield* this.of.arcs(this._ctx(ctx));
+  }
+
+  computeBound(ctx) {
+    return this.of.bound(this._ctx(ctx));
   }
 }
 
@@ -626,6 +905,10 @@ export class Offset extends Block {
 
   *arcs(ctx = {}) {
     yield* this.of.arcs(this._ctx(ctx));
+  }
+
+  computeBound(ctx) {
+    return this.of.bound(this._ctx(ctx));
   }
 }
 
