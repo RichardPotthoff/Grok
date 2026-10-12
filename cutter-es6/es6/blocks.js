@@ -153,43 +153,94 @@ export function placeCircle(circle, pose) {
 }
 
 /**
- * Enclosing circle of n identical copies. One step is displacement t and turn θ.
- * Copies that span more than a half turn use the rotation center.
+ * Minimum circle of a point set (Welzl). The circle of a path of minor arcs
+ * is the circle of its endpoints and crowns, so it touches the path.
  */
-export function repeatBound(circle, iface, n) {
-  if (n <= 0) return { cx: 0, cy: 0, r: 0 };
-  if (n === 1) return { cx: circle.cx, cy: circle.cy, r: circle.r };
-  const th = (iface.dtheta || 0) * DEG;
-  const tx = iface.dx || 0;
-  const ty = iface.dy || 0;
-  if (Math.abs(Math.sin(th / 2)) < 1e-9) {
-    const lastCx = circle.cx + (n - 1) * tx;
-    const lastCy = circle.cy + (n - 1) * ty;
+export function mec(points) {
+  const P = points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (!P.length) return { cx: 0, cy: 0, r: 0 };
+  for (let i = P.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = P[i];
+    P[i] = P[j];
+    P[j] = t;
+  }
+  return welzl(P, [], P.length);
+}
+
+function welzl(P, R, n) {
+  if (n === 0 || R.length === 3) return circleOf(R);
+  const p = P[n - 1];
+  const c = welzl(P, R, n - 1);
+  if (Math.hypot(p.x - c.cx, p.y - c.cy) <= c.r + 1e-8) return c;
+  return welzl(P, R.concat(p), n - 1);
+}
+
+function circleOf(R) {
+  if (!R.length) return { cx: 0, cy: 0, r: 0 };
+  if (R.length === 1) return { cx: R[0].x, cy: R[0].y, r: 0 };
+  if (R.length === 2) {
     return {
-      cx: (circle.cx + lastCx) / 2,
-      cy: (circle.cy + lastCy) / 2,
-      r: Math.hypot(lastCx - circle.cx, lastCy - circle.cy) / 2 + circle.r,
+      cx: (R[0].x + R[1].x) / 2,
+      cy: (R[0].y + R[1].y) / 2,
+      r: Math.hypot(R[1].x - R[0].x, R[1].y - R[0].y) / 2,
     };
   }
+  const a = R[0];
+  const b = R[1];
+  const c = R[2];
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-12) return circleOf([a, b]);
+  const ux =
+    ((a.x * a.x + a.y * a.y) * (b.y - c.y) +
+      (b.x * b.x + b.y * b.y) * (c.y - a.y) +
+      (c.x * c.x + c.y * c.y) * (a.y - b.y)) /
+    d;
+  const uy =
+    ((a.x * a.x + a.y * a.y) * (c.x - b.x) +
+      (b.x * b.x + b.y * b.y) * (a.x - c.x) +
+      (c.x * c.x + c.y * c.y) * (b.x - a.x)) /
+    d;
+  return { cx: ux, cy: uy, r: Math.hypot(a.x - ux, a.y - uy) };
+}
+
+/** Endpoints, and the crown of a curved arc. A minor arc lies inside these. */
+export function arcExtremes(s, dtheta) {
+  const th = (Number(dtheta) || 0) * DEG;
+  const len = Number(s) || 0;
+  const end = arcIface(len, dtheta);
+  const pts = [
+    { x: 0, y: 0 },
+    { x: end.dx, y: end.dy },
+  ];
+  if (Math.abs(th) >= 1e-9) {
+    const mid = arcIface(len / 2, (Number(dtheta) || 0) / 2);
+    pts.push({ x: mid.dx, y: mid.dy });
+  }
+  return pts;
+}
+
+function placePoint(p, pose) {
+  const th = (pose.dtheta || 0) * DEG;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  return {
+    x: pose.dx + c * p.x - s * p.y,
+    y: pose.dy + s * p.x + c * p.y,
+  };
+}
+
+/** Rotation center of one rigid step, or null if the step is a translation. */
+export function stepCenter(iface) {
+  const th = (iface.dtheta || 0) * DEG;
+  if (Math.abs(Math.sin(th / 2)) < 1e-9) return null;
   const cos = Math.cos(th);
   const sin = Math.sin(th);
   const a = 1 - cos;
   const det = a * a + sin * sin;
-  const ox = (a * tx - sin * ty) / det;
-  const oy = (sin * tx + a * ty) / det;
-  const vx = circle.cx - ox;
-  const vy = circle.cy - oy;
-  const rad = Math.hypot(vx, vy);
-  if ((n - 1) * Math.abs(th) >= Math.PI - 1e-9) return { cx: ox, cy: oy, r: rad + circle.r };
-  const last = (n - 1) * th;
-  const lc = Math.cos(last);
-  const ls = Math.sin(last);
-  const lastCx = ox + lc * vx - ls * vy;
-  const lastCy = oy + ls * vx + lc * vy;
   return {
-    cx: (circle.cx + lastCx) / 2,
-    cy: (circle.cy + lastCy) / 2,
-    r: Math.hypot(lastCx - circle.cx, lastCy - circle.cy) / 2 + circle.r,
+    x: (a * iface.dx - sin * iface.dy) / det,
+    y: (sin * iface.dx + a * iface.dy) / det,
   };
 }
 
@@ -309,14 +360,18 @@ export class Block {
   }
 
   computeBound(ctx) {
-    let acc = null;
+    return mec(this.extremes(ctx));
+  }
+
+  /** Points that can lie on the minimum circle: junctions and arc crowns. */
+  extremes(ctx = {}) {
+    const pts = [];
     let pose = { ...IFACE0 };
     for (const [s, da] of this.arcs(ctx)) {
-      const placed = placeCircle(arcBound(s, da), pose);
-      acc = encloseCircles(acc, placed);
+      for (const p of arcExtremes(s, da)) pts.push(placePoint(p, pose));
       pose = composeIface(pose, arcIface(s, da));
     }
-    return acc || { ...EMPTY_CIRCLE };
+    return pts;
   }
 
   get center() {
@@ -522,13 +577,23 @@ export class Seq extends Block {
   }
 
   computeBound(ctx) {
-    let acc = null;
+    const pts = [];
     let pose = { ...IFACE0 };
     for (const child of this._kids(ctx)) {
-      acc = encloseCircles(acc, placeCircle(child.bound(ctx), pose));
+      for (const p of child.extremes(ctx)) pts.push(placePoint(p, pose));
       pose = composeIface(pose, child.interface(ctx));
     }
-    return acc || { ...EMPTY_CIRCLE };
+    return mec(pts);
+  }
+
+  extremes(ctx = {}) {
+    const pts = [];
+    let pose = { ...IFACE0 };
+    for (const child of this._kids(ctx)) {
+      for (const p of child.extremes(ctx)) pts.push(placePoint(p, pose));
+      pose = composeIface(pose, child.interface(ctx));
+    }
+    return pts;
   }
 
   _nearest(x, y, ctx, s0) {
@@ -597,7 +662,23 @@ export class Repeat extends Block {
   }
 
   computeBound(ctx) {
-    return repeatBound(this.of.bound(ctx), this.of.interface(ctx), this.n);
+    const one = this.of.interface(ctx);
+    const childPts = this.of.extremes(ctx);
+    if (this.n <= 1) return mec(childPts);
+    const O = stepCenter(one);
+    const span = this.n * Math.abs(one.dtheta || 0);
+    if (O && span >= 360 - 1e-6) {
+      let r = 0;
+      for (const p of childPts) r = Math.max(r, Math.hypot(p.x - O.x, p.y - O.y));
+      return { cx: O.x, cy: O.y, r };
+    }
+    const pts = [];
+    let pose = { ...IFACE0 };
+    for (let k = 0; k < this.n; k++) {
+      for (const p of childPts) pts.push(placePoint(p, pose));
+      pose = composeIface(pose, one);
+    }
+    return mec(pts);
   }
 
   _nearest(x, y, ctx, s0) {

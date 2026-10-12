@@ -353,6 +353,12 @@ export function describe(v) {
   if (v && v.root instanceof Block) {
     return `use ${v.id} ${v.root.describe()}`;
   }
+  if (v && typeof v === "object") {
+    const bits = Object.entries(v)
+      .filter(([, val]) => typeof val !== "object")
+      .map(([k, val]) => `${k}=${typeof val === "number" ? Number(val.toFixed(4)) : val}`);
+    if (bits.length) return bits.join(" ");
+  }
   return String(v);
 }
 

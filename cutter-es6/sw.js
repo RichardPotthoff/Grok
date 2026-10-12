@@ -1,7 +1,7 @@
 /* Offline cache for the ESM cutter. Relative URLs so this works
    on GitHub Pages (/Grok/cutter-es6/) and on the Grok preview.
    Bump VERSION whenever app sources change so waiting clients can update. */
-const VERSION = "cutter-offline-v20-20261011";
+const VERSION = "cutter-offline-v21-20261012";
 const PRECACHE = [
   "./standalone.html",
   "./drawing.html",
