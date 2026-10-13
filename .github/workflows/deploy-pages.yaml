@@ -4,8 +4,8 @@ name: Build & deploy drawing_anyui bundle to Pages
 
 on:
   workflow_dispatch: {}        # lets you run it from the Actions UI
-  push:
-    branches: [ main ]         # change if your default branch is different
+#  push:
+#    branches: [ main ]         # change if your default branch is different
 
 permissions:
   contents: read
