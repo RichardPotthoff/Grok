@@ -32,7 +32,9 @@ jobs:
       - name: Run bundler
         run: |
           # run your script (it writes index_drawing_anyui.html by default)
-          python cutter-es6/es6_iife_drawing_anyui.py
+          cd cutter-es6
+          python es6_iife_drawing_anyui.py
+          cd ..
 
       - name: Upload build as workflow artifact (optional inspection)
         uses: actions/upload-artifact@v4
