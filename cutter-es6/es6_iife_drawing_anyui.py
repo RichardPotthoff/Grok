@@ -291,7 +291,7 @@ def process_html(html_path,minify=False,output_file='output.html',open=open):
              new_style=f.read().strip()
              if new_style:
                if minify:
-                 style_tag.append(basic_css_minifier('\n'+style+'\n'))
+                 style_tag.append(basic_css_minifier('\n'+new_style+'\n'))
                else:
                  style_tag.append(f"\n/* From: {css_file_path} */\n{new_style}\n")
        else:
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     output_file='index_drawing_anyui.html'
     print(f'ES6 to IIFE convertersion of{html_file} started.')
     print(f'root directory: {os.getcwd()}')
-    process_html(html_file,minify=False,output_file=output_file)
+    process_html(html_file,minify=True,output_file=output_file)
     print(f"{html_file}(ES6)  -> {output_file}(iife) conversion completed.")
     t2=perf_counter()
     print(f'{t2-t1=}')
