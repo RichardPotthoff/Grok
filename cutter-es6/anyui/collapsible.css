@@ -1,0 +1,65 @@
+.anyui-collapsible {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.anyui-collapsible-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: #f4f1ea;
+  border: 1px solid #ddd6c8;
+  cursor: pointer;
+  user-select: none;
+  padding: 0;
+  min-width: 0;
+}
+
+.anyui-collapsible-bar button {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  writing-mode: horizontal-tb;
+  white-space: nowrap;
+}
+
+.anyui-collapsible.side-left .anyui-collapsible-bar,
+.anyui-collapsible.side-right .anyui-collapsible-bar {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 28px;
+  min-width: 28px;
+}
+
+.anyui-collapsible.side-bottom .anyui-collapsible-bar,
+.anyui-collapsible.side-top .anyui-collapsible-bar {
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
+}
+
+.anyui-collapsible-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.anyui-collapsible.open.side-left,
+.anyui-collapsible.open.side-right {
+  flex-direction: row;
+}
+
+.anyui-collapsible.open.side-bottom,
+.anyui-collapsible.open.side-top {
+  flex-direction: column;
+}
+
+.anyui-collapsible:not(.open) {
+  flex: 0 0 auto !important;
+}
