@@ -59,10 +59,16 @@ function render({ model, el }) {
     }
   }
 
+  function applyLayout() {
+    const layout = model.state.layout || {};
+    Object.assign(el.style, layout);
+  }
+
   model.on("change:children", update);
   model.on("change:orientation", update);
   model.on("change:wrap", update);
   model.on("change:gap", update);
+  model.on("change:layout", applyLayout);
   update();
 
   return () => {
@@ -70,6 +76,7 @@ function render({ model, el }) {
     model.off("change:orientation", update);
     model.off("change:wrap", update);
     model.off("change:gap", update);
+    model.off("change:layout", applyLayout);
     childCleanups.forEach((cleanup) => cleanup());
     container.remove();
   };

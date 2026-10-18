@@ -16,7 +16,9 @@ User feedback on the 2026-10-15 chrome: two Edit buttons, bottom script dropdown
 
 - Icon-rail sidebars. Left rail: **Files** and **‹** (hide). Right rail: **Objs**, **Log**, **›** (hide). Rails stay visible; content panels open/close.
 - Files shows a list of script names. Selecting one opens that script in the same left panel (textarea + Done / Run / Output on|off / Copy / Close). Done returns to the list.
-- Canvas stays in the center. Both sidebars can be open at once; the stage remains visible so you can edit, Run, and see the drawing and log together.
+- **Close** no longer deletes a script. The editor has Done (back to the list), Run, Output on/off, Copy. Delete is not exposed.
+- Top toolbar Run removed; Run lives only above the script.
+- Right rail bug fixed: opening Objs or Log now expands the panel (was stuck at the 40 px rail width because layout changes after mount were ignored). Sidebar size now follows content presence.
 - **Output on/off** per script: when off, that script’s `show` uses are omitted from the canvas; `print` still goes to the log.
 - Nested tabs, full-screen Edit mode, and the bottom dropdown are gone.
 - Clear still empties page uses only.

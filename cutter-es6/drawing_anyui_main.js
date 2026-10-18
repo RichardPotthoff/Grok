@@ -92,7 +92,7 @@ const scriptNameLabel = new Html({ value: `<span class="panel-label">script</spa
 const toolbar = new HBox({
   wrap: true,
   gap: "6px",
-  children: [title, btnFit, btnRun, btnClearCanvas, btnHelp],
+  children: [title, btnFit, btnClearCanvas, btnHelp],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -181,7 +181,7 @@ const filesView = new VBox({
 const editorHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnDone, btnRun, btnHideOutput, btnCopy, btnClose, scriptNameLabel],
+  children: [btnDone, btnRun, btnHideOutput, btnCopy, scriptNameLabel],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -221,7 +221,7 @@ const leftIcons = new VBox({
 const leftContent = new VBox({
   gap: "0px",
   children: [filesView],
-  layout: { ...fill, minWidth: "0" },
+  layout: { ...fill, minWidth: "200px", width: "240px", maxWidth: "320px" },
 });
 
 const leftSidebar = new HBox({
@@ -230,7 +230,7 @@ const leftSidebar = new HBox({
   layout: {
     display: "flex",
     flexDirection: "row",
-    flex: "0 0 280px",
+    flex: "0 0 auto",
     minWidth: "40px",
     height: "100%",
     borderRight: "1px solid #ddd6c8",
@@ -254,7 +254,7 @@ const rightIcons = new VBox({
 const rightContent = new VBox({
   gap: "0px",
   children: [objectsPanel],
-  layout: { ...fill, minWidth: "0" },
+  layout: { ...fill, minWidth: "180px", width: "200px", maxWidth: "280px" },
 });
 
 const rightSidebar = new HBox({
@@ -263,7 +263,7 @@ const rightSidebar = new HBox({
   layout: {
     display: "flex",
     flexDirection: "row",
-    flex: "0 0 40px",
+    flex: "0 0 auto",
     minWidth: "40px",
     height: "100%",
     borderLeft: "1px solid #ddd6c8",
@@ -370,16 +370,8 @@ function showFiles() {
 }
 
 function applyLayout() {
-  // left
+  // left — size comes from content presence (icons only = collapsed)
   leftSidebar.set("children", leftOpen ? [leftIcons, leftContent] : [leftIcons]);
-  leftSidebar.set("layout", {
-    display: "flex",
-    flexDirection: "row",
-    flex: leftOpen ? "0 0 280px" : "0 0 40px",
-    minWidth: "40px",
-    height: "100%",
-    borderRight: "1px solid #ddd6c8",
-  });
   leftSidebar.save_changes();
   if (leftOpen) {
     leftContent.set("children", leftView === "editor" ? [editorView] : [filesView]);
@@ -390,14 +382,6 @@ function applyLayout() {
 
   // right
   rightSidebar.set("children", rightOpen ? [rightContent, rightIcons] : [rightIcons]);
-  rightSidebar.set("layout", {
-    display: "flex",
-    flexDirection: "row",
-    flex: rightOpen ? "0 0 240px" : "0 0 40px",
-    minWidth: "40px",
-    height: "100%",
-    borderLeft: "1px solid #ddd6c8",
-  });
   rightSidebar.save_changes();
   if (rightOpen) {
     rightContent.set("children", rightView === "log" ? [logPanel] : [objectsPanel]);
@@ -517,7 +501,6 @@ function openNamed(name, text) {
 }
 
 btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
-btnClose.onClick(() => closeScript());
 btnSpoke.onClick(() => {
   openNamed("spoke", DEFAULT_SCRIPT);
   runScript();
