@@ -8,34 +8,22 @@ Handoff for the next chat. Last updated 2026-10-15.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-## Next conversation (2026-10-15) — script editor UI
+## Next conversation (2026-10-17) — icon-rail sidebars
 
-The REPL works. The chrome is being reworked for the iPad (landscape + onscreen keyboard).
+User feedback on the 2026-10-15 chrome: two Edit buttons, bottom script dropdown, and full-screen script mode that hid the canvas and log.
 
-**What landed this pass (2026-10-15):**
+**What landed:**
 
-- New anyui `Collapsible` widget (`anyui/collapsible-cls.js`, `collapsible.js`, `collapsible.css`). Traits: `open`, `title`, `side` (`left`|`right`|`bottom`|`top`), `child`. Collapses to a thin rail; expands to show the child.
-- `drawing_anyui_main.js` layout rewritten:
-  - Compact top toolbar: title, Fit, Run, **Clear** (canvas only — store stays), Edit.
-  - Stage row: Objects collapsible (left, closed by default), canvas, Log collapsible (right, closed by default).
-  - Thin script bar under the canvas: script dropdown + Edit.
-  - **Edit** enters full-screen script mode (Done / Run / dropdown / New / Close / Copy / examples / Help + the textarea filling the rest). Done returns to the preview layout.
-- Nested `Tab`s removed. Script switching is a `Dropdown`.
-- Clear Canvas button: sets `repl.uses = []` and republishes strokes. Does not touch script text or the store.
+- Icon-rail sidebars. Left rail: **Files** and **‹** (hide). Right rail: **Objs**, **Log**, **›** (hide). Rails stay visible; content panels open/close.
+- Files shows a list of script names. Selecting one opens that script in the same left panel (textarea + Done / Run / Output on|off / Copy / Close). Done returns to the list.
+- Canvas stays in the center. Both sidebars can be open at once; the stage remains visible so you can edit, Run, and see the drawing and log together.
+- **Output on/off** per script: when off, that script’s `show` uses are omitted from the canvas; `print` still goes to the log.
+- Nested tabs, full-screen Edit mode, and the bottom dropdown are gone.
+- Clear still empties page uses only.
 
-**Still open / iterative:**
+**Still open:** virtual file system for scripts; rail width / density tuning on the real iPad with keyboard; whether the icon buttons should be pure icons.
 
-- Virtual file system for scripts (save, run individually or from another script). Not started.
-- Fine-tuning of the Collapsible rails and script mode on the real iPad (keyboard height, rail width, button density).
-- Whether Objects/Log should be overlays instead of layout siblings when open.
-
-**What to rethink, not patch:**
-
-- Script pane must be able to take the whole screen while the keyboard is up. Preview is secondary during editing.
-- Collapse or hide the canvas, object list, and log on demand. One control, not several header bars.
-- anyui widgets stay (`Tab` / `VBox` / `HBox` / `Button`). Reactivity stays on the model. Do not go back to hand-built HTML chrome.
-- Touch-first. No assumption of a hardware keyboard or a wide desktop.
-- Keep the geometry API. The UI change is about space, not about blocks.
+## Where the geometry stands
 
 ## Where the geometry stands
 
