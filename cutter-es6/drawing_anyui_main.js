@@ -72,6 +72,8 @@ const btnFit = new Button({ description: "Fit" });
 const btnHelp = new Button({ description: "Help" });
 const btnRun = new Button({ description: "Run", button_style: "primary" });
 const btnCopy = new Button({ description: "Copy" });
+const btnLogCopy = new Button({ description: "Copy" });
+const btnLogClear = new Button({ description: "Clear" });
 const btnNew = new Button({ description: "+ Script" });
 const btnClose = new Button({ description: "Close" });
 const btnSpoke = new Button({ description: "Spoke" });
@@ -147,7 +149,22 @@ const log = new LogWidget({
 const logPanel = new VBox({
   gap: "0px",
   children: [
-    new Html({ value: `<span class="panel-label" style="padding:4px 6px">Log</span>` }),
+    new HBox({
+      gap: "6px",
+      children: [
+        new Html({ value: `<span class="panel-label">Log</span>` }),
+        btnLogCopy,
+        btnLogClear,
+      ],
+      layout: {
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        width: "100%",
+        flex: "0 0 auto",
+        padding: "4px 6px",
+      },
+    }),
     log,
   ],
   layout: { ...fill },
@@ -439,6 +456,21 @@ btnHelp.onClick(() => {
   rightOpen = true;
   rightView = "log";
   applyLayout();
+});
+btnLogCopy.onClick(async () => {
+  const text = (repl.log || []).join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    repl.note("copied log");
+  } catch {
+    repl.note("err clipboard unavailable");
+  }
+  publishLog();
+});
+btnLogClear.onClick(() => {
+  repl.log = [];
+  repl.note("log cleared");
+  publishLog();
 });
 btnCopy.onClick(async () => {
   persist();

@@ -22,6 +22,7 @@ import {
   asBlock,
   isBlock,
 } from "./blocks.js";
+import { connect as connectPoses } from "./connector.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
 
@@ -91,6 +92,8 @@ export const API_HELP = [
   "define(name, b)      same as store",
   "forget(name)         drop one stored name",
   "show(b, {at, heading, stroke, width, fill, name})",
+  "connect(from, to, {mode, p, r0, r1})",
+  "  from/to = [x, y, heading°]; mode line | biarc | ata",
   "clear()              remove page uses (store stays)",
   "resetStore()         drop all stored names",
   "list()               stored names",
@@ -231,6 +234,9 @@ export class DrawingRepl {
       },
       orbit(b, n, deg) {
         return new Orbit(b, n, deg);
+      },
+      connect(from, to, opts) {
+        return connectPoses(from, to, opts);
       },
       ref(name) {
         return new Ref(name, (n) => self.dict.get(n));
