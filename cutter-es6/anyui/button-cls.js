@@ -7,7 +7,7 @@ const _css_promise = loadCSS(new URL('./button.css', import.meta.url).href); //@
 
 export default class Button extends AnyuiWidget {
   constructor(initialState = {}) {
-    const defaultState = { description: "Click", disabled: false, button_style: "" };
+    const defaultState = { description: "Click", disabled: false, button_style: "", icon: "", icon_label: false };
     super({ ...defaultState, ...initialState });
     this._esm = _esm;
     this._css_promise = _css_promise;

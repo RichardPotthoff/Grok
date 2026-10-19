@@ -19,6 +19,7 @@ import {
   saveSession,
 } from "./es6/drawing-repl.js";
 import { LogWidget, ObjectsWidget, ScriptWidget, StageWidget } from "./es6/drawing-ui-cls.js";
+import { RAIL } from "./es6/rail-icons.js";
 
 const fill = {
   display: "flex",
@@ -81,11 +82,11 @@ const btnClearCanvas = new Button({ description: "Clear" });
 const btnDone = new Button({ description: "Done" });
 const btnHideOutput = new Button({ description: "Output" });
 
-const btnFiles = new Button({ description: "Files" });
-const btnHideLeft = new Button({ description: "‹" });
-const btnObjects = new Button({ description: "Objs" });
-const btnLog = new Button({ description: "Log" });
-const btnHideRight = new Button({ description: "›" });
+const btnFiles = new Button({ description: "Files", icon: RAIL.files });
+const btnHideLeft = new Button({ description: "Hide left", icon: RAIL.hideLeft });
+const btnObjects = new Button({ description: "Objects", icon: RAIL.objects });
+const btnLog = new Button({ description: "Log", icon: RAIL.log });
+const btnHideRight = new Button({ description: "Hide right", icon: RAIL.hideRight });
 
 const scriptNameLabel = new Html({ value: `<span class="panel-label">script</span>` });
 
@@ -377,6 +378,7 @@ function applyLayout() {
     leftContent.set("children", leftView === "editor" ? [editorView] : [filesView]);
     leftContent.save_changes();
   }
+  btnFiles.set("icon", leftOpen && leftView === "files" ? RAIL.filesOpen : RAIL.files);
   btnFiles.set("button_style", leftOpen && leftView === "files" ? "primary" : "");
   btnFiles.save_changes();
 

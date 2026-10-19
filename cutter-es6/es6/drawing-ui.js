@@ -119,12 +119,14 @@ export function renderStage({ model, el }) {
       }
       if (!moved) continue;
       ctx.strokeStyle = INK[use.stroke] || "#111";
-      ctx.lineWidth = (use.width || 1.6) / cam.scale;
+      const w = use.width;
+      const penUp = w === 0;
+      ctx.lineWidth = (penUp ? 0 : w == null ? 1.6 : w) / cam.scale;
       if (use.fill && INK[use.fill]) {
         ctx.fillStyle = INK[use.fill];
         ctx.fill();
       }
-      ctx.stroke();
+      if (!penUp) ctx.stroke();
     }
   }
 
