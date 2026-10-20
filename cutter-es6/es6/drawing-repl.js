@@ -19,6 +19,7 @@ import {
   Seq,
   Slice,
   Offset,
+  Paint,
   asBlock,
   isBlock,
 } from "./blocks.js";
@@ -91,6 +92,7 @@ export const API_HELP = [
   "store(name, b)       keep in the global object list",
   "define(name, b)      same as store",
   "forget(name)         drop one stored name",
+  "paint(b, {stroke, width, fill})  restyle; width 0 is a move",
   "show(b, {at, heading, stroke, width, fill, name})",
   "connect(from, to, {mode, p, r0, r1})",
   "  from/to = [x, y, heading°]; mode line | biarc | ata",
@@ -182,8 +184,8 @@ export class DrawingRepl {
   api() {
     const self = this;
     return {
-      seg(s, dtheta) {
-        return new Arc(s, dtheta);
+      seg(s, dtheta, fields) {
+        return new Arc(s, dtheta, fields);
       },
       turn(dtheta) {
         return new Arc(0, dtheta);
@@ -208,6 +210,9 @@ export class DrawingRepl {
       },
       offset(b, d) {
         return new Offset(b, d);
+      },
+      paint(b, style) {
+        return new Paint(b, style);
       },
       slice(b, from, to) {
         return new Slice(b, from, to);

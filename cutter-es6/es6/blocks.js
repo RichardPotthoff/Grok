@@ -70,6 +70,7 @@ export function walkCtx(ctx = {}) {
     scale: Number.isFinite(scale) ? scale : 1,
     offset: Number.isFinite(offset) ? offset : 0,
     k: ctx.k ?? 0,
+    paint: ctx.paint || null,
   };
 }
 
@@ -419,6 +420,24 @@ export class Block {
     return { block: this.name || this.id, type: this.type };
   }
 
+  /**
+   * Paint this block sets, or null. Cached once; not rebuilt per yield.
+   * A child with no paint returns the parent object (same reference).
+   * A child with paint merges onto the parent once per parent reference.
+   */
+  paintObject(parent) {
+    if (!this._paintCache) this._paintCache = new Map();
+    const key = parent || null;
+    if (this._paintCache.has(key)) return this._paintCache.get(key);
+    const own = this._ownPaint || null;
+    let resolved = null;
+    if (!own) resolved = parent || null;
+    else if (!parent) resolved = own;
+    else resolved = { ...parent, ...own };
+    this._paintCache.set(key, resolved);
+    return resolved;
+  }
+
   describe() {
     const I = this.interface();
     const nm = this.name ? ` ${this.name}` : "";
@@ -490,11 +509,13 @@ export class Arc extends Block {
   /**
    * @param {number} s arc length
    * @param {number} dtheta turn in degrees
+   * @param {{stroke?: string, width?: number, fill?: string}} [fields]
    */
   constructor(s, dtheta, fields = {}) {
     super("arc", fields);
     this.s = Number(s) || 0;
     this.dtheta = Number(dtheta) || 0;
+    this._ownPaint = ownPaint(fields);
   }
 
   computeInterface(ctx) {
@@ -528,7 +549,7 @@ export class Arc extends Block {
 
   *arcs(ctx = {}) {
     const row = emitArc(this.s, this.dtheta, ctx);
-    yield [row.s, row.dtheta, { ...this.extra(), k: walkCtx(ctx).k }];
+    yield [row.s, row.dtheta, this.paintObject(ctx.paint)];
   }
 }
 
@@ -941,10 +962,8 @@ export class Orbit extends Block {
 
   *arcs(ctx = {}) {
     const c = walkCtx(ctx);
-    let i = 0;
-    for (const [s, da] of this.baked(c)) {
-      yield [s, da, { ...this.extra(), k: c.k ?? i++ }];
-    }
+    const extra = this.paintObject(c.paint);
+    for (const [s, da] of this.baked(c)) yield [s, da, extra];
   }
 }
 
@@ -990,6 +1009,67 @@ export class Offset extends Block {
 
   computeBound(ctx) {
     return this.of.bound(this._ctx(ctx));
+  }
+}
+
+function ownPaint(fields) {
+  if (!fields) return null;
+  const out = {};
+  let any = false;
+  if (fields.stroke != null) {
+    out.stroke = fields.stroke;
+    any = true;
+  }
+  if (fields.width != null) {
+    out.width = Number(fields.width);
+    any = true;
+  }
+  if (fields.fill != null) {
+    out.fill = fields.fill;
+    any = true;
+  }
+  return any ? out : null;
+}
+
+/**
+ * Restyle a block. Fields update the parent's paint; unset fields are kept.
+ * One cached object per parent reference — nothing allocated in the child loop.
+ */
+export class Paint extends Block {
+  /**
+   * @param {Block} of
+   * @param {{stroke?: string, width?: number, fill?: string}} style
+   */
+  constructor(of, style = {}, fields = {}) {
+    super("paint", fields);
+    this.of = asBlock(of);
+    this._ownPaint = ownPaint(style) || ownPaint(fields);
+  }
+
+  computeInterface(ctx) {
+    return this.of.interface(ctx);
+  }
+
+  computeLength(ctx) {
+    return this.of.length(ctx);
+  }
+
+  computeArea(ctx) {
+    return this.of.area(ctx);
+  }
+
+  computeArcCount(ctx) {
+    return this.of.arcCount(ctx);
+  }
+
+  *arcs(ctx = {}) {
+    const c = walkCtx(ctx);
+    const paint = this.paintObject(c.paint);
+    yield* this.of.arcs({ ...c, paint });
+  }
+
+  computeBound(ctx) {
+    return this.of.bound(ctx);
   }
 }
 

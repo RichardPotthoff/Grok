@@ -13,6 +13,69 @@ const INK = {
   paper: "#f3ead8",
 };
 
+function paintUse(ctx, use, cam) {
+  const root = use.root;
+  const base = {
+    stroke: use.stroke || "ink",
+    width: use.width == null ? 1.6 : use.width,
+    fill: use.fill || null,
+  };
+  if (!root || typeof root.arcs !== "function") {
+    drawRun(ctx, iterPoints(use, 0.04), base, cam);
+    return;
+  }
+  let x = (use.startPoint || [0, 0])[0];
+  let y = (use.startPoint || [0, 0])[1];
+  let hd = use.startAngle || 0;
+  let run = [];
+  let style = null;
+  const flush = () => {
+    if (run.length) drawRun(ctx, run, style || base, cam);
+    run = [];
+  };
+  for (const [s, da, extra] of root.arcs({ paint: base })) {
+    const next = extra || base;
+    if (style && (next !== style || next.stroke !== style.stroke || next.width !== style.width || next.fill !== style.fill)) {
+      flush();
+    }
+    style = next;
+    const penUp = next.width === 0;
+    if (!run.length) run.push([x, y]);
+    if (!penUp) {
+      const step = walkPath(
+        { startPoint: [x, y], startAngle: hd, turtlePath: [[s, da]] },
+        { scale: 1, tol: 0.04, returnStart: false },
+      );
+      for (const row of step) run.push(row.point);
+    }
+    const th = (hd * Math.PI) / 180;
+    const ang = (da * Math.PI) / 180;
+    const half = ang / 2;
+    const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
+    const mid = th + half;
+    x += chord * Math.cos(mid);
+    y += chord * Math.sin(mid);
+    hd += da;
+    if (penUp) flush();
+  }
+  flush();
+}
+
+function drawRun(ctx, pts, style, cam) {
+  if (!pts || pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  const w = style.width;
+  const penUp = w === 0;
+  ctx.strokeStyle = INK[style.stroke] || style.stroke || "#111";
+  ctx.lineWidth = (penUp ? 0 : w == null ? 1.6 : w) / cam.scale;
+  if (style.fill && INK[style.fill]) {
+    ctx.fillStyle = INK[style.fill];
+    ctx.fill();
+  }
+  if (!penUp) ctx.stroke();
+}
 function iterPoints(use, tol) {
   const pts = [];
   const start = use.startPoint || [0, 0];
@@ -108,26 +171,7 @@ export function renderStage({ model, el }) {
     ctx.moveTo(0, -200);
     ctx.lineTo(0, 200);
     ctx.stroke();
-    for (const use of strokes()) {
-      ctx.beginPath();
-      let moved = false;
-      for (const p of iterPoints(use, 0.04)) {
-        if (!moved) {
-          ctx.moveTo(p[0], p[1]);
-          moved = true;
-        } else ctx.lineTo(p[0], p[1]);
-      }
-      if (!moved) continue;
-      ctx.strokeStyle = INK[use.stroke] || "#111";
-      const w = use.width;
-      const penUp = w === 0;
-      ctx.lineWidth = (penUp ? 0 : w == null ? 1.6 : w) / cam.scale;
-      if (use.fill && INK[use.fill]) {
-        ctx.fillStyle = INK[use.fill];
-        ctx.fill();
-      }
-      if (!penUp) ctx.stroke();
-    }
+    for (const use of strokes()) paintUse(ctx, use, cam);
   }
 
   function allPoints() {
