@@ -11,7 +11,7 @@
  *   "ata"   — arc, tangent, arc; opts.r0, opts.r1 (signed radii)
  */
 
-import { Arc, Seq } from "./blocks.js";
+import { Arc, Paint, Seq } from "./blocks.js";
 import { computeBiarc, xy, Tθ } from "./biarc.js";
 
 const DEG = Math.PI / 180;
@@ -109,7 +109,22 @@ function ataConnect(rx, ry, dh, opts) {
 export function connect(from, to, opts = {}) {
   const { rx, ry, dh } = rel(from, to);
   const mode = String(opts.mode || opts.kind || "line");
-  if (mode === "biarc") return biarcConnect(rx, ry, dh, opts.p);
-  if (mode === "ata" || mode === "arc") return ataConnect(rx, ry, dh, opts);
-  return lineConnect(rx, ry, dh);
+  let block;
+  if (mode === "biarc") block = biarcConnect(rx, ry, dh, opts.p);
+  else if (mode === "ata" || mode === "arc") block = ataConnect(rx, ry, dh, opts);
+  else block = lineConnect(rx, ry, dh);
+  const extra = opts.extra || opts.paint || paintOf(opts);
+  return extra ? new Paint(block, extra) : block;
+}
+
+function paintOf(opts) {
+  const fields = {};
+  let any = false;
+  for (const key of ["stroke", "width", "fill", "dash", "line"]) {
+    if (opts[key] != null) {
+      fields[key] = opts[key];
+      any = true;
+    }
+  }
+  return any ? fields : null;
 }

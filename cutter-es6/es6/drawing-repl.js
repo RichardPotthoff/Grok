@@ -94,8 +94,8 @@ export const API_HELP = [
   "forget(name)         drop one stored name",
   "paint(b, {stroke, width, fill})  restyle; width 0 is a move",
   "show(b, {at, heading, stroke, width, fill, name})",
-  "connect(from, to, {mode, p, r0, r1})",
-  "  from/to = [x, y, heading°]; mode line | biarc | ata",
+  "connect(from, to, {mode, p, r0, r1, stroke, width, fill, dash})",
+  "  from/to = [x, y, heading°]; mode line | biarc | ata; dash shows a move",
   "clear()              remove page uses (store stays)",
   "resetStore()         drop all stored names",
   "list()               stored names",
@@ -324,7 +324,7 @@ export class DrawingRepl {
   }
 
   flattenUse(use) {
-    const tagged = use.root.flatten({ k: 0 });
+    const tagged = use.root.flatten({ paint: usePaint(use) });
     return {
       id: use.id,
       name: use.name,
@@ -423,6 +423,14 @@ export function saveSession(session) {
   } catch {
     /* quota / private mode */
   }
+}
+
+function usePaint(use) {
+  return {
+    stroke: use.stroke || "ink",
+    width: use.width == null ? 1.6 : use.width,
+    fill: use.fill || null,
+  };
 }
 
 function clampIndex(i, n) {

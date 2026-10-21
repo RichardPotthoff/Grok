@@ -1028,6 +1028,11 @@ function ownPaint(fields) {
     out.fill = fields.fill;
     any = true;
   }
+  const dash = fields.dash != null ? fields.dash : fields.line;
+  if (dash != null && dash !== false && dash !== "solid") {
+    out.dash = dash === true ? "dashed" : dash;
+    any = true;
+  }
   return any ? out : null;
 }
 

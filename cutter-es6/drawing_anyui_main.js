@@ -323,11 +323,12 @@ function publishStrokes() {
     strokes = all
       .map((u, i) => ({ u, use: repl.uses[i] }))
       .filter(({ use }) => !use || !use.scriptId || !hiddenScripts.has(use.scriptId))
-      .map(({ u }) => ({
+      .map(({ u, use }) => ({
         startPoint: u.startPoint,
         startAngle: u.startAngle,
         turtlePath: u.turtlePath,
-        root: u.root,
+        tagged: u.tagged,
+        root: use && use.root,
         stroke: u.stroke,
         width: u.width,
         fill: u.fill,

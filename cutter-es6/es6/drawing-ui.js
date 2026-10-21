@@ -14,13 +14,17 @@ const INK = {
 };
 
 function paintUse(ctx, use, cam) {
-  const root = use.root;
   const base = {
     stroke: use.stroke || "ink",
     width: use.width == null ? 1.6 : use.width,
     fill: use.fill || null,
   };
-  if (!root || typeof root.arcs !== "function") {
+  const root = use.root;
+  const rows =
+    root && typeof root.arcs === "function"
+      ? root.arcs({ paint: base })
+      : use.tagged || null;
+  if (!rows) {
     drawRun(ctx, iterPoints(use, 0.04), base, cam);
     return;
   }
@@ -33,13 +37,14 @@ function paintUse(ctx, use, cam) {
     if (run.length) drawRun(ctx, run, style || base, cam);
     run = [];
   };
-  for (const [s, da, extra] of root.arcs({ paint: base })) {
+  for (const [s, da, extra] of rows) {
     const next = extra || base;
-    if (style && (next !== style || next.stroke !== style.stroke || next.width !== style.width || next.fill !== style.fill)) {
+    if (style && (next !== style || next.stroke !== style.stroke || next.width !== style.width || next.fill !== style.fill || next.dash !== style.dash)) {
       flush();
     }
     style = next;
-    const penUp = next.width === 0;
+    const showMove = next.width === 0 && next.dash;
+    const penUp = next.width === 0 && !showMove;
     if (!run.length) run.push([x, y]);
     if (!penUp) {
       const step = walkPath(
@@ -61,20 +66,30 @@ function paintUse(ctx, use, cam) {
   flush();
 }
 
+function dashPattern(dash) {
+  if (!dash || dash === "solid") return [];
+  if (Array.isArray(dash)) return dash.map(Number);
+  if (dash === "dotted" || dash === "dot") return [0.15, 0.55];
+  return [1.1, 0.7];
+}
+
 function drawRun(ctx, pts, style, cam) {
   if (!pts || pts.length < 2) return;
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
   const w = style.width;
-  const penUp = w === 0;
+  const debugMove = w === 0 && style.dash;
+  const penUp = w === 0 && !debugMove;
   ctx.strokeStyle = INK[style.stroke] || style.stroke || "#111";
-  ctx.lineWidth = (penUp ? 0 : w == null ? 1.6 : w) / cam.scale;
-  if (style.fill && INK[style.fill]) {
-    ctx.fillStyle = INK[style.fill];
+  ctx.lineWidth = penUp ? 0 : debugMove ? 0.35 : w == null ? 1.6 : w;
+  ctx.setLineDash(dashPattern(style.dash));
+  if (style.fill && (INK[style.fill] || style.fill)) {
+    ctx.fillStyle = INK[style.fill] || style.fill;
     ctx.fill();
   }
   if (!penUp) ctx.stroke();
+  ctx.setLineDash([]);
 }
 function iterPoints(use, tol) {
   const pts = [];
