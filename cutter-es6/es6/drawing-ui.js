@@ -363,9 +363,12 @@ export function renderObjects({ model, el }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "obj";
-      const I = row.interface || {};
+      const I = row.interface;
+      const meta = I
+        ? `${escapeHtml(row.type)} · ${row.arcs} arcs<br>Δ (${fmt(I.dx)}, ${fmt(I.dy)})  Δθ ${fmt(I.dtheta)}°`
+        : escapeHtml(row.type || "");
       btn.innerHTML = `<div class="nm">${escapeHtml(row.name)}</div>
-        <div class="meta">${escapeHtml(row.type)} · ${row.arcs} arcs<br>Δ (${fmt(I.dx)}, ${fmt(I.dy)})  Δθ ${fmt(I.dtheta)}°</div>`;
+        <div class="meta">${meta}</div>`;
       btn.addEventListener("click", () => model.send({ event: "pick", name: row.name }));
       list.appendChild(btn);
     }

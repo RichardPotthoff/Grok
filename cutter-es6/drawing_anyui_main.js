@@ -81,7 +81,7 @@ const btnStar = new Button({ description: "Star6" });
 const btnSlice = new Button({ description: "Slice" });
 const btnClearStore = new Button({ description: "Clear store" });
 const btnClearCanvas = new Button({ description: "Clear" });
-const btnDone = new Button({ description: "Done" });
+const btnRename = new Button({ description: "Rename" });
 const btnHideOutput = new Button({ description: "Output" });
 
 const btnFiles = new Button({ description: "Files", icon: RAIL.files });
@@ -199,7 +199,7 @@ const filesView = new VBox({
 const editorHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnDone, btnRun, btnHideOutput, btnCopy, scriptNameLabel],
+  children: [btnDone, btnRun, btnHideOutput, btnRename, btnCopy, scriptNameLabel],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -340,18 +340,96 @@ function publishStrokes() {
   stage.save_changes();
 }
 
+const openFolders = new Set();
+
+function splitPath(name) {
+  const p = String(name || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const i = p.lastIndexOf("/");
+  if (i < 0) return { dir: "", base: p || "Script" };
+  return { dir: p.slice(0, i), base: p.slice(i + 1) };
+}
+
 function refreshFilesList() {
-  const children = scripts.map((s, i) => {
+  const rows = scripts.map((s, i) => ({ i, name: scriptName(i), ...splitPath(scriptName(i)) }));
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  const dirs = [...new Set(rows.map((r) => r.dir).filter(Boolean))].sort();
+  for (const d of dirs) if (!openFolders.has(d) && !openFolders.has("!" + d)) openFolders.add(d);
+  const children = [];
+  const pushFile = (row, indent) => {
     const b = new Button({
-      description: scriptName(i),
-      button_style: i === active && leftView === "editor" ? "primary" : "",
-      layout: { width: "100%", justifyContent: "flex-start" },
+      description: row.base,
+      button_style: row.i === active && leftView === "editor" ? "primary" : "",
+      layout: { flex: "1 1 auto", justifyContent: "flex-start", paddingLeft: indent },
     });
-    b.onClick(() => openEditor(i));
-    return b;
-  });
+    b.onClick(() => openEditor(row.i));
+    children.push(b);
+  };
+  for (const dir of dirs) {
+    const open = openFolders.has(dir);
+    const folder = new Button({
+      description: (open ? "▾ " : "▸ ") + dir,
+      layout: { flex: "1 1 auto", justifyContent: "flex-start" },
+    });
+    const ren = new Button({ description: "Rename" });
+    folder.onClick(() => {
+      if (openFolders.has(dir)) openFolders.delete(dir);
+      else openFolders.add(dir);
+      refreshFilesList();
+    });
+    ren.onClick(() => renameFolder(dir));
+    children.push(
+      new HBox({
+        gap: "4px",
+        children: [folder, ren],
+        layout: { width: "100%", alignItems: "center" },
+      }),
+    );
+    if (open) {
+      for (const row of rows) if (row.dir === dir) pushFile(row, "16px");
+    }
+  }
+  for (const row of rows) if (!row.dir) pushFile(row, "0px");
   filesList.set("children", children);
   filesList.save_changes();
+}
+
+function renameScript(idx) {
+  const cur = scriptName(idx);
+  const next = prompt("Script path", cur);
+  if (!next) return;
+  const name = next.trim().replace(/^\/+|\/+$/g, "");
+  if (!name || name === cur) return;
+  editors[idx].set("name", name);
+  editors[idx].save_changes();
+  scripts[idx].name = name;
+  persist();
+  if (active === idx) showEditor(idx);
+  refreshFilesList();
+  repl.note("renamed " + cur + " → " + name);
+  publishLog();
+}
+
+function renameFolder(dir) {
+  const next = prompt("Folder path", dir);
+  if (!next) return;
+  const to = next.trim().replace(/^\/+|\/+$/g, "");
+  if (!to || to === dir) return;
+  scripts.forEach((s, i) => {
+    const name = scriptName(i);
+    if (name === dir || name.startsWith(dir + "/")) {
+      const renamed = to + name.slice(dir.length);
+      editors[i].set("name", renamed);
+      editors[i].save_changes();
+      s.name = renamed;
+    }
+  });
+  openFolders.delete(dir);
+  openFolders.add(to);
+  persist();
+  refreshFilesList();
+  if (scripts[active]) showEditor(active);
+  repl.note("folder " + dir + " → " + to);
+  publishLog();
 }
 
 function updateHideOutputButton() {
@@ -421,7 +499,7 @@ function runScript() {
   const src = editorText(idx);
   const id = scripts[idx] && scripts[idx].id;
   try {
-    repl.run(src, { scriptId: id });
+    repl.run(src, { scriptId: id, scriptName: scriptName(idx) });
   } catch {
     /* logged */
   }
@@ -562,6 +640,7 @@ btnClearCanvas.onClick(() => {
   if (stage.fit) stage.fit();
 });
 btnDone.onClick(() => showFiles());
+btnRename.onClick(() => renameScript(active));
 btnHideOutput.onClick(() => {
   const id = scripts[active]?.id;
   if (!id) return;

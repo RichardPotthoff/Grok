@@ -89,7 +89,9 @@ export const API_HELP = [
   "mirror(b, axisDeg?)  flip handedness across start axis",
   "orbit(b, n, deg)     n rotated copies, joined",
   "ref(name)            block from the store",
-  "store(name, b)       keep in the global object list",
+  "store(name, value)   register anything; relative name → script/name",
+  "load(path)           stored value, or {name: value} for a script prefix",
+  "script               this script's path",
   "define(name, b)      same as store",
   "forget(name)         drop one stored name",
   "paint(b, {stroke, width, fill})  restyle; width 0 is a move",
@@ -105,12 +107,16 @@ export const API_HELP = [
 export class DrawingRepl {
   constructor() {
     this.dict = new Map();
+    this.owners = new Map();
     this.uses = [];
     this.log = [];
+    this._scriptId = "";
+    this._scriptName = "";
   }
 
   reset() {
     this.dict = new Map();
+    this.owners = new Map();
     this.uses = [];
   }
 
@@ -122,31 +128,73 @@ export class DrawingRepl {
   }
 
   /**
-   * @param {string} name
-   * @param {Block} block
+   * Register any value. A relative name is stored under the script path.
+   * A name that already contains `/` is used as given.
    */
-  store(name, block) {
-    const key = String(name);
-    if (!key) throw new Error("store: empty name");
-    const b = asBlock(block);
-    b.name = key;
-    this.dict.set(key, b);
-    return b;
+  qualify(name, scriptName = this._scriptName) {
+    const n = String(name || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!n) throw new Error("store: empty name");
+    if (n.includes("/")) return n;
+    const script = String(scriptName || "").replace(/\\/g, "/").replace(/\/+$/g, "");
+    return script ? `${script}/${n}` : n;
   }
 
-  define(name, block) {
-    return this.store(name, block);
+  store(name, value) {
+    const key = this.qualify(name);
+    if (isBlock(value)) value.name = key;
+    this.dict.set(key, value);
+    if (this._scriptId) this.owners.set(key, this._scriptId);
+    return value;
+  }
+
+  define(name, value) {
+    return this.store(name, value);
+  }
+
+  /**
+   * Exact key, or every export under a script path as `{ baseName: value }`.
+   */
+  load(path) {
+    const key = String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!key) return undefined;
+    if (this.dict.has(key)) return this.dict.get(key);
+    const prefix = key + "/";
+    const bag = {};
+    let n = 0;
+    for (const [k, v] of this.dict) {
+      if (k === key || k.startsWith(prefix)) {
+        bag[k.slice(prefix.length) || k] = v;
+        n++;
+      }
+    }
+    if (!n) {
+      this.note("load: no " + key);
+      return undefined;
+    }
+    return bag;
   }
 
   forget(name) {
     const key = String(name);
     const ok = this.dict.delete(key);
+    this.owners.delete(key);
     if (!ok) this.note("forget: no " + key);
     return ok;
   }
 
+  dropOwned(scriptId) {
+    if (!scriptId) return;
+    for (const [k, owner] of [...this.owners]) {
+      if (owner === scriptId) {
+        this.dict.delete(k);
+        this.owners.delete(k);
+      }
+    }
+  }
+
   resetStore() {
     this.dict = new Map();
+    this.owners = new Map();
   }
 
   /**
@@ -246,11 +294,17 @@ export class DrawingRepl {
       ref(name) {
         return new Ref(name, (n) => self.dict.get(n));
       },
-      store(name, b) {
-        return self.store(name, b);
+      store(name, value) {
+        return self.store(name, value);
       },
-      define(name, b) {
-        return self.store(name, b);
+      define(name, value) {
+        return self.store(name, value);
+      },
+      load(path) {
+        return self.load(path);
+      },
+      get script() {
+        return self._scriptName;
       },
       forget(name) {
         return self.forget(name);
@@ -285,10 +339,16 @@ export class DrawingRepl {
    * Uses previously shown by this scriptId are replaced.
    * On throw, restore dict and uses.
    */
-  run(src, { scriptId = "" } = {}) {
+  run(src, { scriptId = "", scriptName = "" } = {}) {
     const prevDict = new Map(this.dict);
+    const prevOwners = new Map(this.owners);
     const prevUses = this.uses.slice();
+    const prevId = this._scriptId;
+    const prevName = this._scriptName;
+    this.dropOwned(scriptId);
     if (scriptId) this.uses = this.uses.filter((u) => u.scriptId !== scriptId);
+    this._scriptId = scriptId;
+    this._scriptName = scriptName;
     const api = this.api();
     const names = Object.keys(api);
     const markedFrom = this.uses.length;
@@ -305,7 +365,10 @@ export class DrawingRepl {
       );
     } catch (err) {
       this.dict = prevDict;
+      this.owners = prevOwners;
       this.uses = prevUses;
+      this._scriptId = prevId;
+      this._scriptName = prevName;
       this.note("err " + (err && err.message ? err.message : String(err)));
       throw err;
     }
@@ -344,16 +407,33 @@ export class DrawingRepl {
   }
 
   namedList() {
-    return [...this.dict.entries()].map(([name, block]) => ({
-      name,
-      type: block.type,
-      id: block.id,
-      interface: block.interface(),
-      arcs: block.arcCount(),
-      length: block.length(),
-      text: block.describe(),
-    }));
+    return [...this.dict.entries()].map(([name, value]) => describeStored(name, value));
   }
+}
+
+function describeStored(name, value) {
+  if (isBlock(value)) {
+    return {
+      name,
+      type: value.type,
+      id: value.id,
+      interface: value.interface(),
+      arcs: value.arcCount(),
+      length: value.length(),
+      text: value.describe(),
+    };
+  }
+  const type = value == null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  const label = type === "function" ? value.name || "function" : type;
+  return {
+    name,
+    type: label,
+    id: "",
+    interface: null,
+    arcs: "",
+    length: "",
+    text: `${label} ${name}`,
+  };
 }
 
 export function describe(v) {
