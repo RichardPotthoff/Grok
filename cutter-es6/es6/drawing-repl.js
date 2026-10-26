@@ -88,7 +88,7 @@ export const API_HELP = [
   "reverse(b)           leaf arcs last-to-first, same turns",
   "mirror(b, axisDeg?)  flip handedness across start axis",
   "orbit(b, n, deg)     n rotated copies, joined",
-  "ref(name)            block from the store",
+  "ref(name)            stored block only — load() for a class or function",
   "store(name, value)   register anything; relative name → script/name",
   "load(path)           stored value, or {name: value} for a script prefix",
   "script               this script's path",
@@ -202,11 +202,10 @@ export class DrawingRepl {
    * @param {object} [opts]
    */
   show(block, opts = {}) {
-    const root =
-      typeof block === "string"
-        ? this.dict.get(block)
-        : asBlock(block);
-    if (!root) throw new Error("show: not a block");
+    const root = typeof block === "string" ? this.dict.get(block) : block;
+    if (!isBlock(root)) {
+      throw new Error("show: not a block" + (typeof block === "string" ? " (" + block + ")" : ""));
+    }
     const use = {
       id: opts.id || `u${this.uses.length + 1}`,
       name: opts.name || root.name || "",

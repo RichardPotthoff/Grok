@@ -1152,7 +1152,10 @@ export class Ref extends Block {
   target() {
     const b = this.resolve(this.refName);
     if (!b) throw new Error(`unknown block: ${this.refName}`);
-    return asBlock(b);
+    if (!isBlock(b)) {
+      throw new Error(`ref expects a block (${this.refName} is ${typeof b}); use load() for a class or function`);
+    }
+    return b;
   }
 
   computeInterface(ctx) {
