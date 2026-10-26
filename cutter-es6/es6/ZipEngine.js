@@ -148,7 +148,8 @@ export class Zip {
             const filePath = decoder.decode(uint8.subarray(nameStart, nameStart + fileNameLength));
             currentCdOffset += 46 + fileNameLength + extraFieldLength + fileCommentLength;
 
-            if (filePath.endsWith('/')) continue; // Skip physical folder structures
+            if (filePath.endsWith("/")) continue;
+            if (isJunkZipPath(filePath)) continue;
 
             const lfhNameLength = view.getUint16(localHeaderOffset + 26, true);
             const lfhExtraLength = view.getUint16(localHeaderOffset + 28, true);
@@ -159,17 +160,34 @@ export class Zip {
             if (compressionMethod === 0) {
                 decompressedBytes = compressedPayload;
             } else if (compressionMethod === 8) {
-                const blobStream = new Blob([compressedPayload]).stream();
-                const decompressionStream = new DecompressionStream("deflate-raw");
-                const decompressedStream = blobStream.pipeThrough(decompressionStream);
-                const response = new Response(decompressedStream);
-                decompressedBytes = new Uint8Array(await response.arrayBuffer());
+                decompressedBytes = await inflateZip(compressedPayload);
+                if (!decompressedBytes) continue;
             } else {
-                continue; // Skip unknown compression layout mechanisms safely
+                continue;
             }
 
             extractedFiles.push({ name: filePath, content: decompressedBytes });
         }
         return extractedFiles;
     }
+}
+
+function isJunkZipPath(name) {
+    const p = String(name || "").replace(/\\/g, "/");
+    if (!p || p.startsWith("__MACOSX/") || p.includes("/__MACOSX/")) return true;
+    const base = p.slice(p.lastIndexOf("/") + 1);
+    if (base === ".DS_Store" || base.startsWith("._")) return true;
+    return false;
+}
+
+async function inflateZip(payload) {
+    for (const format of ["deflate-raw", "deflate"]) {
+        try {
+            const stream = new Blob([payload]).stream().pipeThrough(new DecompressionStream(format));
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+        } catch {
+            /* try the other wrapper */
+        }
+    }
+    return null;
 }

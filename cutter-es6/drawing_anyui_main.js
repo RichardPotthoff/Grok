@@ -626,8 +626,9 @@ async function downloadScripts() {
   try {
     const blob = await Zip.compress(files);
     const file = new File([blob], "scripts.zip", { type: "application/zip" });
+    // Title/text on the share sheet is saved by Files as an extra .txt ("scripts").
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: "scripts" });
+      await navigator.share({ files: [file] });
       repl.note("shared " + files.length + " scripts");
     } else {
       const url = URL.createObjectURL(blob);
@@ -644,6 +645,21 @@ async function downloadScripts() {
   publishLog();
 }
 
+function isZipJunk(name) {
+  const p = String(name || "").replace(/\\/g, "/");
+  if (p.startsWith("__MACOSX/") || p.includes("/__MACOSX/")) return true;
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  return base === ".DS_Store" || base.startsWith("._");
+}
+
+function commonZipRoot(names) {
+  if (!names.length) return "";
+  const first = names[0].split("/");
+  if (first.length < 2) return "";
+  const root = first[0] + "/";
+  return names.every((n) => n.startsWith(root)) ? root : "";
+}
+
 function uploadScripts() {
   const input = document.createElement("input");
   input.type = "file";
@@ -654,23 +670,32 @@ function uploadScripts() {
     try {
       const entries = await Zip.decompress(file);
       const decoder = new TextDecoder();
-      let n = 0;
+      const usable = [];
       for (const entry of entries) {
-        if (!entry.name || entry.name.endsWith("/")) continue;
-        const path = entry.name.replace(/\\/g, "/").replace(/\.js$/i, "").replace(/^\/+/, "");
-        if (!path) continue;
+        const raw = String(entry.name || "").replace(/\\/g, "/");
+        if (!raw || raw.endsWith("/") || isZipJunk(raw)) continue;
+        if (raw.includes("\0")) continue;
         const text = decoder.decode(entry.content);
+        if (text.includes("\0")) continue;
+        usable.push({ name: raw.replace(/^\/+/, ""), text });
+      }
+      const root = commonZipRoot(usable.map((e) => e.name));
+      let n = 0;
+      for (const entry of usable) {
+        let path = root ? entry.name.slice(root.length) : entry.name;
+        path = path.replace(/\.js$/i, "").replace(/^\/+|\/+$/g, "");
+        if (!path) continue;
         const idx = scripts.findIndex((s, i) => scriptName(i) === path);
         if (idx >= 0) {
-          editors[idx].set("value", text);
+          editors[idx].set("value", entry.text);
           editors[idx].save_changes();
-          scripts[idx].text = text;
+          scripts[idx].text = entry.text;
         } else {
-          const s = newScript(path, text);
+          const s = newScript(path, entry.text);
           scripts.push(s);
           const ed = new ScriptWidget({
             id: "script-" + s.id,
-            value: text,
+            value: entry.text,
             name: path,
             layout: { ...fill, height: "100%" },
           });
@@ -683,7 +708,7 @@ function uploadScripts() {
       }
       persist();
       refreshFilesList();
-      repl.note("uploaded " + n + " scripts");
+      repl.note("uploaded " + n + " scripts" + (root ? " from " + root : ""));
     } catch (err) {
       repl.note("err zip " + (err.message || String(err)));
     }
