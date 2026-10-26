@@ -8,6 +8,7 @@ import VBox from "./anyui/v-box-cls.js";
 import HBox from "./anyui/h-box-cls.js";
 import Button from "./anyui/button-cls.js";
 import Html from "./anyui/html-cls.js";
+import Tree from "./anyui/tree-cls.js";
 import {
   API_HELP,
   DEFAULT_SCRIPT,
@@ -174,16 +175,19 @@ const logPanel = new VBox({
   layout: { ...fill },
 });
 
-const filesList = new VBox({
-  gap: "2px",
-  children: [],
-  layout: { ...fill, overflow: "auto", padding: "4px" },
+const fileTree = new Tree({
+  id: "script-tree",
+  mode: "folder",
+  cwd: "",
+  nodes: [],
+  selected: "",
+  layout: { ...fill, overflow: "auto" },
 });
 
 const filesHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnNew, btnZipDown, btnZipUp, btnSpoke, btnStar, btnSlice],
+  children: [btnNew, btnRename, btnZipDown, btnZipUp, btnSpoke, btnStar, btnSlice],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -196,14 +200,14 @@ const filesHead = new HBox({
 
 const filesView = new VBox({
   gap: "0px",
-  children: [filesHead, filesList],
+  children: [filesHead, fileTree],
   layout: { ...fill },
 });
 
 const editorHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnDone, btnRun, btnHideOutput, btnRename, btnCopy, scriptNameLabel],
+  children: [btnDone, btnRun, btnHideOutput, btnCopy, scriptNameLabel],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -344,57 +348,30 @@ function publishStrokes() {
   stage.save_changes();
 }
 
-const openFolders = new Set();
-
-function splitPath(name) {
-  const p = String(name || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  const i = p.lastIndexOf("/");
-  if (i < 0) return { dir: "", base: p || "Script" };
-  return { dir: p.slice(0, i), base: p.slice(i + 1) };
-}
-
 function refreshFilesList() {
-  const rows = scripts.map((s, i) => ({ i, name: scriptName(i), ...splitPath(scriptName(i)) }));
-  rows.sort((a, b) => a.name.localeCompare(b.name));
-  const dirs = [...new Set(rows.map((r) => r.dir).filter(Boolean))].sort();
-  for (const d of dirs) if (!openFolders.has(d) && !openFolders.has("!" + d)) openFolders.add(d);
-  const children = [];
-  const pushFile = (row, indent) => {
-    const b = new Button({
-      description: row.base,
-      button_style: row.i === active && leftView === "editor" ? "primary" : "",
-      layout: { flex: "1 1 auto", justifyContent: "flex-start", paddingLeft: indent },
-    });
-    b.onClick(() => openEditor(row.i));
-    children.push(b);
-  };
-  for (const dir of dirs) {
-    const open = openFolders.has(dir);
-    const folder = new Button({
-      description: (open ? "▾ " : "▸ ") + dir,
-      layout: { flex: "1 1 auto", justifyContent: "flex-start" },
-    });
-    const ren = new Button({ description: "Rename" });
-    folder.onClick(() => {
-      if (openFolders.has(dir)) openFolders.delete(dir);
-      else openFolders.add(dir);
-      refreshFilesList();
-    });
-    ren.onClick(() => renameFolder(dir));
-    children.push(
-      new HBox({
-        gap: "4px",
-        children: [folder, ren],
-        layout: { width: "100%", alignItems: "center" },
-      }),
-    );
-    if (open) {
-      for (const row of rows) if (row.dir === dir) pushFile(row, "16px");
+  const nodes = [];
+  const seen = new Set();
+  scripts.forEach((s, i) => {
+    const name = scriptName(i);
+    const parts = name.split("/").filter(Boolean);
+    let parent = "";
+    for (let k = 0; k < parts.length - 1; k++) {
+      const id = parts.slice(0, k + 1).join("/");
+      if (!seen.has(id)) {
+        seen.add(id);
+        nodes.push({ id, parent, label: parts[k], kind: "branch" });
+      }
+      parent = id;
     }
-  }
-  for (const row of rows) if (!row.dir) pushFile(row, "0px");
-  filesList.set("children", children);
-  filesList.save_changes();
+    nodes.push({
+      id: "s:" + s.id,
+      parent,
+      label: parts[parts.length - 1] || name,
+      kind: "leaf",
+    });
+  });
+  fileTree.set("nodes", nodes);
+  fileTree.save_changes();
 }
 
 function renameScript(idx) {
@@ -427,8 +404,10 @@ function renameFolder(dir) {
       s.name = renamed;
     }
   });
-  openFolders.delete(dir);
-  openFolders.add(to);
+  const cwd = fileTree.get("cwd") || "";
+  if (cwd === dir || cwd.startsWith(dir + "/")) {
+    fileTree.set("cwd", to + cwd.slice(dir.length));
+  }
   persist();
   refreshFilesList();
   if (scripts[active]) showEditor(active);
@@ -716,7 +695,11 @@ function uploadScripts() {
   };
   input.click();
 }
-btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
+btnNew.onClick(() => {
+  const cwd = fileTree.get("cwd") || "";
+  const base = "Script " + (scripts.length + 1);
+  addScript(cwd ? cwd + "/" + base : base, "");
+});
 btnZipDown.onClick(() => downloadScripts());
 btnZipUp.onClick(() => uploadScripts());
 btnSpoke.onClick(() => {
@@ -745,7 +728,41 @@ btnClearCanvas.onClick(() => {
   if (stage.fit) stage.fit();
 });
 btnDone.onClick(() => showFiles());
-btnRename.onClick(() => renameScript(active));
+btnRename.onClick(() => {
+  const sel = fileTree.get("selected") || "";
+  const cwd = fileTree.get("cwd") || "";
+  if (sel.startsWith("s:")) {
+    const idx = scripts.findIndex((s) => "s:" + s.id === sel);
+    if (idx >= 0) renameScript(idx);
+    return;
+  }
+  if (sel) renameFolder(sel);
+  else if (cwd) renameFolder(cwd);
+});
+
+fileTree.on("msg:custom", (msg) => {
+  if (!msg) return;
+  if (msg.event === "select") {
+    fileTree.set("selected", msg.id);
+    fileTree.save_changes();
+  }
+  if (msg.event === "navigate") {
+    fileTree.set("cwd", msg.id || "");
+    fileTree.set("selected", "");
+    fileTree.save_changes();
+  }
+  if (msg.event === "activate" && String(msg.id).startsWith("s:")) {
+    const idx = scripts.findIndex((s) => "s:" + s.id === msg.id);
+    if (idx >= 0) openEditor(idx);
+  }
+  if (msg.event === "toggle") {
+    const open = new Set(fileTree.get("open") || []);
+    if (msg.open) open.add(msg.id);
+    else open.delete(msg.id);
+    fileTree.set("open", [...open]);
+    fileTree.save_changes();
+  }
+});
 btnHideOutput.onClick(() => {
   const id = scripts[active]?.id;
   if (!id) return;

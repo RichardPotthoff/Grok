@@ -1,0 +1,51 @@
+.anyui-tree {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.anyui-tree-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.anyui-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 26px;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.anyui-tree-row.is-selected {
+  background: #e7e1d4;
+}
+
+.anyui-tree-mark {
+  flex: 0 0 12px;
+  width: 12px;
+  color: #6b6458;
+  font-size: 11px;
+}
+
+.anyui-tree-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anyui-tree-empty {
+  padding: 6px 8px;
+  color: #6b6458;
+  font-size: 12px;
+}
