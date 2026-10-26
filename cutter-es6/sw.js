@@ -28,6 +28,7 @@ const PRECACHE = [
   "./es6/drawing-repl.js",
   "./es6/drawing-ui.js",
   "./es6/drawing-ui-cls.js",
+  "./es6/ZipEngine.js",
   "./anyui/collapsible.js",
   "./anyui/collapsible-cls.js",
   "./anyui/collapsible.css",

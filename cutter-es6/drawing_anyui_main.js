@@ -20,6 +20,7 @@ import {
 } from "./es6/drawing-repl.js";
 import { LogWidget, ObjectsWidget, ScriptWidget, StageWidget } from "./es6/drawing-ui-cls.js";
 import { RAIL } from "./es6/rail-icons.js";
+import { Zip } from "./es6/ZipEngine.js";
 
 const fill = {
   display: "flex",
@@ -75,6 +76,8 @@ const btnCopy = new Button({ description: "Copy" });
 const btnLogCopy = new Button({ description: "Copy" });
 const btnLogClear = new Button({ description: "Clear" });
 const btnNew = new Button({ description: "+ Script" });
+const btnZipDown = new Button({ description: "Download" });
+const btnZipUp = new Button({ description: "Upload" });
 const btnClose = new Button({ description: "Close" });
 const btnSpoke = new Button({ description: "Spoke" });
 const btnStar = new Button({ description: "Star6" });
@@ -82,6 +85,7 @@ const btnSlice = new Button({ description: "Slice" });
 const btnClearStore = new Button({ description: "Clear store" });
 const btnClearCanvas = new Button({ description: "Clear" });
 const btnRename = new Button({ description: "Rename" });
+const btnDone = new Button({ description: "Done" });
 const btnHideOutput = new Button({ description: "Output" });
 
 const btnFiles = new Button({ description: "Files", icon: RAIL.files });
@@ -179,7 +183,7 @@ const filesList = new VBox({
 const filesHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnNew, btnSpoke, btnStar, btnSlice],
+  children: [btnNew, btnZipDown, btnZipUp, btnSpoke, btnStar, btnSlice],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -613,7 +617,83 @@ function openNamed(name, text) {
   addScript(name, text);
 }
 
+async function downloadScripts() {
+  persist();
+  const files = scripts.map((s, i) => ({
+    name: scriptName(i).replace(/\\/g, "/") + ".js",
+    content: editorText(i),
+  }));
+  try {
+    const blob = await Zip.compress(files);
+    const file = new File([blob], "scripts.zip", { type: "application/zip" });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "scripts" });
+      repl.note("shared " + files.length + " scripts");
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scripts.zip";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      repl.note("downloaded " + files.length + " scripts");
+    }
+  } catch (err) {
+    repl.note("err zip " + (err.message || String(err)));
+  }
+  publishLog();
+}
+
+function uploadScripts() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".zip,application/zip";
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try {
+      const entries = await Zip.decompress(file);
+      const decoder = new TextDecoder();
+      let n = 0;
+      for (const entry of entries) {
+        if (!entry.name || entry.name.endsWith("/")) continue;
+        const path = entry.name.replace(/\\/g, "/").replace(/\.js$/i, "").replace(/^\/+/, "");
+        if (!path) continue;
+        const text = decoder.decode(entry.content);
+        const idx = scripts.findIndex((s, i) => scriptName(i) === path);
+        if (idx >= 0) {
+          editors[idx].set("value", text);
+          editors[idx].save_changes();
+          scripts[idx].text = text;
+        } else {
+          const s = newScript(path, text);
+          scripts.push(s);
+          const ed = new ScriptWidget({
+            id: "script-" + s.id,
+            value: text,
+            name: path,
+            layout: { ...fill, height: "100%" },
+          });
+          ed.on("msg:custom", (msg) => {
+            if (msg && msg.event === "run") runScript();
+          });
+          editors.push(ed);
+        }
+        n++;
+      }
+      persist();
+      refreshFilesList();
+      repl.note("uploaded " + n + " scripts");
+    } catch (err) {
+      repl.note("err zip " + (err.message || String(err)));
+    }
+    publishLog();
+  };
+  input.click();
+}
 btnNew.onClick(() => addScript("Script " + (scripts.length + 1), ""));
+btnZipDown.onClick(() => downloadScripts());
+btnZipUp.onClick(() => uploadScripts());
 btnSpoke.onClick(() => {
   openNamed("spoke", DEFAULT_SCRIPT);
   runScript();
