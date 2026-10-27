@@ -23,7 +23,7 @@ import {
   asBlock,
   isBlock,
 } from "./blocks.js";
-import { connect as connectPoses } from "./connector.js";
+import { asPose, ata, biarc, line } from "./connector.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
 
@@ -31,9 +31,9 @@ export const DEFAULT_SCRIPT = `// Spoke × 4  (same moves as the Forth pan examp
 const spoke = seq(
   seg(1, 0),
   ah(1, -2),
-  seg(0, 180),
+  seg(0, Math.PI),
   seg(1, 0),
-  seg(0, 90),
+  seg(0, Math.PI / 2),
 );
 store("spoke", spoke);
 show(repeat(spoke, 4));
@@ -41,9 +41,9 @@ show(repeat(spoke, 4));
 
 export const STAR6_SCRIPT = `// 1/12 of the outline, then reverse + repeat 6
 const star6_ray = seq(
-  seg(3, -30),
+  seg(3, -Math.PI / 6),
   seg(15, 0),
-  seg(4, 60),
+  seg(4, Math.PI / 3),
 );
 store("star6_ray", star6_ray);
 const star6 = repeat(seq(star6_ray, reverse(star6_ray)), 6);
@@ -52,7 +52,7 @@ show(star6);
 `;
 
 export const SLICE_SCRIPT = `// Rounded square, a slice of it, and a parallel offset.
-const side = seq(seg(20, 0), seg(2 * Math.PI, 90));
+const side = seq(seg(20, 0), seg(Math.PI / 2, Math.PI / 2));
 const roundSq = repeat(side, 4);
 store("roundSq", roundSq);
 print("roundSq", roundSq);
@@ -76,7 +76,7 @@ print("nearest", nearest(roundSq, 8, 6));
 `;
 
 export const API_HELP = [
-  "seg(s, dθ)           one arc — degrees",
+  "seg(s, dθ)           one arc — radians. deg = π/180",
   "turn(dθ)             hinge, s = 0",
   "ah(w, l)             arrowhead (Python AH)",
   "seq(a, b, …) / cat   relative concatenate",
@@ -96,8 +96,10 @@ export const API_HELP = [
   "forget(name)         drop one stored name",
   "paint(b, {stroke, width, fill})  restyle; width 0 is a move",
   "show(b, {at, heading, stroke, width, fill, name})",
-  "connect(from, to, {mode, p, r0, r1, stroke, width, fill, dash})",
-  "  from/to = [x, y, heading°]; mode line | biarc | ata; dash shows a move",
+  "line(from, to, extra?)     turn-line-turn",
+  "biarc(from, to, p=1, extra?)  G1 biarc",
+  "ata(from, to, r0, r1, extra?)  arc-tangent-arc, signed radii",
+  "  from/to = [x, y, θ] or interface(); extra = {stroke, width, fill, dash}",
   "clear()              remove page uses (store stays)",
   "resetStore()         drop all stored names",
   "list()               stored names",
@@ -271,7 +273,7 @@ export class DrawingRepl {
           cx: bound.cx,
           cy: bound.cy,
           r: bound.r,
-          path: new Arc(2 * Math.PI * bound.r, 360),
+          path: new Arc(2 * Math.PI * bound.r, 2 * Math.PI),
           at: [bound.cx, bound.cy - bound.r],
         };
       },
@@ -287,8 +289,18 @@ export class DrawingRepl {
       orbit(b, n, deg) {
         return new Orbit(b, n, deg);
       },
-      connect(from, to, opts) {
-        return connectPoses(from, to, opts);
+      line(from, to, extra) {
+        return line(from, to, extra);
+      },
+      biarc(from, to, p, extra) {
+        return biarc(from, to, p, extra);
+      },
+      ata(from, to, r0, r1, extra) {
+        return ata(from, to, r0, r1, extra);
+      },
+      deg: Math.PI / 180,
+      asPose(p) {
+        return asPose(p);
       },
       ref(name) {
         return new Ref(name, (n) => self.dict.get(n));

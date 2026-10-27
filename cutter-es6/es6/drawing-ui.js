@@ -48,13 +48,13 @@ function paintUse(ctx, use, cam) {
     if (!run.length) run.push([x, y]);
     if (!penUp) {
       const step = walkPath(
-        { startPoint: [x, y], startAngle: hd, turtlePath: [[s, da]] },
+        { startPoint: [x, y], startAngle: (hd * 180) / Math.PI, turtlePath: [[s, (da * 180) / Math.PI]] },
         { scale: 1, tol: 0.04, returnStart: false },
       );
       for (const row of step) run.push(row.point);
     }
-    const th = (hd * Math.PI) / 180;
-    const ang = (da * Math.PI) / 180;
+    const th = hd;
+    const ang = da;
     const half = ang / 2;
     const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
     const mid = th + half;
@@ -101,12 +101,12 @@ function iterPoints(use, tol) {
     pts.push([x, y]);
     for (const [s, da] of use.root.arcs()) {
       const step = walkPath(
-        { startPoint: [x, y], startAngle: hd, turtlePath: [[s, da]] },
+        { startPoint: [x, y], startAngle: (hd * 180) / Math.PI, turtlePath: [[s, (da * 180) / Math.PI]] },
         { scale: 1, tol, returnStart: false },
       );
       for (const row of step) pts.push(row.point);
-      const th = (hd * Math.PI) / 180;
-      const ang = (da * Math.PI) / 180;
+      const th = hd;
+      const ang = da;
       const half = ang / 2;
       const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
       const mid = th + half;
@@ -363,9 +363,9 @@ export function renderObjects({ model, el }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "obj";
-      const I = row.interface;
+      const I = Array.isArray(row.interface) ? row.interface : null;
       const meta = I
-        ? `${escapeHtml(row.type)} · ${row.arcs} arcs<br>Δ (${fmt(I.dx)}, ${fmt(I.dy)})  Δθ ${fmt(I.dtheta)}°`
+        ? `${escapeHtml(row.type)} · ${row.arcs} arcs<br>Δ (${fmt(I[0])}, ${fmt(I[1])})  Δθ ${fmt(I[2])}`
         : escapeHtml(row.type || "");
       btn.innerHTML = `<div class="nm">${escapeHtml(row.name)}</div>
         <div class="meta">${meta}</div>`;

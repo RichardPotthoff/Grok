@@ -14,6 +14,7 @@
 import { repeatRotate } from "./path-xform.js";
 
 export const DEG = Math.PI / 180;
+export const TAU = Math.PI * 2;
 
 export function sinc(x) {
   return Math.abs(x) < 1e-12 ? 1 : Math.sin(x) / x;
@@ -26,31 +27,40 @@ function uid(prefix = "b") {
   return `${prefix}_${nextId++}`;
 }
 
+/** Read a pose as [x, y, θ]. Accepts an array, a typed array, or {dx,dy,dtheta}. */
+export function pose3(p) {
+  if (p == null) return [0, 0, 0];
+  if (typeof p.length === "number" && p.length >= 3 && typeof p[0] === "number") {
+    return [p[0], p[1], p[2]];
+  }
+  return [p.dx ?? p.x ?? 0, p.dy ?? p.y ?? 0, p.dtheta ?? p.heading ?? p.h ?? 0];
+}
+
 /**
  * Pose step of one arc starting at the origin, heading 0.
- * @param {number} s
- * @param {number} dtheta degrees
+ * Δθ is radians.
  */
 export function arcIface(s, dtheta) {
-  const ang = Number(dtheta) * DEG;
+  const ang = Number(dtheta) || 0;
   const half = ang / 2;
   const chord = Number(s) * sinc(half);
   return {
     dx: chord * Math.cos(half),
     dy: chord * Math.sin(half),
-    dtheta: Number(dtheta) || 0,
+    dtheta: ang,
   };
 }
 
 /** Compose A then B, both in A's incoming frame. */
 export function composeIface(A, B) {
-  const th = A.dtheta * DEG;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
+  const a = pose3(A);
+  const b = pose3(B);
+  const c = Math.cos(a[2]);
+  const s = Math.sin(a[2]);
   return {
-    dx: A.dx + c * B.dx - s * B.dy,
-    dy: A.dy + s * B.dx + c * B.dy,
-    dtheta: A.dtheta + B.dtheta,
+    dx: a[0] + c * b[0] - s * b[1],
+    dy: a[1] + s * b[0] + c * b[1],
+    dtheta: a[2] + b[2],
   };
 }
 
@@ -85,13 +95,13 @@ export function emitArc(s, dtheta, ctx) {
   const ss = (Number(s) || 0) * c.scale;
   let da = c.mirror ? -(Number(dtheta) || 0) : Number(dtheta) || 0;
   const d = c.mirror ? -c.offset : c.offset;
-  const th = da * DEG;
+  const th = da;
   if (Math.abs(th) < 1e-12) return { s: ss, dtheta: da };
   let sOff = ss - d * th;
-  if (sOff < 0) {
+  if (c.offset !== 0 && sOff < 0) {
     const R = sOff / th;
-    const loop = Math.abs(R) * 2 * Math.PI;
-    const turn = da < 0 ? -360 : 360;
+    const loop = Math.abs(R) * TAU;
+    const turn = da < 0 ? -TAU : TAU;
     if (loop > 1e-12) {
       while (sOff < 0) {
         sOff += loop;
@@ -112,7 +122,7 @@ export function emitArc(s, dtheta, ctx) {
  * A turn of 180° or more uses the arc's circle. A shorter arc uses the chord diameter.
  */
 export function arcBound(s, dtheta) {
-  const th = (Number(dtheta) || 0) * DEG;
+  const th = Number(dtheta) || 0;
   const len = Number(s) || 0;
   if (Math.abs(th) < 1e-12) {
     return { cx: len / 2, cy: 0, r: Math.abs(len) / 2 };
@@ -143,12 +153,12 @@ export function encloseCircles(a, b) {
 
 /** Place a circle that is expressed in a frame whose origin is `pose`. */
 export function placeCircle(circle, pose) {
-  const th = (pose.dtheta || 0) * DEG;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
+  const p = pose3(pose);
+  const c = Math.cos(p[2]);
+  const s = Math.sin(p[2]);
   return {
-    cx: pose.dx + c * circle.cx - s * circle.cy,
-    cy: pose.dy + s * circle.cx + c * circle.cy,
+    cx: p[0] + c * circle.cx - s * circle.cy,
+    cy: p[1] + s * circle.cx + c * circle.cy,
     r: circle.r,
   };
 }
@@ -207,7 +217,7 @@ function circleOf(R) {
 
 /** Endpoints, and the crown of a curved arc. A minor arc lies inside these. */
 export function arcExtremes(s, dtheta) {
-  const th = (Number(dtheta) || 0) * DEG;
+  const th = Number(dtheta) || 0;
   const len = Number(s) || 0;
   const end = arcIface(len, dtheta);
   const pts = [
@@ -222,48 +232,50 @@ export function arcExtremes(s, dtheta) {
 }
 
 function placePoint(p, pose) {
-  const th = (pose.dtheta || 0) * DEG;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
+  const q = pose3(pose);
+  const c = Math.cos(q[2]);
+  const s = Math.sin(q[2]);
   return {
-    x: pose.dx + c * p.x - s * p.y,
-    y: pose.dy + s * p.x + c * p.y,
+    x: q[0] + c * p.x - s * p.y,
+    y: q[1] + s * p.x + c * p.y,
   };
 }
 
 /** Rotation center of one rigid step, or null if the step is a translation. */
 export function stepCenter(iface) {
-  const th = (iface.dtheta || 0) * DEG;
+  const p = pose3(iface);
+  const th = p[2];
   if (Math.abs(Math.sin(th / 2)) < 1e-9) return null;
   const cos = Math.cos(th);
   const sin = Math.sin(th);
   const a = 1 - cos;
   const det = a * a + sin * sin;
   return {
-    x: (a * iface.dx - sin * iface.dy) / det,
-    y: (sin * iface.dx + a * iface.dy) / det,
+    x: (a * p[0] - sin * p[1]) / det,
+    y: (sin * p[0] + a * p[1]) / det,
   };
 }
 
 const EMPTY_CIRCLE = { cx: 0, cy: 0, r: 0 };
 
 function toLocal(x, y, pose) {
-  const th = -(pose.dtheta || 0) * DEG;
-  const dx = x - pose.dx;
-  const dy = y - pose.dy;
+  const p = pose3(pose);
+  const th = -p[2];
+  const dx = x - p[0];
+  const dy = y - p[1];
   const c = Math.cos(th);
   const s = Math.sin(th);
   return { x: c * dx - s * dy, y: s * dx + c * dy };
 }
 
 function fromLocal(hit, pose, s0) {
-  const th = (pose.dtheta || 0) * DEG;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
+  const p = pose3(pose);
+  const c = Math.cos(p[2]);
+  const s = Math.sin(p[2]);
   return {
-    x: pose.dx + c * hit.x - s * hit.y,
-    y: pose.dy + s * hit.x + c * hit.y,
-    heading: (pose.dtheta || 0) + hit.heading,
+    x: p[0] + c * hit.x - s * hit.y,
+    y: p[1] + s * hit.x + c * hit.y,
+    heading: p[2] + hit.heading,
     s: s0 + hit.s,
     dist: hit.dist,
     block: hit.block,
@@ -275,7 +287,7 @@ function fromLocal(hit, pose, s0) {
  * ½ ∫ x dy − y dx = (R²/2) (θ − sin θ), with R = s/θ.
  */
 export function arcArea(s, dtheta) {
-  const th = (Number(dtheta) || 0) * DEG;
+  const th = Number(dtheta) || 0;
   if (Math.abs(th) < 1e-12 || Math.abs(s) < 1e-12) return 0;
   const R = s / th;
   return 0.5 * R * R * (th - Math.sin(th));
@@ -305,9 +317,10 @@ export class Block {
     return value;
   }
 
-  /** @returns {{dx: number, dy: number, dtheta: number}} */
+  /** @returns {[number, number, number]} [dx, dy, Δθ] in radians */
   interface(ctx = {}) {
-    return this._remember("i", ctx, (c) => this.computeInterface(c));
+    const o = this._remember("i", ctx, (c) => this.computeInterface(c));
+    return pose3(o);
   }
 
   computeInterface(_ctx) {
@@ -439,9 +452,9 @@ export class Block {
   }
 
   describe() {
-    const I = this.interface();
+    const I = pose3(this.interface());
     const nm = this.name ? ` ${this.name}` : "";
-    return `${this.type}${nm}  Δ=(${fmt(I.dx)}, ${fmt(I.dy)})  Δθ=${fmt(I.dtheta)}°  L=${fmt(this.length())}`;
+    return `${this.type}${nm}  Δ=(${fmt(I[0])}, ${fmt(I[1])})  Δθ=${fmt(I[2])}  L=${fmt(this.length())}`;
   }
 }
 
@@ -454,7 +467,7 @@ function fmt(n) {
 }
 
 function nearestOnArc(s, dtheta, x, y) {
-  const th = (Number(dtheta) || 0) * DEG;
+  const th = Number(dtheta) || 0;
   const len = Number(s) || 0;
   if (Math.abs(th) < 1e-12) {
     const denom = Math.abs(len) < 1e-12 ? 1 : len;
@@ -494,13 +507,14 @@ function foldArea(rows) {
 }
 
 function appendArea(acc, iface, area) {
-  const th = acc.dtheta * DEG;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
-  const dx = c * iface.dx - s * iface.dy;
-  const dy = s * iface.dx + c * iface.dy;
-  const cross = 0.5 * (acc.dx * dy - acc.dy * dx);
-  const next = composeIface(acc, iface);
+  const a = pose3(acc);
+  const b = pose3(iface);
+  const c = Math.cos(a[2]);
+  const s = Math.sin(a[2]);
+  const dx = c * b[0] - s * b[1];
+  const dy = s * b[0] + c * b[1];
+  const cross = 0.5 * (a[0] * dy - a[1] * dx);
+  const next = composeIface(a, b);
   return { ...next, area: acc.area + area + cross };
 }
 
@@ -664,8 +678,8 @@ export class Repeat extends Block {
   }
 
   computeArea(ctx) {
-    const one = this.of.interface(ctx);
-    const closed = Math.hypot(one.dx, one.dy) < 1e-9;
+    const one = pose3(this.of.interface(ctx));
+    const closed = Math.hypot(one[0], one[1]) < 1e-9;
     if (closed) return this.n * this.of.area(ctx);
     let acc = { dx: 0, dy: 0, dtheta: 0, area: 0 };
     const area = this.of.area(ctx);
@@ -683,12 +697,12 @@ export class Repeat extends Block {
   }
 
   computeBound(ctx) {
-    const one = this.of.interface(ctx);
+    const one = pose3(this.of.interface(ctx));
     const childPts = this.of.extremes(ctx);
     if (this.n <= 1) return mec(childPts);
     const O = stepCenter(one);
-    const span = this.n * Math.abs(one.dtheta || 0);
-    if (O && span >= 360 - 1e-6) {
+    const span = this.n * Math.abs(one[2] || 0);
+    if (O && span >= TAU - 1e-6) {
       let r = 0;
       for (const p of childPts) r = Math.max(r, Math.hypot(p.x - O.x, p.y - O.y));
       return { cx: O.x, cy: O.y, r };
@@ -942,10 +956,10 @@ export class Orbit extends Block {
   }
 
   baked(ctx) {
-    const segs = this.of.turtlePath(ctx);
+    const segs = this.of.turtlePath(ctx).map(([s, da]) => [s, da / DEG]);
     const stroke = { startPoint: [0, 0], startAngle: 0, turtlePath: segs };
-    const out = repeatRotate(stroke, this.n, this.deg, [0, 0]);
-    return (out.turtlePath || []).map((seg) => [Number(seg[0]), Number(seg[1])]);
+    const out = repeatRotate(stroke, this.n, this.deg / DEG, [0, 0]);
+    return (out.turtlePath || []).map((seg) => [Number(seg[0]), Number(seg[1]) * DEG]);
   }
 
   computeInterface(ctx) {
