@@ -10,6 +10,8 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  box-sizing: border-box;
+  padding-top: max(env(safe-area-inset-top, 0px), var(--preview-top, 0px));
 }
 
 #app > div {

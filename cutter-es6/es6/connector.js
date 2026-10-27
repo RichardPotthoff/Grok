@@ -94,15 +94,52 @@ export function biarc(from, to, p = 1, extra) {
 
 /**
  * Arc, tangent, arc. r0 and r1 are signed radii (positive = left).
- * Tries both external tangents and keeps the one that lands on the end pose.
+ * Zero is allowed: both zero is the straight line, one zero is a
+ * point-to-circle tangent. Default radii are 0, so ata(a, b) is line(a, b).
  */
-export function ata(from, to, r0, r1, extra) {
+export function ata(from, to, r0 = 0, r1 = 0, extra) {
   const [rx, ry, dh] = rel(from, to);
-  const R0 = num(r0, 1);
-  const R1 = num(r1, R0);
-  if (Math.abs(R0) < 1e-9 || Math.abs(R1) < 1e-9) throw new Error("ata: radii must be non-zero");
-  const block = ataBlock(rx, ry, dh, R0, R1);
-  return finish(block, paintOf(extra));
+  const R0 = num(r0, 0);
+  const R1 = num(r1, 0);
+  const paint = paintOf(extra);
+  if (Math.abs(R0) < 1e-9 && Math.abs(R1) < 1e-9) return line(from, to, extra);
+  if (Math.abs(R0) < 1e-9) return finish(pointArc(rx, ry, dh, R1, false), paint);
+  if (Math.abs(R1) < 1e-9) return finish(pointArc(rx, ry, dh, R0, true), paint);
+  return finish(ataBlock(rx, ry, dh, R0, R1), paint);
+}
+
+/** One radius is zero: hinge, tangent line, arc — or arc, line, hinge. */
+function pointArc(rx, ry, dh, r, startArc) {
+  const cx = startArc ? 0 : rx - r * Math.sin(dh);
+  const cy = startArc ? r : ry + r * Math.cos(dh);
+  const px = startArc ? rx : 0;
+  const py = startArc ? ry : 0;
+  const toCenter = Math.atan2(cy - py, cx - px);
+  const toPoint = Math.atan2(py - cy, px - cx);
+  const d = Math.hypot(cx - px, cy - py);
+  if (d < Math.abs(r) - 1e-9) throw new Error("ata: point inside circle");
+  const alpha = Math.asin(Math.max(-1, Math.min(1, Math.abs(r) / d))) * Math.sign(r || 1);
+  let best = null;
+  const phis = [toCenter - alpha, toCenter + alpha, toPoint - alpha, toPoint + alpha];
+  for (const phi of phis) {
+    const tx = cx + r * Math.sin(phi);
+    const ty = cy - r * Math.cos(phi);
+    const turn = wrap(startArc ? phi : dh - phi);
+    const s = r * turn;
+    const lineLen = Math.hypot((startArc ? rx : tx) - (startArc ? tx : 0), (startArc ? ry : ty) - (startArc ? ty : 0));
+    const hinge = wrap(startArc ? dh - phi : phi);
+    const arcs = startArc
+      ? [new Arc(s, turn), new Arc(lineLen, 0), new Arc(0, hinge)]
+      : [new Arc(0, phi), new Arc(lineLen, 0), new Arc(s, turn)];
+    const block = new Seq(arcs);
+    const got = block.interface();
+    const err = Math.hypot(got[0] - rx, got[1] - ry) + Math.abs(wrap(got[2] - dh));
+    if (err > 1e-3) continue;
+    const cost = Math.abs(s) + lineLen;
+    if (!best || cost < best.cost) best = { cost, block };
+  }
+  if (!best) throw new Error("ata: no tangent");
+  return best.block;
 }
 
 function ataBlock(rx, ry, dh, r0, r1) {

@@ -98,7 +98,7 @@ export const API_HELP = [
   "show(b, {at, heading, stroke, width, fill, name})",
   "line(from, to, extra?)     turn-line-turn",
   "biarc(from, to, p=1, extra?)  G1 biarc",
-  "ata(from, to, r0, r1, extra?)  arc-tangent-arc, signed radii",
+  "ata(from, to, r0=0, r1=0, extra?)  arc-tangent-arc; 0,0 is the line",
   "  from/to = [x, y, θ] or interface(); extra = {stroke, width, fill, dash}",
   "clear()              remove page uses (store stays)",
   "resetStore()         drop all stored names",
@@ -218,7 +218,7 @@ export class DrawingRepl {
           : [0, 0],
       startAngle: opts.heading ?? opts.startAngle ?? 0,
       stroke: opts.stroke || "ink",
-      width: opts.width == null ? 1.6 : Number(opts.width),
+      width: opts.width == null ? null : Number(opts.width),
       fill: opts.fill || null,
       root,
     };

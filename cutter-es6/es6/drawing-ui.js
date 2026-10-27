@@ -16,7 +16,7 @@ const INK = {
 function paintUse(ctx, use, cam) {
   const base = {
     stroke: use.stroke || "ink",
-    width: use.width == null ? 1.6 : use.width,
+    width: use.width == null ? null : use.width,
     fill: use.fill || null,
   };
   const root = use.root;
@@ -82,7 +82,8 @@ function drawRun(ctx, pts, style, cam) {
   const debugMove = w === 0 && style.dash;
   const penUp = w === 0 && !debugMove;
   ctx.strokeStyle = INK[style.stroke] || style.stroke || "#111";
-  ctx.lineWidth = penUp ? 0 : debugMove ? 0.35 : w == null ? 1.6 : w;
+  const hair = 1.25 / (cam.scale || 1);
+  ctx.lineWidth = penUp ? 0 : debugMove ? hair : w == null ? hair : w;
   ctx.setLineDash(dashPattern(style.dash));
   if (style.fill && (INK[style.fill] || style.fill)) {
     ctx.fillStyle = INK[style.fill] || style.fill;
