@@ -110,7 +110,15 @@ export function ata(from, to, r0, r1, rt, extra) {
   const i0 = r0 == null || !Number.isFinite(Number(r0));
   const i1 = r1 == null || !Number.isFinite(Number(r1));
   const paint = paintOf(extra);
-  if (i0 || i1) return finish(fillet(rx, ry, dh, i0, i1, num(r0, 0), num(r1, 0), rt), paint);
+  if (i0 && i1 && rt != null && Number.isFinite(Number(rt)) && !Object.is(Number(rt), 0) && !Object.is(Number(rt), -0)) {
+    return finish(corner(rx, ry, dh, Number(rt)), paint);
+  }
+  if (i0 || i1) {
+    const big = 1e6;
+    const R0 = i0 ? big * (Object.is(r0, -Infinity) ? -1 : 1) : num(r0, 0);
+    const R1 = i1 ? big * (Object.is(r1, -Infinity) ? -1 : 1) : num(r1, 0);
+    return finish(flattenWide(ata(from, to, R0, R1, rt)), paint);
+  }
   const R0 = num(r0, 0);
   const R1 = num(r1, 0);
   if (Math.abs(R0) < 1e-9 && Math.abs(R1) < 1e-9) return line(from, to, extra);
@@ -128,16 +136,14 @@ function posTurn(delta, r) {
   return Math.abs(t) < 1e-12 ? 0 : t;
 }
 
-/**
- * A straight side (infinite radius) joined by a fillet of radius rt.
- * Both sides straight is a rounded corner. One side straight keeps the other arc.
- */
-function fillet(rx, ry, dh, i0, i1, r0, r1, rt) {
-  const radius = num(rt, 0);
-  if (Math.abs(radius) < 1e-9) return line([0, 0, 0], [rx, ry, dh]);
-  if (i0 && i1) return corner(rx, ry, dh, radius);
-  if (i0) return sideFillet(rx, ry, dh, r1, radius, false);
-  return sideFillet(rx, ry, dh, r0, radius, true);
+/** A very large radius is a straight side. Collapse it to Δθ = 0. */
+function flattenWide(block) {
+  const arcs = [];
+  for (const [s, da] of block.arcs()) {
+    if (Math.abs(da) > 1e-6 && Math.abs(s / da) > 1e5) arcs.push(new Arc(s, 0));
+    else arcs.push(new Arc(s, da));
+  }
+  return new Seq(arcs);
 }
 
 function corner(rx, ry, dh, rt) {
@@ -162,36 +168,6 @@ function corner(rx, ry, dh, rt) {
     return line([0, 0, 0], [rx, ry, dh]);
   }
   return block;
-}
-
-function sideFillet(rx, ry, dh, r, rt, startArc) {
-  const cx = startArc ? 0 : rx - r * Math.sin(dh);
-  const cy = startArc ? r : ry + r * Math.cos(dh);
-  const dist = Math.abs(rt - r);
-  const y = startArc ? cy : rt;
-  const h2 = dist * dist - (y - cy) * (y - cy);
-  if (h2 < -1e-8) return line([0, 0, 0], [rx, ry, dh]);
-  const h = Math.sqrt(Math.max(0, h2));
-  let best = null;
-  for (const ctx of [cx - h, cx + h]) {
-    const cty = startArc ? cy : rt;
-    const left = unit(ctx - cx, cty - cy, rt - r);
-    if (!left) continue;
-    const phi = Math.atan2(-left[0], left[1]);
-    const arcTurn = posTurn(startArc ? phi : dh - phi, r);
-    const midTurn = posTurn(startArc ? dh - phi : phi, rt);
-    const lineLen = startArc ? Math.hypot(rx - (ctx - rt * Math.sin(dh)), ry - (cty + rt * Math.cos(dh))) : ctx;
-    if (lineLen < -1e-6) continue;
-    const arcs = startArc
-      ? [new Arc(r * arcTurn, arcTurn), new Arc(rt * midTurn, midTurn), new Arc(lineLen, 0)]
-      : [new Arc(lineLen, 0), new Arc(rt * midTurn, midTurn), new Arc(r * arcTurn, arcTurn)];
-    const block = new Seq(arcs);
-    const got = block.interface();
-    const err = Math.hypot(got[0] - rx, got[1] - ry) + Math.abs(wrap(got[2] - dh));
-    if (err > 1e-2) continue;
-    if (!best || err < best.err) best = { err, block };
-  }
-  return best ? best.block : line([0, 0, 0], [rx, ry, dh]);
 }
 
 /** One radius is zero: hinge, tangent line, arc — or arc, line, hinge. */
