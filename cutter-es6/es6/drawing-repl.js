@@ -98,7 +98,7 @@ export const API_HELP = [
   "show(b, {at, heading, stroke, width, fill, name})",
   "line(from, to, extra?)     turn-line-turn",
   "biarc(from, to, p=1, extra?)  G1 biarc",
-  "ata(from, to, r0=0, r1=0, extra?)  arc-tangent-arc; 0,0 is the line",
+  "ata(from, to, r0=0, r1=0, rt?, extra?)  arc-tangent-arc; rt curves the tangent",
   "  from/to = [x, y, θ] or interface(); extra = {stroke, width, fill, dash}",
   "clear()              remove page uses (store stays)",
   "resetStore()         drop all stored names",
@@ -295,8 +295,8 @@ export class DrawingRepl {
       biarc(from, to, p, extra) {
         return biarc(from, to, p, extra);
       },
-      ata(from, to, r0, r1, extra) {
-        return ata(from, to, r0, r1, extra);
+      ata(from, to, r0, r1, rt, extra) {
+        return ata(from, to, r0, r1, rt, extra);
       },
       deg: Math.PI / 180,
       asPose(p) {

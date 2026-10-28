@@ -94,10 +94,16 @@ export function biarc(from, to, p = 1, extra) {
 
 /**
  * Arc, tangent, arc. r0 and r1 are signed radii (positive = left).
- * Zero is allowed: both zero is the straight line, one zero is a
- * point-to-circle tangent. Default radii are 0, so ata(a, b) is line(a, b).
+ * rt, if given, replaces the straight tangent with an arc of that radius
+ * (positive = ccw). Omitted or 0 keeps the straight tangent. A value
+ * outside the range that can touch both circles is clamped.
+ * Zero r0 and r1 is the straight line, so ata(a, b) is line(a, b).
  */
-export function ata(from, to, r0 = 0, r1 = 0, extra) {
+export function ata(from, to, r0 = 0, r1 = 0, rt = 0, extra) {
+  if (rt && typeof rt === "object") {
+    extra = rt;
+    rt = extra.rt;
+  }
   const [rx, ry, dh] = rel(from, to);
   const R0 = num(r0, 0);
   const R1 = num(r1, 0);
@@ -105,7 +111,9 @@ export function ata(from, to, r0 = 0, r1 = 0, extra) {
   if (Math.abs(R0) < 1e-9 && Math.abs(R1) < 1e-9) return line(from, to, extra);
   if (Math.abs(R0) < 1e-9) return finish(pointArc(rx, ry, dh, R1, false), paint);
   if (Math.abs(R1) < 1e-9) return finish(pointArc(rx, ry, dh, R0, true), paint);
-  return finish(ataBlock(rx, ry, dh, R0, R1), paint);
+  const RT = num(rt, 0);
+  if (Math.abs(RT) < 1e-9) return finish(ataBlock(rx, ry, dh, R0, R1), paint);
+  return finish(ataCurve(rx, ry, dh, R0, R1, RT), paint);
 }
 
 /** One radius is zero: hinge, tangent line, arc — or arc, line, hinge. */
@@ -167,6 +175,97 @@ function ataBlock(rx, ry, dh, r0, r1) {
   }
   if (!best) throw new Error("ata: no tangent");
   return best.block;
+}
+
+/**
+ * Middle arc of radius rt, tangent to both end circles.
+ * Its center is |rt − r0| from c0 and |rt − r1| from c1.
+ */
+function ataCurve(rx, ry, dh, r0, r1, rt) {
+  const c0x = 0;
+  const c0y = r0;
+  const c1x = rx - r1 * Math.sin(dh);
+  const c1y = ry + r1 * Math.cos(dh);
+  const d = Math.hypot(c1x - c0x, c1y - c0y);
+  const radius = clampRt(rt, r0, r1, d);
+  const a = Math.abs(radius - r0);
+  const b = Math.abs(radius - r1);
+  const hits = circleHits(c0x, c0y, a, c1x, c1y, b);
+  let best = null;
+  for (const [ctx, cty] of hits) {
+    const built = buildCurve(ctx, cty, radius, rx, ry, dh, r0, r1, c1x, c1y);
+    if (!built) continue;
+    if (!best || built.cost < best.cost) best = built;
+  }
+  if (!best) return ataBlock(rx, ry, dh, r0, r1);
+  return best.block;
+}
+
+function clampRt(rt, r0, r1, d) {
+  if (touches(rt, r0, r1, d)) return rt;
+  const sign = rt < 0 ? -1 : 1;
+  let lo = 1e-3;
+  let hi = Math.max(Math.abs(rt), Math.abs(r0), Math.abs(r1), d) * 4 + 1;
+  if (!touches(sign * hi, r0, r1, d)) return sign * hi;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (touches(sign * mid, r0, r1, d)) hi = mid;
+    else lo = mid;
+  }
+  return sign * hi;
+}
+
+function touches(rt, r0, r1, d) {
+  const a = Math.abs(rt - r0);
+  const b = Math.abs(rt - r1);
+  return Math.abs(a - b) <= d + 1e-9 && a + b >= d - 1e-9 && a > 1e-9 && b > 1e-9;
+}
+
+function circleHits(x0, y0, r0, x1, y1, r1) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const d = Math.hypot(dx, dy);
+  if (d < 1e-9) return [];
+  const h = (d * d + r0 * r0 - r1 * r1) / (2 * d);
+  const k2 = r0 * r0 - h * h;
+  if (k2 < -1e-8) return [];
+  const k = Math.sqrt(Math.max(0, k2));
+  const ux = dx / d;
+  const uy = dy / d;
+  const px = x0 + h * ux;
+  const py = y0 + h * uy;
+  if (k < 1e-9) return [[px, py]];
+  return [
+    [px - k * uy, py + k * ux],
+    [px + k * uy, py - k * ux],
+  ];
+}
+
+function buildCurve(ctx, cty, rt, rx, ry, dh, r0, r1, c1x, c1y) {
+  const left0 = unit(ctx - 0, cty - r0, rt - r0);
+  const left1 = unit(ctx - c1x, cty - c1y, rt - r1);
+  if (!left0 || !left1) return null;
+  const phi0 = Math.atan2(-left0[0], left0[1]);
+  const phi1 = Math.atan2(-left1[0], left1[1]);
+  const turn0 = wrap(phi0);
+  const turnM = wrap(phi1 - phi0);
+  const turn1 = wrap(dh - phi1);
+  const block = new Seq([
+    new Arc(r0 * turn0, turn0),
+    new Arc(rt * turnM, turnM),
+    new Arc(r1 * turn1, turn1),
+  ]);
+  const got = block.interface();
+  const err = Math.hypot(got[0] - rx, got[1] - ry) + Math.abs(wrap(got[2] - dh));
+  if (err > 1e-3) return null;
+  return { cost: Math.abs(r0 * turn0) + Math.abs(rt * turnM) + Math.abs(r1 * turn1), block };
+}
+
+function unit(dx, dy, scale) {
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9 || Math.abs(scale) < 1e-9) return null;
+  const s = Math.sign(scale) / len;
+  return [dx * s, dy * s];
 }
 
 function buildAta(phi, rx, ry, dh, r0, r1, c1x, c1y) {
