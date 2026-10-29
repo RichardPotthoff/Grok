@@ -98,7 +98,9 @@ export function emitArc(s, dtheta, ctx) {
   const th = da;
   if (Math.abs(th) < 1e-12) return { s: ss, dtheta: da };
   let sOff = ss - d * th;
+  /*
   if (c.offset !== 0 && sOff < 0) {
+  
     const R = sOff / th;
     const loop = Math.abs(R) * TAU;
     const turn = da < 0 ? -TAU : TAU;
@@ -109,6 +111,7 @@ export function emitArc(s, dtheta, ctx) {
       }
     }
   }
+  */
   return { s: sOff, dtheta: da };
 }
 
