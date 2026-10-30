@@ -103,7 +103,7 @@ export function emitArc(s, dtheta, ctx) {
   
     const R = sOff / th;
     const loop = Math.abs(R) * TAU;
-    const turn = da < 0 ? -TAU : TAU;
+    const turn = R < 0 ? -TAU : TAU;
     if (loop > 1e-12) {
       while (sOff < 0) {
         sOff += loop;
