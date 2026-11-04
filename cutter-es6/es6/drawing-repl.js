@@ -470,6 +470,7 @@ export function newScript(name = "Script", text = "") {
     id: "s" + Math.random().toString(36).slice(2, 8),
     name,
     text,
+    ok: false,
   };
 }
 
@@ -489,6 +490,7 @@ export function loadSession() {
           id: s.id || "s" + i,
           name: s.name || "Script " + (i + 1),
           text: String(s.text || ""),
+          ok: s.ok === true,
         })),
         active: clampIndex(data.active, data.scripts.length),
       };
@@ -507,7 +509,12 @@ export function saveSession(session) {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        scripts: session.scripts.map((s) => ({ id: s.id, name: s.name, text: s.text })),
+        scripts: session.scripts.map((s) => ({
+          id: s.id,
+          name: s.name,
+          text: s.text,
+          ok: s.ok === true,
+        })),
         active: session.active,
         saved: Date.now(),
       }),

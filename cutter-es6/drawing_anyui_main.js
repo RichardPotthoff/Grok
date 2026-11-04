@@ -481,10 +481,19 @@ function runScript() {
   const idx = active;
   const src = editorText(idx);
   const id = scripts[idx] && scripts[idx].id;
+  const s = scripts[idx];
+  if (s) {
+    s.ok = false;
+    saveSession({ scripts, active });
+  }
   try {
     repl.run(src, { scriptId: id, scriptName: scriptName(idx) });
+    if (s) {
+      s.ok = true;
+      saveSession({ scripts, active });
+    }
   } catch {
-    /* logged */
+    /* logged; ok stays false */
   }
   publishObjects();
   publishLog();
@@ -817,9 +826,16 @@ objects.on("msg:custom", (msg) => {
   publishLog();
 });
 
-editors.forEach((ed) => {
+editors.forEach((ed, i) => {
   ed.on("msg:custom", (msg) => {
     if (msg && msg.event === "run") runScript();
+  });
+  ed.on("change:value", () => {
+    const s = scripts[i];
+    if (s && s.ok) {
+      s.ok = false;
+      persist();
+    }
   });
 });
 
@@ -830,7 +846,17 @@ async function boot() {
   refreshFilesList();
   applyLayout();
   if (scripts.length) openEditor(active);
-  runScript();
+  // Only auto-run scripts that previously finished successfully.
+  // An infinite loop never returns, so it never gets marked ok and will not restart on reload.
+  const okIdx = scripts.map((s, i) => (s.ok ? i : -1)).filter((i) => i >= 0);
+  for (const i of okIdx) {
+    active = i;
+    runScript();
+  }
+  if (scripts.length) {
+    active = Math.max(0, Math.min(scripts.length - 1, session.active || 0));
+    openEditor(active);
+  }
   requestAnimationFrame(() => requestAnimationFrame(() => stage.fit()));
   window.drawingRepl = { repl, stage, editors, runScript, applyLayout };
 }
