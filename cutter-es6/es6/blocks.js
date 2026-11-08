@@ -1100,6 +1100,11 @@ export class Paint extends Block {
  * Sub-path of `of` from arc length `from` to `to`.
  * Boundary arcs are split exactly: [v − u, Δθ·(v − u)/s].
  * A hinge has no length and is kept when the mark lands on it.
+ *
+ * The source is treated as periodic: if the range extends past
+ * `of.length()`, the walk wraps and continues. The slice length is
+ * `to − from` (not clipped). A non-finite `to` still means "to the end
+ * of one period", preserving the old clip behaviour.
  */
 export class Slice extends Block {
   /**
@@ -1110,21 +1115,82 @@ export class Slice extends Block {
   constructor(of, from, to, fields = {}) {
     super("slice", fields);
     this.of = asBlock(of);
-    this.from = Math.max(0, Number(from) || 0);
+    this.from = Number(from) || 0;
     this.to = Number(to);
     if (!Number.isFinite(this.to)) this.to = Infinity;
   }
 
   computeLength(ctx) {
-    const total = this.of.length(ctx);
-    const a = Math.min(this.from, total);
-    const b = Math.min(Math.max(this.to, a), total);
-    return b - a;
+    if (!Number.isFinite(this.to)) {
+      const total = this.of.length(ctx);
+      const a = Math.max(0, Math.min(this.from, total));
+      return Math.max(0, total - a);
+    }
+    return Math.max(0, this.to - this.from);
   }
 
+  /**
+   * Pose step from `from` to `to`. Uses the source period so a long
+   * prefix costs one period walk plus a divmod, not a walk of the
+   * whole distance.
+   */
   computeInterface(ctx) {
+    const L = this.of.length(ctx);
+    if (!(L > 0) || this.to <= this.from) return { ...IFACE0 };
+    if (!Number.isFinite(this.to)) {
+      let acc = { ...IFACE0 };
+      for (const [s, da] of this.arcs(ctx)) acc = composeIface(acc, arcIface(s, da));
+      return acc;
+    }
+    const one = pose3(this.of.interface(ctx));
+    const a = this.from;
+    const b = this.to;
+    const q0 = Math.floor(a / L);
+    const r0 = a - q0 * L;
+    const q1 = Math.floor(b / L);
+    const r1 = b - q1 * L;
+    if (q0 === q1) {
+      return this._window(ctx, r0, r1);
+    }
+    let acc = this._window(ctx, r0, L);
+    const full = q1 - q0 - 1;
+    if (full > 0) acc = composeIface(acc, this._repeat(one, full));
+    if (r1 > 1e-12) acc = composeIface(acc, this._window(ctx, 0, r1));
+    return acc;
+  }
+
+  /** Interface of one period, composed n times. */
+  _repeat(one, n) {
     let acc = { ...IFACE0 };
-    for (const [s, da] of this.arcs(ctx)) acc = composeIface(acc, arcIface(s, da));
+    let step = one;
+    let k = n;
+    while (k > 0) {
+      if (k & 1) acc = composeIface(acc, step);
+      step = composeIface(step, step);
+      k >>= 1;
+    }
+    return acc;
+  }
+
+  /** Interface of the source from arc length a to b, both in [0, L]. */
+  _window(ctx, a, b) {
+    if (b <= a + 1e-12) return { ...IFACE0 };
+    let acc = { ...IFACE0 };
+    let sAcc = 0;
+    for (const [s, da] of this.of.arcs(ctx)) {
+      const len = Math.abs(s);
+      const next = sAcc + len;
+      if (len < 1e-12) {
+        if (sAcc >= a && sAcc <= b) acc = composeIface(acc, arcIface(0, da));
+      } else if (next > a && sAcc < b) {
+        const u = Math.max(0, a - sAcc);
+        const v = Math.min(len, b - sAcc);
+        const f = (v - u) / len;
+        if (f > 1e-12) acc = composeIface(acc, arcIface(s * f, da * f));
+      }
+      sAcc = next;
+      if (sAcc >= b) break;
+    }
     return acc;
   }
 
@@ -1136,21 +1202,47 @@ export class Slice extends Block {
     const a = this.from;
     const b = this.to;
     if (b <= a) return;
+    const L = this.of.length(ctx);
+    if (!(L > 0)) return;
+    if (!Number.isFinite(b)) {
+      yield* this._once(ctx, Math.max(0, a), Infinity);
+      return;
+    }
+    let remaining = b - a;
+    let pos = a % L;
+    if (pos < 0) pos += L;
+    while (remaining > 1e-12) {
+      const emitted = yield* this._once(ctx, pos, pos + remaining);
+      remaining -= emitted;
+      pos = 0;
+    }
+  }
+
+  /**
+   * Yield the source from arc length `from` up to `to`, without wrapping.
+   * Returns the length actually emitted.
+   */
+  *_once(ctx, from, to) {
     let acc = 0;
+    let emitted = 0;
     for (const [s, da, extra] of this.of.arcs(ctx)) {
       const len = Math.abs(s);
       const next = acc + len;
       if (len < 1e-12) {
-        if (acc >= a && acc <= b) yield [0, da, extra];
-      } else if (next > a && acc < b) {
-        const u = Math.max(0, a - acc);
-        const v = Math.min(len, b - acc);
+        if (acc >= from && acc <= to) yield [0, da, extra];
+      } else if (next > from && acc < to) {
+        const u = Math.max(0, from - acc);
+        const v = Math.min(len, to - acc);
         const f = (v - u) / len;
-        if (f > 1e-12) yield [s * f, da * f, extra];
+        if (f > 1e-12) {
+          yield [s * f, da * f, extra];
+          emitted += v - u;
+        }
       }
       acc = next;
-      if (acc >= b) break;
+      if (acc >= to) break;
     }
+    return emitted;
   }
 }
 

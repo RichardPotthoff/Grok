@@ -25,6 +25,13 @@ Profile both allocation (GC pressure) and time. Keep the data model streamable.
 
 ## What landed since 2026-10-15
 
+### Slice wraps (2026-11-08)
+
+- `slice(of, from, to)` treats `of` as periodic. Length is `to − from` (not clipped). A finite range that crosses the end wraps; `*arcs` loops across the period boundary and splits the boundary arcs.
+- `interface()` of a long prefix uses divmod against `of.length()` plus the one-period interface, so the cost is one period walk, not a walk of the whole distance. Full periods are composed by exponentiation.
+- A non-finite `to` still means “to the end of one period” (old clip behaviour).
+- Drop the `repeat(...)` wrapper when you only need a window of a closed outline. `slice(outline, lo, lo1).interface()` and `slice(outline, lo, lo1).arcs()` are enough.
+
 ### UI (drawing_anyui)
 
 - Icon-rail sidebars. Left: Files / hide. Right: Objects / Log / hide. Canvas stays centered so script, drawing, and log are visible together.
