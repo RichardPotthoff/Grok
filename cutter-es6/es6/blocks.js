@@ -658,7 +658,7 @@ export class Seq extends Block {
   }
 }
 
-/** Replay the child n times. A reversed repeat is the reversed child, n times. */
+/** Replay the child n times. Implemented as a wrapping slice of n periods. */
 export class Repeat extends Block {
   /**
    * @param {Block} of
@@ -670,11 +670,16 @@ export class Repeat extends Block {
     this.n = Math.max(0, Math.floor(Number(n) || 0));
   }
 
+  /** A slice that covers exactly n periods. Cached per context length. */
+  _asSlice(ctx) {
+    const L = this.of.length(ctx);
+    return new Slice(this.of, 0, this.n * L);
+  }
+
   computeInterface(ctx) {
-    const one = this.of.interface(ctx);
-    let acc = { ...IFACE0 };
-    for (let i = 0; i < this.n; i++) acc = composeIface(acc, one);
-    return acc;
+    if (this.n === 0) return { ...IFACE0 };
+    if (this.n === 1) return this.of.interface(ctx);
+    return this._asSlice(ctx).interface(ctx);
   }
 
   computeLength(ctx) {
@@ -696,8 +701,8 @@ export class Repeat extends Block {
   }
 
   *arcs(ctx = {}) {
-    const c = walkCtx(ctx);
-    for (let k = 0; k < this.n; k++) yield* this.of.arcs({ ...c, k });
+    if (this.n === 0) return;
+    yield* this._asSlice(ctx).arcs(ctx);
   }
 
   computeBound(ctx) {

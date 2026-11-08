@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-04.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v38-20261104`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v39-20261108`. Hard-refresh after a deploy.
 
 ## Next conversation — performance for ESP32 / modded xs
 
@@ -32,9 +32,15 @@ Profile both allocation (GC pressure) and time. Keep the data model streamable.
 - A non-finite `to` still means “to the end of one period” (old clip behaviour).
 - Drop the `repeat(...)` wrapper when you only need a window of a closed outline. `slice(outline, lo, lo1).interface()` and `slice(outline, lo, lo1).arcs()` are enough.
 
+### Repeat is a slice (2026-11-08)
+
+- `repeat(of, n)` is implemented as a wrapping `slice(of, 0, n * of.length())`. Interface and arcs go through the same period/divmod path. Length, closed-area, arc-count, bound, and nearest shortcuts stay on `Repeat`.
+- A large `n` no longer expands. Cost is one period plus a fast composition.
+
 ### UI (drawing_anyui)
 
-- Icon-rail sidebars. Left: Files / hide. Right: Objects / Log / hide. Canvas stays centered so script, drawing, and log are visible together.
+- Icon-rail sidebars. Left: Files / hide. Right: Preview / Objects / Log / hide. Right views are multi-select; Preview and Log stack vertically when both are on. Collapsing the right rail gives the script the full remaining width. Run auto-opens the right rail on Preview.
+- Files is a folder-mode tree (`anyui/tree.js`). Path-style script names. Rename on the editor and on a folder row. Selecting a script opens it in the same panel (Done / Run / Output on|off).
 - Files is a folder-mode tree (`anyui/tree.js`). Path-style script names. Rename on the editor and on a folder row. Selecting a script opens it in the same panel (Done / Run / Output on|off).
 - Rail icons are drawn with the arc API (`es6/rail-icons.js`) and rendered as SVG.
 - Log pane: Copy and Clear.

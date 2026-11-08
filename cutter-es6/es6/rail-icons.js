@@ -65,7 +65,24 @@ export function logIcon() {
   );
 }
 
-/** Two offset rounded squares — objects. */
+/** Small frame with a curve — preview. */
+export function previewIcon() {
+  return seq(
+    seg(7),
+    turn(90),
+    seg(5),
+    turn(90),
+    seg(7),
+    turn(90),
+    seg(5),
+    turn(90),
+    seg(2),
+    turn(-30),
+    seg(3.5, 0.8),
+    turn(-40),
+    seg(3, -0.6),
+  );
+}
 export function objectsIcon() {
   const box = seq(seg(5), turn(90), seg(4), turn(90), seg(5), turn(90), seg(4), turn(90));
   return seq(box, turn(20), seg(1.6), turn(-20), box);
@@ -110,6 +127,7 @@ export const RAIL = {
   filesOpen: iconSvg(scale(folderIcon(22), 0.9), { width: 1.2 }),
   log: iconSvg(logIcon(), { width: 1.3 }),
   objects: iconSvg(objectsIcon(), { width: 1.2 }),
+  preview: iconSvg(previewIcon(), { width: 1.2 }),
   hideLeft: iconSvg(chevronLeft(), { width: 1.6 }),
   hideRight: iconSvg(chevronRight(), { width: 1.6 }),
 };

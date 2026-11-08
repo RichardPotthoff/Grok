@@ -1,7 +1,8 @@
 /**
  * Drawing REPL chrome — icon-rail sidebars.
- * Left: Files (list → editor). Right: Objects / Log.
- * Canvas stays in the center so script, drawing, and log can be visible together.
+ * Left: Files (list → editor). Right: Preview / Objects / Log.
+ * Right views are multi-select; Preview and Log stack vertically.
+ * Collapsing the right rail gives the script the full remaining width.
  */
 
 import VBox from "./anyui/v-box-cls.js";
@@ -40,7 +41,7 @@ let active = Math.max(0, Math.min(scripts.length - 1, session.active || 0));
 let leftOpen = true;
 let leftView = "files"; // "files" | "editor"
 let rightOpen = false;
-let rightView = "objects"; // "objects" | "log"
+const rightViews = new Set(); // "preview" | "objects" | "log" — multi-select
 const hiddenScripts = new Set();
 
 const editors = scripts.map(
@@ -91,6 +92,7 @@ const btnHideOutput = new Button({ description: "Output" });
 
 const btnFiles = new Button({ description: "Files", icon: RAIL.files });
 const btnHideLeft = new Button({ description: "Hide left", icon: RAIL.hideLeft });
+const btnPreview = new Button({ description: "Preview", icon: RAIL.preview });
 const btnObjects = new Button({ description: "Objects", icon: RAIL.objects });
 const btnLog = new Button({ description: "Log", icon: RAIL.log });
 const btnHideRight = new Button({ description: "Hide right", icon: RAIL.hideRight });
@@ -247,7 +249,7 @@ const leftIcons = new VBox({
 const leftContent = new VBox({
   gap: "0px",
   children: [filesView],
-  layout: { ...fill, minWidth: "200px", width: "240px", maxWidth: "320px" },
+  layout: { ...fill, minWidth: "280px", flex: "1 1 0" },
 });
 
 const leftSidebar = new HBox({
@@ -256,7 +258,7 @@ const leftSidebar = new HBox({
   layout: {
     display: "flex",
     flexDirection: "row",
-    flex: "0 0 auto",
+    flex: "1 1 0",
     minWidth: "40px",
     height: "100%",
     borderRight: "1px solid #ddd6c8",
@@ -265,7 +267,7 @@ const leftSidebar = new HBox({
 
 const rightIcons = new VBox({
   gap: "0px",
-  children: [btnObjects, btnLog, btnHideRight],
+  children: [btnPreview, btnObjects, btnLog, btnHideRight],
   layout: {
     display: "flex",
     flexDirection: "column",
@@ -279,8 +281,8 @@ const rightIcons = new VBox({
 
 const rightContent = new VBox({
   gap: "0px",
-  children: [objectsPanel],
-  layout: { ...fill, minWidth: "180px", width: "200px", maxWidth: "280px" },
+  children: [],
+  layout: { ...fill, minWidth: "240px", flex: "1 1 0" },
 });
 
 const rightSidebar = new HBox({
@@ -289,7 +291,7 @@ const rightSidebar = new HBox({
   layout: {
     display: "flex",
     flexDirection: "row",
-    flex: "0 0 auto",
+    flex: "1 1 0",
     minWidth: "40px",
     height: "100%",
     borderLeft: "1px solid #ddd6c8",
@@ -298,7 +300,7 @@ const rightSidebar = new HBox({
 
 const stageRow = new HBox({
   gap: "0px",
-  children: [leftSidebar, stage, rightSidebar],
+  children: [leftSidebar, rightSidebar],
   layout: { ...fill, minHeight: "0" },
 });
 
@@ -461,16 +463,22 @@ function applyLayout() {
   btnFiles.set("button_style", leftOpen && leftView === "files" ? "primary" : "");
   btnFiles.save_changes();
 
-  // right
+  // right — multi-select; preview + log stack vertically
   rightSidebar.set("children", rightOpen ? [rightContent, rightIcons] : [rightIcons]);
   rightSidebar.save_changes();
   if (rightOpen) {
-    rightContent.set("children", rightView === "log" ? [logPanel] : [objectsPanel]);
+    const panels = [];
+    if (rightViews.has("preview")) panels.push(stage);
+    if (rightViews.has("objects")) panels.push(objectsPanel);
+    if (rightViews.has("log")) panels.push(logPanel);
+    rightContent.set("children", panels);
     rightContent.save_changes();
   }
-  btnObjects.set("button_style", rightOpen && rightView === "objects" ? "primary" : "");
+  btnPreview.set("button_style", rightOpen && rightViews.has("preview") ? "primary" : "");
+  btnPreview.save_changes();
+  btnObjects.set("button_style", rightOpen && rightViews.has("objects") ? "primary" : "");
   btnObjects.save_changes();
-  btnLog.set("button_style", rightOpen && rightView === "log" ? "primary" : "");
+  btnLog.set("button_style", rightOpen && rightViews.has("log") ? "primary" : "");
   btnLog.save_changes();
 
   if (stage.fit) requestAnimationFrame(() => stage.fit());
@@ -498,6 +506,11 @@ function runScript() {
   publishObjects();
   publishLog();
   publishStrokes();
+  if (!rightOpen || !rightViews.has("preview")) {
+    rightOpen = true;
+    rightViews.add("preview");
+    applyLayout();
+  }
   if (stage.fit) stage.fit();
 }
 
@@ -525,7 +538,7 @@ btnHelp.onClick(() => {
   repl.note(API_HELP);
   publishLog();
   rightOpen = true;
-  rightView = "log";
+  rightViews.add("log");
   applyLayout();
 });
 btnLogCopy.onClick(async () => {
@@ -796,24 +809,21 @@ btnHideLeft.onClick(() => {
   leftOpen = false;
   applyLayout();
 });
-btnObjects.onClick(() => {
-  if (rightOpen && rightView === "objects") {
+function toggleRight(view) {
+  if (rightOpen && rightViews.has(view) && rightViews.size === 1) {
     rightOpen = false;
   } else {
     rightOpen = true;
-    rightView = "objects";
+    if (rightViews.has(view)) rightViews.delete(view);
+    else rightViews.add(view);
+    if (rightViews.size === 0) rightOpen = false;
   }
   applyLayout();
-});
-btnLog.onClick(() => {
-  if (rightOpen && rightView === "log") {
-    rightOpen = false;
-  } else {
-    rightOpen = true;
-    rightView = "log";
-  }
-  applyLayout();
-});
+}
+
+btnPreview.onClick(() => toggleRight("preview"));
+btnObjects.onClick(() => toggleRight("objects"));
+btnLog.onClick(() => toggleRight("log"));
 btnHideRight.onClick(() => {
   rightOpen = false;
   applyLayout();
