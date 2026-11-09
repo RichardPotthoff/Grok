@@ -102,7 +102,7 @@ const scriptNameLabel = new Html({ value: `<span class="panel-label">script</spa
 const toolbar = new HBox({
   wrap: true,
   gap: "6px",
-  children: [title, btnFit, btnClearCanvas, btnHelp],
+  children: [title],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -117,6 +117,29 @@ const stage = new StageWidget({
   id: "drawing-stage",
   strokes: [],
   layout: { ...fill, minHeight: "80px", minWidth: "80px" },
+});
+
+const previewHead = new HBox({
+  gap: "6px",
+  children: [
+    new Html({ value: `<span class="panel-label">Preview</span>` }),
+    btnFit,
+    btnClearCanvas,
+  ],
+  layout: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    width: "100%",
+    flex: "0 0 auto",
+    padding: "4px 6px",
+  },
+});
+
+const previewPanel = new VBox({
+  gap: "0px",
+  children: [previewHead, stage],
+  layout: { ...fill },
 });
 
 const objects = new ObjectsWidget({
@@ -160,6 +183,7 @@ const logPanel = new VBox({
       gap: "6px",
       children: [
         new Html({ value: `<span class="panel-label">Log</span>` }),
+        btnHelp,
         btnLogCopy,
         btnLogClear,
       ],
@@ -452,7 +476,28 @@ function showFiles() {
 }
 
 function applyLayout() {
-  // left — size comes from content presence (icons only = collapsed)
+  // Collapsed side is icons only and must not take a flex share.
+  const leftFlex = leftOpen ? "1 1 0" : "0 0 auto";
+  const rightFlex = rightOpen ? "1 1 0" : "0 0 auto";
+  leftSidebar.set("layout", {
+    display: "flex",
+    flexDirection: "row",
+    flex: leftFlex,
+    minWidth: "40px",
+    height: "100%",
+    borderRight: "1px solid #ddd6c8",
+  });
+  leftSidebar.save_changes();
+  rightSidebar.set("layout", {
+    display: "flex",
+    flexDirection: "row",
+    flex: rightFlex,
+    minWidth: "40px",
+    height: "100%",
+    borderLeft: "1px solid #ddd6c8",
+  });
+  rightSidebar.save_changes();
+
   leftSidebar.set("children", leftOpen ? [leftIcons, leftContent] : [leftIcons]);
   leftSidebar.save_changes();
   if (leftOpen) {
@@ -463,12 +508,11 @@ function applyLayout() {
   btnFiles.set("button_style", leftOpen && leftView === "files" ? "primary" : "");
   btnFiles.save_changes();
 
-  // right — multi-select; preview + log stack vertically
   rightSidebar.set("children", rightOpen ? [rightContent, rightIcons] : [rightIcons]);
   rightSidebar.save_changes();
   if (rightOpen) {
     const panels = [];
-    if (rightViews.has("preview")) panels.push(stage);
+    if (rightViews.has("preview")) panels.push(previewPanel);
     if (rightViews.has("objects")) panels.push(objectsPanel);
     if (rightViews.has("log")) panels.push(logPanel);
     rightContent.set("children", panels);
