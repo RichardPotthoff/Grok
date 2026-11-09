@@ -447,6 +447,7 @@ export class Block {
     let pos = a % L;
     if (pos < 0) pos += L;
     while (remaining > 1e-12) {
+      const end = pos + remaining;
       let acc = 0;
       for (const src of this.arcs(ctx, out)) {
         const s = src[0];
@@ -455,10 +456,10 @@ export class Block {
         const len = Math.abs(s);
         const next = acc + len;
         if (len < 1e-12) {
-          if (acc >= pos && acc <= pos + remaining) yield out;
-        } else if (next > pos && acc < pos + remaining) {
+          if (acc >= pos && acc <= end) yield out;
+        } else if (next > pos && acc < end) {
           const u = Math.max(0, pos - acc);
-          const v = Math.min(len, pos + remaining - acc);
+          const v = Math.min(len, end - acc);
           const f = (v - u) / len;
           if (f > 1e-12) {
             out[0] = s * f;
@@ -469,7 +470,7 @@ export class Block {
           }
         }
         acc = next;
-        if (remaining <= 1e-12) break;
+        if (acc >= end) break;
       }
       pos = 0;
     }
