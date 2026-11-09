@@ -23,7 +23,7 @@ import {
   asBlock,
   isBlock,
 } from "./blocks.js";
-import { asPose, ata, biarc, line } from "./connector.js";
+import { asPose, ata, ataArcs, biarc, line } from "./connector.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
 
@@ -298,6 +298,9 @@ export class DrawingRepl {
       },
       ata(from, to, r0, r1, rt, extra) {
         return ata(from, to, r0, r1, rt, extra);
+      },
+      ataArcs(from, to, r0, r1, rt, buf) {
+        return ataArcs(from, to, r0, r1, rt, buf);
       },
       deg: Math.PI / 180,
       asPose(p) {

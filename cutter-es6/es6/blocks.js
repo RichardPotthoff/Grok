@@ -71,18 +71,19 @@ export function composeIface(A, B) {
  * applied at the leaf after scale: s' = s − d·θ for a curved arc, and a
  * hinge becomes the corner fillet of radius d.
  * @param {object} [ctx]
+ * @param {object} [out] optional reused flags object
  */
-export function walkCtx(ctx = {}) {
+export function walkCtx(ctx = {}, out) {
   const scale = Number(ctx.scale);
   const offset = Number(ctx.offset);
-  return {
-    reverse: !!ctx.reverse,
-    mirror: !!ctx.mirror,
-    scale: Number.isFinite(scale) ? scale : 1,
-    offset: Number.isFinite(offset) ? offset : 0,
-    k: ctx.k ?? 0,
-    paint: ctx.paint || null,
-  };
+  const o = out || {};
+  o.reverse = !!ctx.reverse;
+  o.mirror = !!ctx.mirror;
+  o.scale = Number.isFinite(scale) ? scale : 1;
+  o.offset = Number.isFinite(offset) ? offset : 0;
+  o.k = ctx.k ?? 0;
+  o.paint = ctx.paint || null;
+  return o;
 }
 
 export function ctxKey(ctx) {
@@ -90,29 +91,23 @@ export function ctxKey(ctx) {
   return `${c.reverse ? 1 : 0}${c.mirror ? 1 : 0}:${c.scale}:${c.offset}`;
 }
 
-/** Leaf row after the walk flags. A hinge (s = 0, Δθ ≠ 0) is kept. */
-export function emitArc(s, dtheta, ctx) {
-  const c = walkCtx(ctx);
+/** Leaf row after the walk flags. A hinge (s = 0, Δθ ≠ 0) is kept.
+ *  Writes into `out` when given, so the hot path allocates nothing.
+ */
+export function emitArc(s, dtheta, ctx, out) {
+  const c = walkCtx(ctx, out && out._ctx);
   const ss = (Number(s) || 0) * c.scale;
   let da = c.mirror ? -(Number(dtheta) || 0) : Number(dtheta) || 0;
   const d = c.mirror ? -c.offset : c.offset;
   const th = da;
-  if (Math.abs(th) < 1e-12) return { s: ss, dtheta: da };
-  let sOff = ss - d * th;
-  /*
-  if (c.offset !== 0 && sOff < 0) {
-  
-    const R = sOff / th;
-    const loop = Math.abs(R) * TAU;
-    const turn = R < 0 ? -TAU : TAU;
-    if (loop > 1e-12) {
-      while (sOff < 0) {
-        sOff += loop;
-        da += turn;
-      }
-    }
+  let sOff = ss;
+  if (Math.abs(th) >= 1e-12) sOff = ss - d * th;
+  if (out) {
+    out.s = sOff;
+    out.dtheta = da;
+    out._ctx = c;
+    return out;
   }
-  */
   return { s: sOff, dtheta: da };
 }
 
@@ -327,6 +322,62 @@ export class Block {
     return pose3(o);
   }
 
+  /**
+   * Pose at arc length `s` along this block, written into `out`.
+   * Uses the block's period so a long distance costs one period walk
+   * plus a divmod, not a walk of the whole distance. `out` is returned.
+   * @param {number} s
+   * @param {Array|Float64Array} out length ≥ 3
+   */
+  poseAt(s, out, ctx = {}) {
+    const L = this.length(ctx);
+    if (!(L > 0) || s <= 0) {
+      out[0] = 0;
+      out[1] = 0;
+      out[2] = 0;
+      return out;
+    }
+    const q = Math.floor(s / L);
+    const r = s - q * L;
+    const one = pose3(this.interface(ctx));
+    let acc = q > 0 ? this._repeatIface(one, q) : [0, 0, 0];
+    if (r > 1e-12) {
+      let walked = 0;
+      for (const [ss, da] of this.arcs(ctx)) {
+        const len = Math.abs(ss);
+        const next = walked + len;
+        if (len < 1e-12) {
+          if (walked >= r) break;
+          acc = composeIface(acc, arcIface(0, da));
+        } else if (next >= r) {
+          const f = (r - walked) / len;
+          acc = composeIface(acc, arcIface(ss * f, da * f));
+          break;
+        } else {
+          acc = composeIface(acc, arcIface(ss, da));
+        }
+        walked = next;
+      }
+    }
+    const p = pose3(acc);
+    out[0] = p[0];
+    out[1] = p[1];
+    out[2] = p[2];
+    return out;
+  }
+
+  _repeatIface(one, n) {
+    let acc = [0, 0, 0];
+    let step = one;
+    let k = n;
+    while (k > 0) {
+      if (k & 1) acc = composeIface(acc, step);
+      step = composeIface(step, step);
+      k >>= 1;
+    }
+    return acc;
+  }
+
   computeInterface(_ctx) {
     return { ...IFACE0 };
   }
@@ -371,6 +422,58 @@ export class Block {
    * @returns {Generator<[number, number, object]>}
    */
   *arcs(_ctx = {}) {}
+
+  /**
+   * Window of this block from arc length `from` to `to`, wrapping at the
+   * period. Same rows as `slice(this, from, to).arcs()`, without allocating
+   * a Slice.
+   *
+   * If `row` is an array it is filled and yielded on every step (one
+   * object for the whole window). Otherwise each yield is a fresh array.
+   * @param {number} from
+   * @param {number} to
+   * @param {object} [ctx]
+   * @param {Array} [row] optional reusable [s, Δθ, extra]
+   */
+  *arcsSlice(from, to, ctx = {}, row) {
+    const a = Number(from) || 0;
+    const b = Number(to);
+    if (!(b > a)) return;
+    const L = this.length(ctx);
+    if (!(L > 0)) return;
+    const reuse = row && typeof row.length === "number";
+    const out = reuse ? row : [0, 0, null];
+    let remaining = b - a;
+    let pos = a % L;
+    if (pos < 0) pos += L;
+    while (remaining > 1e-12) {
+      let acc = 0;
+      for (const src of this.arcs(ctx, out)) {
+        const s = src[0];
+        const da = src[1];
+        const extra = src[2];
+        const len = Math.abs(s);
+        const next = acc + len;
+        if (len < 1e-12) {
+          if (acc >= pos && acc <= pos + remaining) yield out;
+        } else if (next > pos && acc < pos + remaining) {
+          const u = Math.max(0, pos - acc);
+          const v = Math.min(len, pos + remaining - acc);
+          const f = (v - u) / len;
+          if (f > 1e-12) {
+            out[0] = s * f;
+            out[1] = da * f;
+            out[2] = extra;
+            yield out;
+            remaining -= v - u;
+          }
+        }
+        acc = next;
+        if (remaining <= 1e-12) break;
+      }
+      pos = 0;
+    }
+  }
 
   /** Enclosing circle in this block's frame. `{ cx, cy, r }`. */
   bound(ctx = {}) {
@@ -565,9 +668,13 @@ export class Arc extends Block {
     return { ...hit, s: s0 + hit.s, block: this };
   }
 
-  *arcs(ctx = {}) {
-    const row = emitArc(this.s, this.dtheta, ctx);
-    yield [row.s, row.dtheta, this.paintObject(ctx.paint)];
+  *arcs(ctx = {}, row) {
+    const out = row && typeof row.length === "number" ? row : [0, 0, null];
+    const e = emitArc(this.s, this.dtheta, ctx, out._emit || (out._emit = {}));
+    out[0] = e.s;
+    out[1] = e.dtheta;
+    out[2] = this.paintObject(ctx.paint);
+    yield out;
   }
 }
 
@@ -610,9 +717,10 @@ export class Seq extends Block {
     return n;
   }
 
-  *arcs(ctx = {}) {
+  *arcs(ctx = {}, row) {
     const c = walkCtx(ctx);
-    for (const child of this._kids(c)) yield* child.arcs(c);
+    const out = row && typeof row.length === "number" ? row : [0, 0, null];
+    for (const child of this._kids(c)) yield* child.arcs(c, out);
   }
 
   computeBound(ctx) {

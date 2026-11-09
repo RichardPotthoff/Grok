@@ -128,6 +128,45 @@ export function ata(from, to, r0, r1, rt, extra) {
   return finish(ataCurve(rx, ry, dh, R0, R1, Number(rt)), paint);
 }
 
+/**
+ * Arc-tangent-arc into a caller-supplied buffer.
+ * Writes [s0, Δθ0, sm, Δθm, s1, Δθ1] and returns the buffer.
+ * For the straight-tangent case (rt omitted or non-finite) this
+ * allocates nothing. Other cases fall back to ata() and copy out.
+ * @param {Array|Float64Array} buf length ≥ 6
+ */
+export function ataArcs(from, to, r0, r1, rt, buf) {
+  if (!buf || buf.length < 6) buf = [0, 0, 0, 0, 0, 0];
+  const [rx, ry, dh] = rel(from, to);
+  const R0 = num(r0, 0);
+  const R1 = num(r1, 0);
+  if (
+    Number.isFinite(R0) &&
+    Number.isFinite(R1) &&
+    Math.abs(R0) > 1e-9 &&
+    Math.abs(R1) > 1e-9 &&
+    (rt == null || !Number.isFinite(Number(rt)))
+  ) {
+    const arcs = ataBlockArcs(rx, ry, dh, R0, R1);
+    buf[0] = arcs[0];
+    buf[1] = arcs[1];
+    buf[2] = arcs[2];
+    buf[3] = arcs[3];
+    buf[4] = arcs[4];
+    buf[5] = arcs[5];
+    return buf;
+  }
+  const block = ata(from, to, r0, r1, rt);
+  let i = 0;
+  for (const [s, da] of block.arcs()) {
+    if (i >= 6) break;
+    buf[i++] = s;
+    buf[i++] = da;
+  }
+  while (i < 6) buf[i++] = 0;
+  return buf;
+}
+
 /** Turn of the same sign as r, so s = r·Δθ is never negative. */
 function posTurn(delta, r) {
   let t = wrap(delta);
@@ -205,6 +244,11 @@ function pointArc(rx, ry, dh, r, startArc) {
 }
 
 function ataBlock(rx, ry, dh, r0, r1) {
+  const arcs = ataBlockArcs(rx, ry, dh, r0, r1);
+  return new Seq([new Arc(arcs[0], arcs[1]), new Arc(arcs[2], arcs[3]), new Arc(arcs[4], arcs[5])]);
+}
+
+function ataBlockArcs(rx, ry, dh, r0, r1) {
   const c0x = 0;
   const c0y = r0;
   const c1x = rx - r1 * Math.sin(dh);
@@ -228,7 +272,7 @@ function ataBlock(rx, ry, dh, r0, r1) {
     }
   }
   if (!best) throw new Error("ata: no tangent");
-  return best.block;
+  return best.arcs;
 }
 
 /**
@@ -339,6 +383,6 @@ function buildAta(phi, rx, ry, dh, r0, r1, c1x, c1y) {
   if (err > 1e-4 || s0 < -1e-9 || s1 < -1e-9) return null;
   return {
     cost: Math.abs(s0) + line + Math.abs(s1),
-    block: new Seq([new Arc(s0, turn0), new Arc(line, 0), new Arc(s1, turn1)]),
+    arcs: [s0, turn0, line, 0, s1, turn1],
   };
 }

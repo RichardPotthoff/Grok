@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-04.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v39-20261108`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v40-20261109`. Hard-refresh after a deploy.
 
 ## Next conversation — performance for ESP32 / modded xs
 
@@ -31,6 +31,14 @@ Profile both allocation (GC pressure) and time. Keep the data model streamable.
 - `interface()` of a long prefix uses divmod against `of.length()` plus the one-period interface, so the cost is one period walk, not a walk of the whole distance. Full periods are composed by exponentiation.
 - A non-finite `to` still means “to the end of one period” (old clip behaviour).
 - Drop the `repeat(...)` wrapper when you only need a window of a closed outline. `slice(outline, lo, lo1).interface()` and `slice(outline, lo, lo1).arcs()` are enough.
+
+### Hot-path reuse (2026-11-09)
+
+- `block.poseAt(s, out)` writes the pose at arc length `s` into `out`. Period-aware.
+- `ataArcs(from, to, r0, r1, rt, buf)` writes six numbers into a buffer. Straight-tangent case allocates no `Seq`.
+- `block.arcsSlice(from, to, ctx, row)` is the wrapping window without a `Slice`. Pass `row` to reuse one array.
+- `walkCtx(ctx, out)` and `emitArc(s, dθ, ctx, out)` write into a reused object. `arcs(ctx, row)` threads the row so a leaf yield allocates nothing after the first call.
+- REPL exposes `ataArcs`.
 
 ### Repeat is a slice (2026-11-08)
 
