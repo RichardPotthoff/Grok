@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-04.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v42-20261109`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v44-20261109`. Hard-refresh after a deploy.
 
 ## Next conversation — performance for ESP32 / modded xs
 
@@ -31,6 +31,12 @@ Profile both allocation (GC pressure) and time. Keep the data model streamable.
 - `interface()` of a long prefix uses divmod against `of.length()` plus the one-period interface, so the cost is one period walk, not a walk of the whole distance. Full periods are composed by exponentiation.
 - A non-finite `to` still means “to the end of one period” (old clip behaviour).
 - Drop the `repeat(...)` wrapper when you only need a window of a closed outline. `slice(outline, lo, lo1).interface()` and `slice(outline, lo, lo1).arcs()` are enough.
+
+### Print (2026-11-09)
+
+- `gcode(block, printer)` streams G1 lines. `downloadGcode` writes them (save picker when available, else share/download). `preview3d` builds a rectangular tube and opens the 3D rail view.
+- Printer object and the parameter dialog live in the `print` sample script (Files → Print). `form()` is the only new UI primitive.
+- Z is `z0 + pitch * s`. pitch 0 is one flat layer.
 
 ### Hot-path reuse (2026-11-09)
 

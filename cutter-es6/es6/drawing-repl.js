@@ -24,6 +24,7 @@ import {
   isBlock,
 } from "./blocks.js";
 import { asPose, ata, ataArcs, biarc, line } from "./connector.js";
+import { downloadLines, gcodeLines, gcodeStats, printerDefaults, tubeMesh } from "./gcode.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
 
@@ -51,7 +52,43 @@ store("star6", star6);
 show(star6);
 `;
 
-export const SLICE_SCRIPT = `// Rounded square, a slice of it, and a parallel offset.
+export const PRINT_SCRIPT = `// Print the last shown path.
+// pitch = 0 is one flat layer. For a weave, set pitch = height / length.
+const p = printer({
+  temp: 200,
+  bed: 60,
+  fan: 255,
+  speed: 1800,
+  layer: 0.2,
+  width: 0.45,
+  pitch: 0,
+  seg: 1,
+});
+const asked = await form("Print", [
+  { key: "temp", label: "Hotend C", value: p.temp },
+  { key: "bed", label: "Bed C", value: p.bed },
+  { key: "fan", label: "Fan 0-255", value: p.fan },
+  { key: "speed", label: "Speed mm/min", value: p.speed },
+  { key: "pitch", label: "Z per mm", value: p.pitch },
+  { key: "width", label: "Bead width", value: p.width },
+]);
+if (!asked) {
+  print("cancelled");
+} else {
+  Object.assign(p, asked);
+  const uses = shown();
+  const part = uses.length ? uses[uses.length - 1] : null;
+  if (!part) {
+    print("nothing shown — show() a path first");
+  } else {
+    const stats = gcodeStats(part, p);
+    print("length", stats.length.toFixed(1), "filament", stats.filament.toFixed(1), "min", stats.minutes.toFixed(1));
+    preview3d(part, p);
+    const how = await downloadGcode("part.gcode", part, p);
+    print("gcode", how);
+  }
+}
+`;
 const side = seq(seg(20, 0), seg(Math.PI / 2, Math.PI / 2));
 const roundSq = repeat(side, 4);
 store("roundSq", roundSq);
@@ -235,7 +272,7 @@ export class DrawingRepl {
     const self = this;
     return {
       seg(s, dtheta, fields) {
-        return new Arc(s, dtheta, fields);
+        return new Arc(s, dtheta, fields || undefined);
       },
       turn(dtheta) {
         return new Arc(0, dtheta);
@@ -324,8 +361,8 @@ export class DrawingRepl {
       forget(name) {
         return self.forget(name);
       },
-      show(b, opts) {
-        return self.show(b, opts);
+      shown() {
+        return self.uses.map((u) => u.root);
       },
       clear() {
         self.uses = [];
@@ -346,6 +383,32 @@ export class DrawingRepl {
       print(...args) {
         self.note(args.map(describe).join(" "));
       },
+      printer(over) {
+        return printerDefaults(over);
+      },
+      gcode(block, printer) {
+        return gcodeLines(asBlock(block), printer);
+      },
+      gcodeStats(block, printer) {
+        return gcodeStats(asBlock(block), printer);
+      },
+      tube(block, printer) {
+        return tubeMesh(asBlock(block), printer);
+      },
+      downloadGcode(name, block, printer) {
+        return downloadLines(name || "part.gcode", gcodeLines(asBlock(block), printer));
+      },
+      preview3d(block, printer) {
+        const mesh = tubeMesh(asBlock(block), printer);
+        const hook = typeof window !== "undefined" && window.drawingRepl && window.drawingRepl.show3d;
+        if (hook) hook(mesh);
+        return mesh;
+      },
+      form(title, fields) {
+        const hook = typeof window !== "undefined" && window.drawingRepl && window.drawingRepl.form;
+        if (!hook) return Promise.resolve(Object.fromEntries((fields || []).map((f) => [f.key, f.value])));
+        return hook(title, fields);
+      },
     };
   }
 
@@ -354,7 +417,7 @@ export class DrawingRepl {
    * Uses previously shown by this scriptId are replaced.
    * On throw, restore dict and uses.
    */
-  run(src, { scriptId = "", scriptName = "" } = {}) {
+  async run(src, { scriptId = "", scriptName = "" } = {}) {
     const prevDict = new Map(this.dict);
     const prevOwners = new Map(this.owners);
     const prevUses = this.uses.slice();
@@ -368,8 +431,8 @@ export class DrawingRepl {
     const names = Object.keys(api);
     const markedFrom = this.uses.length;
     try {
-      const fn = new Function(...names, `"use strict";\n${src}\n`);
-      fn(...names.map((k) => api[k]));
+      const fn = new Function(...names, `"use strict";\nreturn (async () => {\n${src}\n})();\n`);
+      await fn(...names.map((k) => api[k]));
       if (scriptId) {
         for (let i = markedFrom; i < this.uses.length; i++) {
           this.uses[i].scriptId = scriptId;

@@ -88,6 +88,29 @@ export function objectsIcon() {
   return seq(box, turn(20), seg(1.6), turn(-20), box);
 }
 
+/** Stacked layers — 3D preview. */
+export function preview3dIcon() {
+  return seq(
+    seg(6),
+    turn(60),
+    seg(3),
+    turn(120),
+    seg(6),
+    turn(60),
+    seg(3),
+    turn(120),
+    seg(1.2),
+    turn(-90),
+    seg(2.2),
+    turn(90),
+    seg(6),
+    turn(60),
+    seg(3),
+    turn(120),
+    seg(6),
+  );
+}
+
 /** Left-pointing chevron. */
 export function chevronLeft() {
   return seq(turn(140), seg(5), turn(-100), seg(5));
@@ -128,6 +151,7 @@ export const RAIL = {
   log: iconSvg(logIcon(), { width: 1.3 }),
   objects: iconSvg(objectsIcon(), { width: 1.2 }),
   preview: iconSvg(previewIcon(), { width: 1.2 }),
+  preview3d: iconSvg(preview3dIcon(), { width: 1.2 }),
   hideLeft: iconSvg(chevronLeft(), { width: 1.6 }),
   hideRight: iconSvg(chevronRight(), { width: 1.6 }),
 };

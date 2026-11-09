@@ -15,12 +15,13 @@ import {
   DEFAULT_SCRIPT,
   STAR6_SCRIPT,
   SLICE_SCRIPT,
+  PRINT_SCRIPT,
   DrawingRepl,
   loadSession,
   newScript,
   saveSession,
 } from "./es6/drawing-repl.js";
-import { LogWidget, ObjectsWidget, ScriptWidget, StageWidget } from "./es6/drawing-ui-cls.js";
+import { LogWidget, ObjectsWidget, ScriptWidget, StageWidget, Preview3dWidget } from "./es6/drawing-ui-cls.js";
 import { RAIL } from "./es6/rail-icons.js";
 import { Zip } from "./es6/ZipEngine.js";
 
@@ -84,6 +85,7 @@ const btnClose = new Button({ description: "Close" });
 const btnSpoke = new Button({ description: "Spoke" });
 const btnStar = new Button({ description: "Star6" });
 const btnSlice = new Button({ description: "Slice" });
+const btnPrint = new Button({ description: "Print" });
 const btnClearStore = new Button({ description: "Clear store" });
 const btnClearCanvas = new Button({ description: "Clear" });
 const btnRename = new Button({ description: "Rename" });
@@ -93,6 +95,7 @@ const btnHideOutput = new Button({ description: "Output" });
 const btnFiles = new Button({ description: "Files", icon: RAIL.files });
 const btnHideLeft = new Button({ description: "Hide left", icon: RAIL.hideLeft });
 const btnPreview = new Button({ description: "Preview", icon: RAIL.preview });
+const btn3d = new Button({ description: "3D", icon: RAIL.preview3d });
 const btnObjects = new Button({ description: "Objects", icon: RAIL.objects });
 const btnLog = new Button({ description: "Log", icon: RAIL.log });
 const btnHideRight = new Button({ description: "Hide right", icon: RAIL.hideRight });
@@ -139,6 +142,31 @@ const previewHead = new HBox({
 const previewPanel = new VBox({
   gap: "0px",
   children: [previewHead, stage],
+  layout: { ...fill },
+});
+
+const preview3d = new Preview3dWidget({
+  id: "drawing-3d",
+  mesh: null,
+  layout: { ...fill, minHeight: "80px" },
+});
+
+const preview3dPanel = new VBox({
+  gap: "0px",
+  children: [
+    new HBox({
+      gap: "6px",
+      children: [new Html({ value: `<span class="panel-label">3D</span>` })],
+      layout: {
+        display: "flex",
+        alignItems: "center",
+        width: "100%",
+        flex: "0 0 auto",
+        padding: "4px 6px",
+      },
+    }),
+    preview3d,
+  ],
   layout: { ...fill },
 });
 
@@ -213,7 +241,7 @@ const fileTree = new Tree({
 const filesHead = new HBox({
   wrap: true,
   gap: "4px",
-  children: [btnNew, btnRename, btnZipDown, btnZipUp, btnSpoke, btnStar, btnSlice],
+  children: [btnNew, btnRename, btnZipDown, btnZipUp, btnSpoke, btnStar, btnSlice, btnPrint],
   layout: {
     display: "flex",
     flexWrap: "wrap",
@@ -291,7 +319,7 @@ const leftSidebar = new HBox({
 
 const rightIcons = new VBox({
   gap: "0px",
-  children: [btnPreview, btnObjects, btnLog, btnHideRight],
+  children: [btnPreview, btn3d, btnObjects, btnLog, btnHideRight],
   layout: {
     display: "flex",
     flexDirection: "column",
@@ -513,6 +541,7 @@ function applyLayout() {
   if (rightOpen) {
     const panels = [];
     if (rightViews.has("preview")) panels.push(previewPanel);
+    if (rightViews.has("3d")) panels.push(preview3dPanel);
     if (rightViews.has("objects")) panels.push(objectsPanel);
     if (rightViews.has("log")) panels.push(logPanel);
     rightContent.set("children", panels);
@@ -520,6 +549,8 @@ function applyLayout() {
   }
   btnPreview.set("button_style", rightOpen && rightViews.has("preview") ? "primary" : "");
   btnPreview.save_changes();
+  btn3d.set("button_style", rightOpen && rightViews.has("3d") ? "primary" : "");
+  btn3d.save_changes();
   btnObjects.set("button_style", rightOpen && rightViews.has("objects") ? "primary" : "");
   btnObjects.save_changes();
   btnLog.set("button_style", rightOpen && rightViews.has("log") ? "primary" : "");
@@ -528,7 +559,7 @@ function applyLayout() {
   if (stage.fit) requestAnimationFrame(() => stage.fit());
 }
 
-function runScript() {
+async function runScript() {
   persist();
   const idx = active;
   const src = editorText(idx);
@@ -539,7 +570,7 @@ function runScript() {
     saveSession({ scripts, active });
   }
   try {
-    repl.run(src, { scriptId: id, scriptName: scriptName(idx) });
+    await repl.run(src, { scriptId: id, scriptName: scriptName(idx) });
     if (s) {
       s.ok = true;
       saveSession({ scripts, active });
@@ -780,6 +811,9 @@ btnSlice.onClick(() => {
   openNamed("slice", SLICE_SCRIPT);
   runScript();
 });
+btnPrint.onClick(() => {
+  openNamed("print", PRINT_SCRIPT);
+});
 btnClearStore.onClick(() => {
   repl.resetStore();
   repl.note("store cleared");
@@ -866,6 +900,7 @@ function toggleRight(view) {
 }
 
 btnPreview.onClick(() => toggleRight("preview"));
+btn3d.onClick(() => toggleRight("3d"));
 btnObjects.onClick(() => toggleRight("objects"));
 btnLog.onClick(() => toggleRight("log"));
 btnHideRight.onClick(() => {
@@ -893,7 +928,57 @@ editors.forEach((ed, i) => {
   });
 });
 
-const mount = document.getElementById("app");
+function openForm(title, fields) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50;";
+    const card = document.createElement("form");
+    card.style.cssText = "background:#f7f3ea;padding:16px;border-radius:8px;min-width:260px;max-width:90vw;display:flex;flex-direction:column;gap:8px;";
+    const h = document.createElement("div");
+    h.textContent = title || "Parameters";
+    h.style.fontWeight = "600";
+    card.append(h);
+    const inputs = {};
+    for (const f of fields || []) {
+      const row = document.createElement("label");
+      row.style.cssText = "display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:14px;";
+      row.append(document.createTextNode(f.label || f.key));
+      const input = document.createElement("input");
+      input.value = f.value == null ? "" : String(f.value);
+      input.style.width = "8rem";
+      row.append(input);
+      card.append(row);
+      inputs[f.key] = input;
+    }
+    const buttons = document.createElement("div");
+    buttons.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    const ok = document.createElement("button");
+    ok.type = "submit";
+    ok.textContent = "OK";
+    buttons.append(cancel, ok);
+    card.append(buttons);
+    overlay.append(card);
+    document.body.append(overlay);
+    const close = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+    cancel.onclick = () => close(null);
+    card.onsubmit = (e) => {
+      e.preventDefault();
+      const out = {};
+      for (const f of fields || []) {
+        const raw = inputs[f.key].value;
+        const n = Number(raw);
+        out[f.key] = raw !== "" && Number.isFinite(n) ? n : raw;
+      }
+      close(out);
+    };
+  });
+}
 
 async function boot() {
   await root.create_view({ el: mount });
@@ -905,14 +990,29 @@ async function boot() {
   const okIdx = scripts.map((s, i) => (s.ok ? i : -1)).filter((i) => i >= 0);
   for (const i of okIdx) {
     active = i;
-    runScript();
+    await runScript();
   }
   if (scripts.length) {
     active = Math.max(0, Math.min(scripts.length - 1, session.active || 0));
     openEditor(active);
   }
   requestAnimationFrame(() => requestAnimationFrame(() => stage.fit()));
-  window.drawingRepl = { repl, stage, editors, runScript, applyLayout };
+  window.drawingRepl = {
+    repl,
+    stage,
+    editors,
+    runScript,
+    applyLayout,
+    show3d(mesh) {
+      preview3d.setMesh(mesh);
+      rightOpen = true;
+      rightViews.add("3d");
+      applyLayout();
+    },
+    form(title, fields) {
+      return openForm(title, fields);
+    },
+  };
 }
 
 boot().catch((err) => {

@@ -1,5 +1,6 @@
 import { AnyuiWidget, widgetManager } from "../anyui/anyui-model.js";
 import { renderStage, renderScript, renderLog, renderObjects } from "./drawing-ui.js";
+import { renderPreview3d } from "./preview3d.js";
 
 export class StageWidget extends AnyuiWidget {
   constructor(initialState = {}) {
@@ -34,6 +35,20 @@ export class LogWidget extends AnyuiWidget {
   }
 }
 
+export class Preview3dWidget extends AnyuiWidget {
+  constructor(initialState = {}) {
+    super({ mesh: null, ...initialState });
+    this._esm = { render: renderPreview3d };
+  }
+  setMesh(mesh) {
+    this.set("mesh", mesh);
+    this.save_changes();
+    if (this._view) this._view.setMesh(mesh);
+  }
+  static {
+    widgetManager.register_class(this);
+  }
+}
 export class ObjectsWidget extends AnyuiWidget {
   constructor(initialState = {}) {
     super({ items: [], ...initialState });

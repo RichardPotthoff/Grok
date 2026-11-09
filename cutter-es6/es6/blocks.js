@@ -298,6 +298,7 @@ export class Block {
    * @param {{id?: string, name?: string}} [fields]
    */
   constructor(type, fields = {}) {
+    if (!fields || typeof fields !== "object") fields = {};
     this.type = type;
     this.id = fields.id || uid(type);
     this.name = fields.name || "";
@@ -442,7 +443,7 @@ export class Block {
     const L = this.length(ctx);
     if (!(L > 0)) return;
     const reuse = row && typeof row.length === "number";
-    const out = reuse ? row : [0, 0, null];
+    const out = reuse ? row : [0, 0];
     let remaining = b - a;
     let pos = a % L;
     if (pos < 0) pos += L;
@@ -464,7 +465,8 @@ export class Block {
           if (f > 1e-12) {
             out[0] = s * f;
             out[1] = da * f;
-            out[2] = extra;
+            if (extra) out[2] = extra;
+            else out.length = 2;
             yield out;
             remaining -= v - u;
           }
@@ -670,11 +672,13 @@ export class Arc extends Block {
   }
 
   *arcs(ctx = {}, row) {
-    const out = row && typeof row.length === "number" ? row : [0, 0, null];
+    const out = row && typeof row.length === "number" ? row : [0, 0];
     const e = emitArc(this.s, this.dtheta, ctx, out._emit || (out._emit = {}));
     out[0] = e.s;
     out[1] = e.dtheta;
-    out[2] = this.paintObject(ctx.paint);
+    const paint = this.paintObject(ctx.paint);
+    if (paint) out[2] = paint;
+    else out.length = 2;
     yield out;
   }
 }
@@ -720,7 +724,7 @@ export class Seq extends Block {
 
   *arcs(ctx = {}, row) {
     const c = walkCtx(ctx);
-    const out = row && typeof row.length === "number" ? row : [0, 0, null];
+    const out = row && typeof row.length === "number" ? row : [0, 0];
     for (const child of this._kids(c)) yield* child.arcs(c, out);
   }
 
@@ -1095,7 +1099,7 @@ export class Orbit extends Block {
   *arcs(ctx = {}) {
     const c = walkCtx(ctx);
     const extra = this.paintObject(c.paint);
-    for (const [s, da] of this.baked(c)) yield [s, da, extra];
+    for (const [s, da] of this.baked(c)) yield extra ? [s, da, extra] : [s, da];
   }
 }
 
@@ -1343,13 +1347,13 @@ export class Slice extends Block {
       const len = Math.abs(s);
       const next = acc + len;
       if (len < 1e-12) {
-        if (acc >= from && acc <= to) yield [0, da, extra];
+        if (acc >= from && acc <= to) yield extra ? [0, da, extra] : [0, da];
       } else if (next > from && acc < to) {
         const u = Math.max(0, from - acc);
         const v = Math.min(len, to - acc);
         const f = (v - u) / len;
         if (f > 1e-12) {
-          yield [s * f, da * f, extra];
+          yield extra ? [s * f, da * f, extra] : [s * f, da * f];
           emitted += v - u;
         }
       }
@@ -1409,8 +1413,14 @@ export class Ref extends Block {
  */
 export function asBlock(x) {
   if (x instanceof Block) return x;
-  if (Array.isArray(x) && x.length === 2 && typeof x[0] === "number") {
-    return new Arc(x[0], x[1]);
+  if (
+    Array.isArray(x) &&
+    (x.length === 2 || x.length === 3) &&
+    typeof x[0] === "number" &&
+    typeof x[1] === "number"
+  ) {
+    const fields = x[2] && typeof x[2] === "object" ? x[2] : undefined;
+    return new Arc(x[0], x[1], fields);
   }
   if (Array.isArray(x)) return new Seq(x.map(asBlock));
   throw new Error("not a block");
