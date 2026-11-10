@@ -77,24 +77,38 @@ function fmt(n) {
 }
 
 /**
- * Sample one arc into points in the current pose frame, then step the pose.
- * Yields {x, y, z, e, travel} with e advanced by extruded length.
+ * Sample one arc into points. Z, bead width, and layer height come from
+ * the arc's extra when set, otherwise from the printer.
+ *   extra.z   absolute Z at the end of this arc (constant along it)
+ *   extra.hl  layer height, for the bead and the volume
+ *   extra.width  bead width
+ * Volume is width * hl * length. Z is emitted only when it changes.
  */
-function* arcSamples(pose, s, da, p, state) {
+function* arcSamples(pose, s, da, extra, p, state) {
   const len = Math.abs(s);
-  const travel = len < 1e-9;
+  const travel = len < 1e-9 || (extra && extra.width === 0);
+  const width = extra && extra.width != null ? extra.width : p.width || p.nozzle;
+  const hl = extra && extra.hl != null ? extra.hl : p.layer || 0.2;
+  const z = extra && extra.z != null ? extra.z : (p.z0 ?? p.layer ?? 0.2) + (p.pitch || 0) * (state.s + len);
   const n = travel || Math.abs(da) < 1e-9 ? 1 : Math.max(1, Math.ceil(len / (p.seg || 1)));
   const ds = s / n;
   const dda = da / n;
-  const area = (p.width || p.nozzle) * (p.layer || 0.2) * (p.flow || 1);
+  const area = (width || 0) * hl * (p.flow || 1);
   const ePer = area / FILAMENT_AREA(p.filament || 1.75);
   for (let i = 0; i < n; i++) {
     stepPose(pose, ds, dda);
-    const dist = state.s + Math.abs(ds);
-    state.s = dist;
+    state.s += Math.abs(ds);
     if (!travel) state.e += Math.abs(ds) * ePer;
-    const z = (p.z0 ?? p.layer ?? 0.2) + (p.pitch || 0) * state.s;
-    yield { x: pose[0], y: pose[1], z, e: state.e, travel, f: travel ? p.travel : p.speed };
+    yield {
+      x: pose[0],
+      y: pose[1],
+      z,
+      e: state.e,
+      travel,
+      width,
+      hl,
+      f: travel ? p.travel : p.speed,
+    };
   }
 }
 
@@ -105,9 +119,14 @@ export function* gcodeLines(block, printer = {}) {
   const pose = [0, 0, 0];
   const state = { s: 0, e: 0 };
   let prevTravel = true;
-  for (const [s, da] of block.arcs()) {
-    for (const pt of arcSamples(pose, s, da, p, state)) {
-      const words = [`G1 X${fmt(pt.x)} Y${fmt(pt.y)} Z${fmt(pt.z)}`];
+  let prevZ = null;
+  for (const [s, da, extra] of block.arcs()) {
+    for (const pt of arcSamples(pose, s, da, extra, p, state)) {
+      const words = [`G1 X${fmt(pt.x)} Y${fmt(pt.y)}`];
+      if (prevZ === null || Math.abs(pt.z - prevZ) > 1e-4) {
+        words.push(`Z${fmt(pt.z)}`);
+        prevZ = pt.z;
+      }
       if (!pt.travel) words.push(`E${fmt(pt.e)}`);
       if (pt.travel !== prevTravel) words.push(`F${Math.round(pt.f || p.speed)}`);
       prevTravel = pt.travel;
@@ -117,20 +136,24 @@ export function* gcodeLines(block, printer = {}) {
   yield endText(p);
 }
 
-/** Totals without keeping the lines. */
+/** Totals without keeping the lines. Volume uses each arc's width and hl. */
 export function gcodeStats(block, printer = {}) {
   const p = printerDefaults(printer);
   let length = 0;
-  let extrude = 0;
-  for (const [s] of block.arcs()) {
+  let filament = 0;
+  let zMax = p.z0 ?? p.layer ?? 0.2;
+  for (const [s, , extra] of block.arcs()) {
     const len = Math.abs(s);
     length += len;
-    if (len > 1e-9) extrude += len;
+    if (len < 1e-9 || (extra && extra.width === 0)) continue;
+    const width = extra && extra.width != null ? extra.width : p.width || p.nozzle;
+    const hl = extra && extra.hl != null ? extra.hl : p.layer || 0.2;
+    const z = extra && extra.z != null ? extra.z : (p.z0 ?? hl) + (p.pitch || 0) * length;
+    if (z > zMax) zMax = z;
+    filament += (len * width * hl * (p.flow || 1)) / FILAMENT_AREA(p.filament || 1.75);
   }
-  const area = (p.width || p.nozzle) * (p.layer || 0.2) * (p.flow || 1);
-  const filament = (extrude * area) / FILAMENT_AREA(p.filament || 1.75);
-  const minutes = extrude / (p.speed || 1800);
-  return { length, extrude, filament, minutes, layers: p.pitch ? (p.pitch * length) / (p.layer || 0.2) : 1 };
+  const minutes = length / (p.speed || 1800);
+  return { length, filament, minutes, zMax };
 }
 
 /**
@@ -141,15 +164,17 @@ export function gcodeStats(block, printer = {}) {
  */
 export function tubeMesh(block, printer = {}) {
   const p = printerDefaults(printer);
-  const w = (p.width || p.nozzle || 0.4) / 2;
-  const h = (p.layer || 0.2) / 2;
   const pose = [0, 0, 0];
   const state = { s: 0, e: 0 };
   const rings = [];
-  rings.push(ringAt(pose, (p.z0 ?? 0.2), w, h));
-  for (const [s, da] of block.arcs()) {
-    for (const pt of arcSamples(pose, s, da, p, state)) {
-      if (!pt.travel) rings.push(ringAt(pose, pt.z, w, h));
+  const z0 = p.z0 ?? p.layer ?? 0.2;
+  const w0 = (p.width || p.nozzle || 0.4) / 2;
+  const h0 = (p.layer || 0.2) / 2;
+  rings.push(ringAt(pose, z0, w0, h0));
+  for (const [s, da, extra] of block.arcs()) {
+    for (const pt of arcSamples(pose, s, da, extra, p, state)) {
+      if (pt.travel) continue;
+      rings.push(ringAt(pose, pt.z, (pt.width || 0.4) / 2, (pt.hl || 0.2) / 2));
     }
   }
   return loft(rings);
@@ -219,10 +244,11 @@ export async function downloadLines(name, lines) {
   }
   const parts = [];
   for (const line of lines) parts.push(line + "\n");
-  const blob = new Blob(parts, { type: "text/plain" });
-  const file = new File([blob], name, { type: "text/plain" });
+  const blob = new Blob(parts, { type: "application/octet-stream" });
+  const file = new File([blob], name, { type: "application/octet-stream" });
+  // Title or text on the share sheet is saved by Files as a second .txt.
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title: name });
+    await navigator.share({ files: [file] });
     return "shared";
   }
   const a = document.createElement("a");

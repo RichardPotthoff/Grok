@@ -115,7 +115,8 @@ print("nearest", nearest(roundSq, 8, 6));
 `;
 
 export const API_HELP = [
-  "seg(s, dθ)           one arc — radians. deg = π/180",
+  "seg(s, dθ, {stroke, width, hl, z})  arc. z and hl ride on the row",
+  "  width*hl*length is the extruded volume. width 0 is a move",
   "turn(dθ)             hinge, s = 0",
   "ah(w, l)             arrowhead (Python AH)",
   "seq(a, b, …) / cat   relative concatenate",

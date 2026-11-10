@@ -1158,6 +1158,14 @@ function ownPaint(fields) {
     out.width = Number(fields.width);
     any = true;
   }
+  if (fields.hl != null) {
+    out.hl = Number(fields.hl);
+    any = true;
+  }
+  if (fields.z != null) {
+    out.z = Number(fields.z);
+    any = true;
+  }
   if (fields.fill != null) {
     out.fill = fields.fill;
     any = true;
