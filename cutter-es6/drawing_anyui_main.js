@@ -980,6 +980,8 @@ function openForm(title, fields) {
   });
 }
 
+const mount = document.getElementById("app");
+
 async function boot() {
   await root.create_view({ el: mount });
   refreshFilesList();
