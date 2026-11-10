@@ -89,6 +89,8 @@ if (!asked) {
   }
 }
 `;
+
+export const SLICE_SCRIPT = `// Rounded square, a slice of it, and a parallel offset.
 const side = seq(seg(20, 0), seg(Math.PI / 2, Math.PI / 2));
 const roundSq = repeat(side, 4);
 store("roundSq", roundSq);
@@ -169,14 +171,14 @@ export class DrawingRepl {
 
   /**
    * Register any value. A relative name is stored under the script path.
-   * A name that already contains `/` is used as given.
+   * A name that already contains / is used as given.
    */
   qualify(name, scriptName = this._scriptName) {
     const n = String(name || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     if (!n) throw new Error("store: empty name");
     if (n.includes("/")) return n;
     const script = String(scriptName || "").replace(/\\/g, "/").replace(/\/+$/g, "");
-    return script ? `${script}/${n}` : n;
+    return script ? script + "/" + n : n;
   }
 
   store(name, value) {
@@ -360,6 +362,9 @@ export class DrawingRepl {
       },
       forget(name) {
         return self.forget(name);
+      },
+      show(b, opts) {
+        return self.show(b, opts);
       },
       shown() {
         return self.uses.map((u) => u.root);

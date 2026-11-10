@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-04.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v44-20261109`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v46-20261110`. Hard-refresh after a deploy.
 
 ## Next conversation — performance for ESP32 / modded xs
 

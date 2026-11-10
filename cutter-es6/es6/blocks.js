@@ -465,8 +465,7 @@ export class Block {
           if (f > 1e-12) {
             out[0] = s * f;
             out[1] = da * f;
-            if (extra) out[2] = extra;
-            else out.length = 2;
+            out[2] = extra || undefined;
             yield out;
             remaining -= v - u;
           }
@@ -672,13 +671,12 @@ export class Arc extends Block {
   }
 
   *arcs(ctx = {}, row) {
-    const out = row && typeof row.length === "number" ? row : [0, 0];
+    const reuse = row && typeof row.length === "number";
+    const out = reuse ? row : [0, 0, undefined];
     const e = emitArc(this.s, this.dtheta, ctx, out._emit || (out._emit = {}));
     out[0] = e.s;
     out[1] = e.dtheta;
-    const paint = this.paintObject(ctx.paint);
-    if (paint) out[2] = paint;
-    else out.length = 2;
+    out[2] = this.paintObject(ctx.paint) || undefined;
     yield out;
   }
 }
@@ -1099,7 +1097,7 @@ export class Orbit extends Block {
   *arcs(ctx = {}) {
     const c = walkCtx(ctx);
     const extra = this.paintObject(c.paint);
-    for (const [s, da] of this.baked(c)) yield extra ? [s, da, extra] : [s, da];
+    for (const [s, da] of this.baked(c)) yield [s, da, extra || undefined];
   }
 }
 
@@ -1347,13 +1345,13 @@ export class Slice extends Block {
       const len = Math.abs(s);
       const next = acc + len;
       if (len < 1e-12) {
-        if (acc >= from && acc <= to) yield extra ? [0, da, extra] : [0, da];
+        if (acc >= from && acc <= to) yield [0, da, extra || undefined];
       } else if (next > from && acc < to) {
         const u = Math.max(0, from - acc);
         const v = Math.min(len, to - acc);
         const f = (v - u) / len;
         if (f > 1e-12) {
-          yield extra ? [s * f, da * f, extra] : [s * f, da * f];
+          yield [s * f, da * f, extra || undefined];
           emitted += v - u;
         }
       }
