@@ -135,7 +135,10 @@ export const API_HELP = [
   "define(name, b)      same as store",
   "forget(name)         drop one stored name",
   "paint(b, {stroke, width, fill})  restyle; width 0 is a move",
-  "show(b, {at, heading, stroke, width, fill, name})",
+  "show(b, {at, heading, stroke, width, fill, name})  page. call again to add",
+  "show3D(b, printer?)  3D tube of the same path",
+  "size(w, h)          Fit window in world units. omit to fit the path",
+  "load(path)          stored value; runs that script if missing or changed",
   "line(from, to, extra?)     turn-line-turn",
   "biarc(from, to, p=1, extra?)  G1 biarc",
   "ata(from, to, r0=0, r1=0, rt?, extra?)  arc-tangent-arc",
@@ -155,6 +158,8 @@ export class DrawingRepl {
     this.log = [];
     this._scriptId = "";
     this._scriptName = "";
+    this._quiet = false;
+    this.viewSize = null;
   }
 
   reset() {
@@ -195,11 +200,21 @@ export class DrawingRepl {
   }
 
   /**
-   * Exact key, or every export under a script path as `{ baseName: value }`.
+   * Exact key, or every export under a script path.
+   * If the value is missing, or its script has changed, run that script
+   * with show suppressed, then look up again.
    */
-  load(path) {
+  async load(path) {
     const key = String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     if (!key) return undefined;
+    if (!(await this._fresh(key))) {
+      const importer = this._import;
+      if (importer) await importer(key);
+    }
+    return this._lookup(key);
+  }
+
+  _lookup(key) {
     if (this.dict.has(key)) return this.dict.get(key);
     const prefix = key + "/";
     const bag = {};
@@ -210,11 +225,14 @@ export class DrawingRepl {
         n++;
       }
     }
-    if (!n) {
-      this.note("load: no " + key);
-      return undefined;
-    }
-    return bag;
+    return n ? bag : undefined;
+  }
+
+  async _fresh(key) {
+    if (!this.dict.has(key) && !this._lookup(key)) return false;
+    const stale = this._stale;
+    if (!stale) return true;
+    return !(await stale(key));
   }
 
   forget(name) {
@@ -245,6 +263,7 @@ export class DrawingRepl {
    * @param {object} [opts]
    */
   show(block, opts = {}) {
+    if (this._quiet) return null;
     const root = typeof block === "string" ? this.dict.get(block) : block;
     if (!isBlock(root)) {
       throw new Error("show: not a block" + (typeof block === "string" ? " (" + block + ")" : ""));
@@ -265,6 +284,12 @@ export class DrawingRepl {
     };
     this.uses.push(use);
     return use;
+  }
+
+  /** World window for Fit, like matplotlib figsize. Null means fit the path. */
+  size(w, h) {
+    this.viewSize = { w: Number(w) || 10, h: Number(h) || Number(w) || 10 };
+    return this.viewSize;
   }
 
   lookup(name) {
@@ -367,6 +392,16 @@ export class DrawingRepl {
       show(b, opts) {
         return self.show(b, opts);
       },
+      show3D(b, printer) {
+        if (self._quiet) return null;
+        const mesh = tubeMesh(asBlock(b), printer);
+        const hook = typeof window !== "undefined" && window.drawingRepl && window.drawingRepl.show3d;
+        if (hook) hook(mesh);
+        return mesh;
+      },
+      size(w, h) {
+        return self.size(w, h);
+      },
       shown() {
         return self.uses.map((u) => u.root);
       },
@@ -405,10 +440,7 @@ export class DrawingRepl {
         return downloadLines(name || "part.gcode", gcodeLines(asBlock(block), printer));
       },
       preview3d(block, printer) {
-        const mesh = tubeMesh(asBlock(block), printer);
-        const hook = typeof window !== "undefined" && window.drawingRepl && window.drawingRepl.show3d;
-        if (hook) hook(mesh);
-        return mesh;
+        return this.show3D(block, printer);
       },
       form(title, fields) {
         const hook = typeof window !== "undefined" && window.drawingRepl && window.drawingRepl.form;
@@ -423,16 +455,19 @@ export class DrawingRepl {
    * Uses previously shown by this scriptId are replaced.
    * On throw, restore dict and uses.
    */
-  async run(src, { scriptId = "", scriptName = "" } = {}) {
+  async run(src, { scriptId = "", scriptName = "", quiet = false } = {}) {
     const prevDict = new Map(this.dict);
     const prevOwners = new Map(this.owners);
     const prevUses = this.uses.slice();
     const prevId = this._scriptId;
     const prevName = this._scriptName;
+    const prevQuiet = this._quiet;
     this.dropOwned(scriptId);
-    if (scriptId) this.uses = this.uses.filter((u) => u.scriptId !== scriptId);
+    if (!quiet) this.uses = [];
+    else if (scriptId) this.uses = this.uses.filter((u) => u.scriptId !== scriptId);
     this._scriptId = scriptId;
     this._scriptName = scriptName;
+    this._quiet = quiet;
     const api = this.api();
     const names = Object.keys(api);
     const markedFrom = this.uses.length;
@@ -455,6 +490,8 @@ export class DrawingRepl {
       this._scriptName = prevName;
       this.note("err " + (err && err.message ? err.message : String(err)));
       throw err;
+    } finally {
+      this._quiet = prevQuiet;
     }
   }
 

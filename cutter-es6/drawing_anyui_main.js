@@ -559,25 +559,28 @@ function applyLayout() {
   if (stage.fit) requestAnimationFrame(() => stage.fit());
 }
 
-async function runScript() {
-  persist();
-  const idx = active;
+async function runOne(idx, { quiet = false } = {}) {
   const src = editorText(idx);
-  const id = scripts[idx] && scripts[idx].id;
   const s = scripts[idx];
   if (s) {
     s.ok = false;
     saveSession({ scripts, active });
   }
   try {
-    await repl.run(src, { scriptId: id, scriptName: scriptName(idx) });
+    await repl.run(src, { scriptId: s && s.id, scriptName: scriptName(idx), quiet });
     if (s) {
       s.ok = true;
       saveSession({ scripts, active });
     }
+    return true;
   } catch {
-    /* logged; ok stays false */
+    return false;
   }
+}
+
+async function runScript() {
+  persist();
+  await runOne(active, { quiet: false });
   publishObjects();
   publishLog();
   publishStrokes();
@@ -1014,6 +1017,18 @@ async function boot() {
     form(title, fields) {
       return openForm(title, fields);
     },
+  };
+  repl._import = async (key) => {
+    let idx = scripts.findIndex((s, i) => scriptName(i) === key);
+    if (idx < 0) idx = scripts.findIndex((s, i) => key.startsWith(scriptName(i) + "/"));
+    if (idx < 0) return false;
+    return runOne(idx, { quiet: true });
+  };
+  repl._stale = (key) => {
+    const id = repl.owners.get(key);
+    if (!id) return false;
+    const s = scripts.find((row) => row.id === id);
+    return !!(s && !s.ok);
   };
 }
 

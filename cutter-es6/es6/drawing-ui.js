@@ -13,57 +13,116 @@ const INK = {
   paper: "#f3ead8",
 };
 
+/** Sample one arc straight into lineTo. No point array. */
+function traceArc(ctx, x, y, hd, s, da, tol) {
+  const ang = da || 0;
+  if (Math.abs(ang) < 1e-9 || Math.abs(s) < 1e-9) {
+    ctx.lineTo(x + s * Math.cos(hd), y + s * Math.sin(hd));
+    return;
+  }
+  const R = s / ang;
+  const cx = x - R * Math.sin(hd);
+  const cy = y + R * Math.cos(hd);
+  const err = Math.min(Math.abs(R), tol);
+  const maxStep = 2 * Math.acos(Math.max(-1, 1 - err / Math.abs(R)));
+  const n = Math.max(1, Math.ceil(Math.abs(ang) / (maxStep || 1)));
+  for (let i = 1; i <= n; i++) {
+    const a = hd + ang * (i / n);
+    ctx.lineTo(cx + R * Math.sin(a), cy - R * Math.cos(a));
+  }
+}
+
+function stepTo(x, y, hd, s, da) {
+  const ang = da || 0;
+  if (Math.abs(ang) < 1e-12) return [x + s * Math.cos(hd), y + s * Math.sin(hd), hd];
+  const half = ang / 2;
+  const chord = (s * Math.sin(half)) / half;
+  const mid = hd + half;
+  return [x + chord * Math.cos(mid), y + chord * Math.sin(mid), hd + ang];
+}
+
 function paintUse(ctx, use, cam) {
   const base = {
     stroke: use.stroke || "ink",
     width: use.width == null ? null : use.width,
     fill: use.fill || null,
+    dash: null,
   };
   const root = use.root;
-  const rows =
-    root && typeof root.arcs === "function"
-      ? root.arcs({ paint: base })
-      : use.tagged || null;
-  if (!rows) {
+  if (!root || typeof root.arcs !== "function") {
     drawRun(ctx, iterPoints(use, 0.04), base, cam);
     return;
   }
+  const tol = 0.04;
+  fillPass(ctx, root, use, base, tol);
+  strokePass(ctx, root, use, base, cam, tol);
+}
+
+function fillPass(ctx, root, use, base, tol) {
   let x = (use.startPoint || [0, 0])[0];
   let y = (use.startPoint || [0, 0])[1];
   let hd = use.startAngle || 0;
-  let run = [];
-  let style = null;
-  const flush = () => {
-    if (run.length) drawRun(ctx, run, style || base, cam);
-    run = [];
+  let open = false;
+  let fill = null;
+  const close = () => {
+    if (open && fill) ctx.fill();
+    open = false;
   };
-  for (const [s, da, extra] of rows) {
-    const next = extra || base;
-    if (style && (next !== style || next.stroke !== style.stroke || next.width !== style.width || next.fill !== style.fill || next.dash !== style.dash)) {
-      flush();
+  for (const [s, da, extra] of root.arcs({ paint: base })) {
+    const src = extra || {};
+    const next = src.fill != null ? src.fill : base.fill;
+    const w = src.width != null ? src.width : base.width;
+    const penUp = w === 0 && !src.dash;
+    if (open && (next !== fill || penUp)) close();
+    fill = next;
+    if (fill && !penUp) {
+      if (!open) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.fillStyle = INK[fill] || fill;
+        open = true;
+      }
+      traceArc(ctx, x, y, hd, s, da, tol);
     }
-    style = next;
-    const showMove = next.width === 0 && next.dash;
-    const penUp = next.width === 0 && !showMove;
-    if (!run.length) run.push([x, y]);
-    if (!penUp) {
-      const step = walkPath(
-        { startPoint: [x, y], startAngle: (hd * 180) / Math.PI, turtlePath: [[s, (da * 180) / Math.PI]] },
-        { scale: 1, tol: 0.04, returnStart: false },
-      );
-      for (const row of step) run.push(row.point);
-    }
-    const th = hd;
-    const ang = da;
-    const half = ang / 2;
-    const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
-    const mid = th + half;
-    x += chord * Math.cos(mid);
-    y += chord * Math.sin(mid);
-    hd += da;
-    if (penUp) flush();
+    [x, y, hd] = stepTo(x, y, hd, s, da);
   }
-  flush();
+  close();
+}
+
+function strokePass(ctx, root, use, base, cam, tol) {
+  let x = (use.startPoint || [0, 0])[0];
+  let y = (use.startPoint || [0, 0])[1];
+  let hd = use.startAngle || 0;
+  let open = false;
+  let stroke = base.stroke;
+  let width = base.width;
+  let dash = base.dash;
+  const strokeNow = () => {
+    if (!open) return;
+    applyStyle(ctx, stroke, width, null, dash, cam);
+    if (!(width === 0 && !dash)) ctx.stroke();
+    open = false;
+  };
+  for (const [s, da, extra] of root.arcs({ paint: base })) {
+    const src = extra || {};
+    const ns = src.stroke != null ? src.stroke : base.stroke;
+    const nw = src.width != null ? src.width : base.width;
+    const nd = src.dash != null ? src.dash : base.dash;
+    if (open && (ns !== stroke || nw !== width || nd !== dash)) strokeNow();
+    stroke = ns;
+    width = nw;
+    dash = nd;
+    const penUp = width === 0 && !dash;
+    if (!open) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      open = true;
+    }
+    if (!penUp) traceArc(ctx, x, y, hd, s, da, tol);
+    [x, y, hd] = stepTo(x, y, hd, s, da);
+    if (penUp) strokeNow();
+  }
+  strokeNow();
 }
 
 function dashPattern(dash) {
@@ -78,48 +137,76 @@ function drawRun(ctx, pts, style, cam) {
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-  const w = style.width;
-  const debugMove = w === 0 && style.dash;
-  const penUp = w === 0 && !debugMove;
-  ctx.strokeStyle = INK[style.stroke] || style.stroke || "#111";
-  const hair = 1.25 / (cam.scale || 1);
-  ctx.lineWidth = penUp ? 0 : debugMove ? hair : w == null ? hair : w;
-  ctx.setLineDash(dashPattern(style.dash));
-  if (style.fill && (INK[style.fill] || style.fill)) {
-    ctx.fillStyle = INK[style.fill] || style.fill;
-    ctx.fill();
-  }
-  if (!penUp) ctx.stroke();
+  applyStyle(ctx, style.stroke, style.width, style.fill, style.dash, cam);
+  if (style.fill) ctx.fill();
+  if (!(style.width === 0 && !style.dash)) ctx.stroke();
   ctx.setLineDash([]);
 }
+function applyStyle(ctx, stroke, width, fill, dash, cam) {
+  const debugMove = width === 0 && dash;
+  const penUp = width === 0 && !debugMove;
+  ctx.strokeStyle = INK[stroke] || stroke || "#111";
+  const hair = 1.25 / (cam.scale || 1);
+  ctx.lineWidth = penUp ? 0 : debugMove ? hair : width == null ? hair : width;
+  ctx.setLineDash(dashPattern(dash));
+  if (fill && (INK[fill] || fill)) ctx.fillStyle = INK[fill] || fill;
+}
+/** Axis-aligned box of one use. Only the two corners are kept. */
+function boundsOfUse(use) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const add = (x, y) => {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  };
+  const x0 = (use.startPoint || [0, 0])[0];
+  const y0 = (use.startPoint || [0, 0])[1];
+  add(x0, y0);
+  if (use.root && typeof use.root.arcs === "function") {
+    let x = x0, y = y0, hd = use.startAngle || 0;
+    for (const [s, da] of use.root.arcs()) {
+      const ang = da || 0;
+      if (Math.abs(ang) < 1e-9) {
+        x += s * Math.cos(hd);
+        y += s * Math.sin(hd);
+        add(x, y);
+        continue;
+      }
+      const R = s / ang;
+      const cx = x - R * Math.sin(hd);
+      const cy = y + R * Math.cos(hd);
+      const end = stepTo(x, y, hd, s, ang);
+      add(end[0], end[1]);
+      const lo = Math.min(0, ang);
+      const hi = Math.max(0, ang);
+      for (let k = -4; k <= 4; k++) {
+        const a = k * Math.PI / 2 - hd;
+        if (a > lo + 1e-9 && a < hi - 1e-9) {
+          const t = hd + a;
+          add(cx + R * Math.sin(t), cy - R * Math.cos(t));
+        }
+      }
+      x = end[0];
+      y = end[1];
+      hd = end[2];
+    }
+  }
+  if (!Number.isFinite(minX)) return { minX: -1, minY: -1, maxX: 1, maxY: 1, cx: 0, cy: 0, w: 2, h: 2 };
+  return {
+    minX, minY, maxX, maxY,
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
+    w: Math.max(maxX - minX, 1e-6),
+    h: Math.max(maxY - minY, 1e-6),
+  };
+}
+
 function iterPoints(use, tol) {
   const pts = [];
-  const start = use.startPoint || [0, 0];
-  if (use.root && typeof use.root.arcs === "function") {
-    let x = start[0];
-    let y = start[1];
-    let hd = use.startAngle || 0;
-    pts.push([x, y]);
-    for (const [s, da] of use.root.arcs()) {
-      const step = walkPath(
-        { startPoint: [x, y], startAngle: (hd * 180) / Math.PI, turtlePath: [[s, (da * 180) / Math.PI]] },
-        { scale: 1, tol, returnStart: false },
-      );
-      for (const row of step) pts.push(row.point);
-      const th = hd;
-      const ang = da;
-      const half = ang / 2;
-      const chord = Math.abs(ang) < 1e-12 ? s : (s * Math.sin(half)) / half;
-      const mid = th + half;
-      x += chord * Math.cos(mid);
-      y += chord * Math.sin(mid);
-      hd += da;
-    }
-    return pts;
-  }
   const samples = walkPath(use, { scale: 1, tol, returnStart: true });
   for (const row of samples) pts.push(row.point);
-  if (!pts.length) pts.push(start.slice());
+  if (!pts.length) pts.push((use.startPoint || [0, 0]).slice());
   return pts;
 }
 
@@ -190,24 +277,39 @@ export function renderStage({ model, el }) {
     for (const use of strokes()) paintUse(ctx, use, cam);
   }
 
-  function allPoints() {
-    const pts = [];
-    for (const use of strokes()) {
-      for (const p of iterPoints(use, 0.2)) pts.push(p);
-      if (!pts.length) pts.push((use.startPoint || [0, 0]).slice());
-    }
-    return pts;
-  }
-
   function fit() {
     if (!syncSize()) return false;
-    const b = boundsOf(allPoints());
+    const view = window.drawingRepl && window.drawingRepl.repl && window.drawingRepl.repl.viewSize;
+    if (view && view.w > 0 && view.h > 0) {
+      const pad = 0.18;
+      const sx = canvas.width / (view.w * (1 + pad));
+      const sy = canvas.height / (view.h * (1 + pad));
+      cam.scale = Math.max(4, Math.min(sx, sy) || 24);
+      cam.x = 0;
+      cam.y = 0;
+      fitted = true;
+      paint();
+      return true;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const use of strokes()) {
+      const b = boundsOfUse(use);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    if (!Number.isFinite(minX)) {
+      minX = -1; minY = -1; maxX = 1; maxY = 1;
+    }
+    const w = Math.max(maxX - minX, 1e-6);
+    const h = Math.max(maxY - minY, 1e-6);
     const pad = 0.18;
-    const sx = canvas.width / (b.w * (1 + pad));
-    const sy = canvas.height / (b.h * (1 + pad));
+    const sx = canvas.width / (w * (1 + pad));
+    const sy = canvas.height / (h * (1 + pad));
     cam.scale = Math.max(4, Math.min(sx, sy) || 24);
-    cam.x = b.cx;
-    cam.y = b.cy;
+    cam.x = (minX + maxX) / 2;
+    cam.y = (minY + maxY) / 2;
     fitted = true;
     paint();
     return true;
