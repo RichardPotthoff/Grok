@@ -159,6 +159,7 @@ export class DrawingRepl {
     this._scriptId = "";
     this._scriptName = "";
     this._quiet = false;
+    this._replaceOnShow = false;
     this.viewSize = null;
   }
 
@@ -225,7 +226,13 @@ export class DrawingRepl {
         n++;
       }
     }
-    return n ? bag : undefined;
+    if (n) return bag;
+    const bare = [];
+    for (const [k, v] of this.dict) {
+      if (k === key || k.endsWith("/" + key)) bare.push(v);
+    }
+    if (bare.length === 1) return bare[0];
+    return undefined;
   }
 
   async _fresh(key) {
@@ -264,7 +271,11 @@ export class DrawingRepl {
    */
   show(block, opts = {}) {
     if (this._quiet) return null;
-    const root = typeof block === "string" ? this.dict.get(block) : block;
+    if (this._replaceOnShow) {
+      this.uses = [];
+      this._replaceOnShow = false;
+    }
+    const root = typeof block === "string" ? this._lookup(block) : block;
     if (!isBlock(root)) {
       throw new Error("show: not a block" + (typeof block === "string" ? " (" + block + ")" : ""));
     }
@@ -463,7 +474,7 @@ export class DrawingRepl {
     const prevName = this._scriptName;
     const prevQuiet = this._quiet;
     this.dropOwned(scriptId);
-    if (!quiet) this.uses = [];
+    if (!quiet) this._replaceOnShow = true;
     else if (scriptId) this.uses = this.uses.filter((u) => u.scriptId !== scriptId);
     this._scriptId = scriptId;
     this._scriptName = scriptName;
@@ -492,6 +503,7 @@ export class DrawingRepl {
       throw err;
     } finally {
       this._quiet = prevQuiet;
+      this._replaceOnShow = false;
     }
   }
 
@@ -536,7 +548,7 @@ function describeStored(name, value) {
   if (isBlock(value)) {
     return {
       name,
-      type: value.type,
+      type: value.type || (value.constructor && value.constructor.name) || "block",
       id: value.id,
       interface: value.interface(),
       arcs: value.arcCount(),
@@ -544,7 +556,13 @@ function describeStored(name, value) {
       text: value.describe(),
     };
   }
-  const type = value == null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  const type = value == null
+    ? "null"
+    : isBlock(value)
+      ? value.type || value.constructor.name || "block"
+      : Array.isArray(value)
+        ? "array"
+        : typeof value;
   const label = type === "function" ? value.name || "function" : type;
   return {
     name,

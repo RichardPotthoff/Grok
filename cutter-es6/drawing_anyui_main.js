@@ -989,19 +989,6 @@ async function boot() {
   await root.create_view({ el: mount });
   refreshFilesList();
   applyLayout();
-  if (scripts.length) openEditor(active);
-  // Only auto-run scripts that previously finished successfully.
-  // An infinite loop never returns, so it never gets marked ok and will not restart on reload.
-  const okIdx = scripts.map((s, i) => (s.ok ? i : -1)).filter((i) => i >= 0);
-  for (const i of okIdx) {
-    active = i;
-    await runScript();
-  }
-  if (scripts.length) {
-    active = Math.max(0, Math.min(scripts.length - 1, session.active || 0));
-    openEditor(active);
-  }
-  requestAnimationFrame(() => requestAnimationFrame(() => stage.fit()));
   window.drawingRepl = {
     repl,
     stage,
@@ -1021,8 +1008,15 @@ async function boot() {
   repl._import = async (key) => {
     let idx = scripts.findIndex((s, i) => scriptName(i) === key);
     if (idx < 0) idx = scripts.findIndex((s, i) => key.startsWith(scriptName(i) + "/"));
+    if (idx < 0) {
+      const owned = [...repl.owners.entries()].find(([k]) => k === key || k.endsWith("/" + key));
+      if (owned) idx = scripts.findIndex((s) => s.id === owned[1]);
+    }
     if (idx < 0) return false;
-    return runOne(idx, { quiet: true });
+    const ok = await runOne(idx, { quiet: true });
+    publishObjects();
+    publishLog();
+    return ok;
   };
   repl._stale = (key) => {
     const id = repl.owners.get(key);
@@ -1030,6 +1024,8 @@ async function boot() {
     const s = scripts.find((row) => row.id === id);
     return !!(s && !s.ok);
   };
+  if (scripts.length) openEditor(active);
+  requestAnimationFrame(() => requestAnimationFrame(() => stage.fit()));
 }
 
 boot().catch((err) => {
