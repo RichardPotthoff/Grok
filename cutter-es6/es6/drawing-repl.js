@@ -24,6 +24,8 @@ import {
   isBlock,
 } from "./blocks.js";
 import { asPose, ata, ataArcs, biarc, line } from "./connector.js";
+import { ataSigned, ataBest, ataArcsBuf } from "./ata.js";
+import { intersectCircleCircle, intersectCircleLine, intersectLineLine, intersect } from "./intersect.js";
 import { downloadLines, gcodeLines, gcodeStats, printerDefaults, tubeMesh } from "./gcode.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
@@ -52,38 +54,36 @@ store("star6", star6);
 show(star6);
 `;
 
-export const PRINT_SCRIPT = `// Print the last shown path.
-// pitch = 0 is one flat layer. For a weave, set pitch = height / length.
-const p = printer({
-  temp: 200,
-  bed: 60,
-  fan: 255,
-  speed: 1800,
-  layer: 0.2,
-  width: 0.45,
-  pitch: 0,
-  seg: 1,
-});
-const asked = await form("Print", [
-  { key: "temp", label: "Hotend C", value: p.temp },
-  { key: "bed", label: "Bed C", value: p.bed },
-  { key: "fan", label: "Fan 0-255", value: p.fan },
-  { key: "speed", label: "Speed mm/min", value: p.speed },
-  { key: "pitch", label: "Z per mm", value: p.pitch },
-  { key: "width", label: "Bead width", value: p.width },
-]);
-if (!asked) {
-  print("cancelled");
+export const PRINT_SCRIPT = `// Print a stored path. Change the key to the object you want.
+const part = await load("MeshCam/camMesh");
+if (!part) {
+  print("load failed — run MeshCam once, then load the full key");
 } else {
-  Object.assign(p, asked);
-  const uses = shown();
-  const part = uses.length ? uses[uses.length - 1] : null;
-  if (!part) {
-    print("nothing shown — show() a path first");
+  const p = printer({
+    temp: 200,
+    bed: 60,
+    fan: 255,
+    speed: 1800,
+    layer: 0.2,
+    width: 0.45,
+    pitch: 0,
+    seg: 1,
+  });
+  const asked = await form("Print", [
+    { key: "temp", label: "Hotend C", value: p.temp },
+    { key: "bed", label: "Bed C", value: p.bed },
+    { key: "fan", label: "Fan 0-255", value: p.fan },
+    { key: "speed", label: "Speed mm/min", value: p.speed },
+    { key: "pitch", label: "Z per mm", value: p.pitch },
+    { key: "width", label: "Bead width", value: p.width },
+  ]);
+  if (!asked) {
+    print("cancelled");
   } else {
+    Object.assign(p, asked);
     const stats = gcodeStats(part, p);
     print("length", stats.length.toFixed(1), "filament", stats.filament.toFixed(1), "min", stats.minutes.toFixed(1));
-    preview3d(part, p);
+    show3D(part, p);
     const how = await downloadGcode("part.gcode", part, p);
     print("gcode", how);
   }
@@ -130,7 +130,7 @@ export const API_HELP = [
   "orbit(b, n, deg)     n rotated copies, joined",
   "ref(name)            stored block only — load() for a class or function",
   "store(name, value)   register anything; relative name → script/name",
-  "load(path)           stored value, or {name: value} for a script prefix",
+  "load(path)           await load(full key). runs that script if missing",
   "script               this script's path",
   "define(name, b)      same as store",
   "forget(name)         drop one stored name",
@@ -138,13 +138,12 @@ export const API_HELP = [
   "show(b, {at, heading, stroke, width, fill, name})  page. call again to add",
   "show3D(b, printer?)  3D tube of the same path",
   "size(w, h)          Fit window in world units. omit to fit the path",
-  "load(path)          stored value; runs that script if missing or changed",
   "line(from, to, extra?)     turn-line-turn",
   "biarc(from, to, p=1, extra?)  G1 biarc",
   "ata(from, to, r0=0, r1=0, rt?, extra?)  arc-tangent-arc",
   "  r0/r1 undefined or ±Infinity: that side is straight, rt is the fillet",
   "  from/to = [x, y, θ] or interface(); extra = {stroke, width, fill, dash}",
-  "clear()              remove page uses (store stays)",
+  "clear()              clear the 2D page. store stays",
   "resetStore()         drop all stored names",
   "list()               stored names",
   "print(...)           log pane",
@@ -378,6 +377,16 @@ export class DrawingRepl {
       ataArcs(from, to, r0, r1, rt, buf) {
         return ataArcs(from, to, r0, r1, rt, buf);
       },
+      ataSigned(from, to, r0, rt, r1) {
+        return ataSigned(from, to, r0, rt, r1);
+      },
+      ataBest(from, to, radii) {
+        return ataBest(from, to, radii);
+      },
+      intersectCC: intersectCircleCircle,
+      intersectCL: intersectCircleLine,
+      intersectLL: intersectLineLine,
+      intersect,
       deg: Math.PI / 180,
       asPose(p) {
         return asPose(p);

@@ -1,6 +1,6 @@
 # Drawing REPL — progress
 
-Handoff for the next chat. Last updated 2026-11-04.
+Handoff for the next chat. Last updated 2026-11-17.
 
 **Goal:** arc-only turtle. Primitive is the circular arc. Live geometry is `[[s, Δθ], …]` plus a start pose. The document is a tree of **blocks** (stream operators); flatten only to draw, hit-test, or export. 3D-printing extrusion paths are the goal.
 
@@ -8,22 +8,73 @@ Handoff for the next chat. Last updated 2026-11-04.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v56-20261111`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v58-20261117`. Hard-refresh after a deploy.
 
-## Next conversation — performance for ESP32 / modded xs
+## Next conversation — analytic intersect + ATA rebuild
 
-The path generators will drive a 3D-printer extrusion path. The algorithm has to run in a memory-constrained environment (ESP32, modded xs). This conversation got long; start a new one on bottlenecks.
+Start here. New primitives in `es6/intersect.js` and `es6/ata.js`.
 
-**What to look at first:**
+**What landed (2026-11-17):**
 
-- `arcs()` walk and `interface()`: allocations per yield, copy-on-write paint objects, repeat expansion.
-- `ata` / `line` / `biarc`: temporary objects, the `rt` bounds search (repeated `solveCurve` probes), the `1e6` stand-in for an infinite radius.
-- Paint walk in `drawing-ui.js` (`paintUse`): polyline sampling via `walkPath` is for the canvas only; the printer path should stay exact arcs.
-- Anything that builds a full array where a stream would do.
+- `es6/intersect.js`: analytic `intersectCircleCircle`, `intersectCircleLine`, `intersectLineLine`, dispatcher `intersect`. Accepts `+0`/`-0` (point) and `±Infinity` (directed line). Optional pre-allocated buffer (8 numbers: two hits × (x,y,t0,t1)). Parameters may be negative (“behind”). No epsilon policy inside; tiny values returned as computed.
+- `es6/ata.js`: `ataSigned(from, to, r0, rt, r1)` (senses from radius signs) and `ataBest(from, to, radii)` (enumerates admissible sign pairs / magnitudes, picks minimal total |Δθ|). Built on the intersect primitives. `radii` elements may be a number (both senses), `[rPos, rNeg]`, `0`, or `±Infinity`.
+- Exposed in the REPL: `ataSigned`, `ataBest`, `intersectCC`, `intersectCL`, `intersectLL`, `intersect`.
+- Test script: `test-ata.js` (paste into a script tab). One start pose, several end poses, various r0/rt/r1, visualizes a couple, and times N calls with buffer reuse.
 
-Profile both allocation (GC pressure) and time. Keep the data model streamable.
+**Open / rough edges (expected on first cut):**
 
-## What landed since 2026-10-15
+- `buildFromMiddle` in `ata.js` is still approximate (angle construction + temporary 1e-4 pose gate). Refine to exact tangent points and drop the gate.
+- Straight-middle (`rt = ±Infinity`) path is stubbed.
+- Sign-to-internal/external distance (`|rt ± r|`) needs a clean rule per combination.
+- Caller still decides whether a returned `1e-16` length means zero.
+
+**Use cases to exercise:**
+
+- Layer slicing: intersect outline arcs with a horizontal line at height h (the extrusion-fill script).
+- ATA construction via offset-circle intersection.
+- Performance: buffer-reused intersect vs. object-creating ATA.
+
+## What landed since 2026-11-04
+
+### Print and Z (2026-11-09 … 2026-11-17)
+...
+
+**Reported bug (2026-11-17):** with `rt` set to `0`, the length of the second arc was not zero. The user expected a zero middle (or second) arc for that input.
+
+**Current convention, which may be the bug:** in `ataCurve`, `Object.is(rt, 0)` selects `rtmax` and `Object.is(rt, -0)` selects `rtmin` — the extreme radii that still touch both circles with every arc length positive. A literal `0` is therefore not “no middle arc”; it is “largest valid radius.” `rt` omitted or non-finite keeps the tangent straight (`ataBlock`). Decide whether `+0`/`-0` should stay as the extremes, or whether `rt = 0` should collapse the middle arc to `s = 0`.
+
+**Where to look:**
+
+- `ata` / `ataArcs` / `ataCurve` / `ataBlock` / `solveCurve` / `buildCurve` / `rtBounds` in `es6/connector.js`.
+- `rtBounds` probes `solveCurve` repeatedly (`v *= 0.6` from a 16× span). That search is also the hot-path cost.
+- Infinite `r0`/`r1` still uses a `1e6` stand-in, then `flattenWide` collapses a huge radius to `Δθ = 0`.
+- `ataArcs` only avoids allocation for the straight-tangent case. Other cases call `ata()` and copy out.
+- End-pose check in `buildCurve` rejects a solution whose interface misses `(rx, ry, dh)` by more than `1e-3`. A near-miss can fall through to `ataBlock` and look like a wrong length.
+
+Keep exact arcs. Prefer a closed form or a tighter bound over the probe loop. Profile both correctness (end pose, arc lengths, the `rt = 0` case) and allocation.
+
+## What landed since 2026-11-04
+
+### Print and Z (2026-11-09 … 2026-11-17)
+
+- `gcode(block, printer)` streams G1 lines. `downloadGcode` shares the file alone (no title — a title became a second `text N.txt` on iPad). `show3D(block, printer)` builds the tube and opens the 3D rail.
+- Z, bead width, and layer height ride on the arc extra: `seg(s, dθ, { z, hl, width })`. Volume is `width * hl * length`. A `Z` word is written only when it changes. No per-arc `z` falls back to `z0 + pitch * s`.
+- Print example loads an explicit key (`await load("MeshCam/camMesh")`) and does not read the 2D page. `form()` is the dialog. `clear()` empties the page; the store stays.
+
+### Page, load, and preview (2026-11-11 … 2026-11-17)
+
+- One script owns the page. A Run leaves the page alone until that script calls `show`. `show` again to add drawings.
+- `load(path)` is async. Use `await load("Script/name")`. A relative `store("name")` is saved as `script/name`. If the key is missing or its script was edited, `load` runs that script with `show` and `show3D` suppressed.
+- Reload does not run scripts. The store is empty until something `load`s.
+- 2D preview is a state machine: fill pass, then stroke pass, generator re-run on each redraw. Arcs are sampled straight into `lineTo`. Fit keeps only the two corners of the axis-aligned box, including arc crowns.
+- `size(w, h)` sets the Fit window in world units.
+
+### Slice, repeat, reuse (2026-11-08 … 2026-11-09)
+
+- `slice(of, from, to)` treats `of` as periodic. Length is `to − from`. `repeat(of, n)` is that slice.
+- `poseAt`, `ataArcs`, `arcsSlice`, and reused rows on `arcs(ctx, row)`. `walkCtx` / `emitArc` write into reused objects.
+
+## Older notes
 
 ### Slice wraps (2026-11-08)
 
