@@ -11,7 +11,7 @@
 
 import { Arc, Seq } from "./blocks.js";
 import { asPose } from "./connector.js";
-import { intersectCircleCircle, intersectCircleLine, isZero, isInf } from "./intersect.js";
+import { intersectCircleCircle, intersectCircleLine, intersectLineLine, isZero, isInf } from "./intersect.js";
 
 function rel(from, to) {
   const a = asPose(from);
@@ -32,31 +32,34 @@ function wrap(a) {
 
 /** Build one signed ATA. Returns Seq or null. Uses optional buf for intersects. */
 export function ataSigned(from, to, r0, rt, r1, buf) {
+  if (!buf) buf = new Float64Array(8);
   const [rx, ry, dh] = rel(from, to);
-  // start circle in relative frame
-  const c0x = 0, c0y = r0;
-  const c1x = rx - r1 * Math.sin(dh);
-  const c1y = ry + r1 * Math.cos(dh);
 
-  // offset distances for middle center
-  const d0 = Math.abs(rt - r0);
-  const d1 = Math.abs(rt - r1);
+  // Both sides straight: line-line (sharp corner when rt ≈ 0)
+  if (isInf(r0) && isInf(r1)) {
+    return lineLine(rx, ry, dh, rt, buf);
+  }
 
-  let n = 0;
-  let hits;
+  // One or both finite — existing circle path (still approximate)
+  const c0x = 0, c0y = isInf(r0) ? 0 : r0;
+  const c1x = isInf(r1) ? rx : rx - r1 * Math.sin(dh);
+  const c1y = isInf(r1) ? ry : ry + r1 * Math.cos(dh);
+
+  const d0 = Math.abs(rt - (isInf(r0) ? 0 : r0));
+  const d1 = Math.abs(rt - (isInf(r1) ? 0 : r1));
+
+  let hits = 0;
   if (isInf(rt)) {
-    // straight middle: use the old-style or line between tangent points — simplified
-    return null; // TODO: full line case
+    return null; // straight middle still TODO
   }
   if (isZero(rt)) {
-    // middle is the intersection point of the two end circles
+    if (isInf(r0) || isInf(r1)) return null; // mixed line+circle + rt=0 not yet
     hits = intersectCircleCircle(c0x, c0y, Math.abs(r0), c1x, c1y, Math.abs(r1), buf);
   } else {
     hits = intersectCircleCircle(c0x, c0y, d0, c1x, c1y, d1, buf);
   }
   if (!hits) return null;
 
-  // try both intersection points, pick the one that gives smaller total |turn|
   let best = null;
   for (let i = 0; i < hits; i++) {
     const mx = buf[i * 4];
@@ -65,6 +68,33 @@ export function ataSigned(from, to, r0, rt, r1, buf) {
     if (built && (!best || built.curv < best.curv)) best = built;
   }
   return best ? best.block : null;
+}
+
+/** Two directed lines, optional fillet radius rt. rt=0 → sharp corner. */
+function lineLine(rx, ry, dh, rt, buf) {
+  // Start ray: origin, direction (1,0) in relative frame
+  // End ray: arrives at (rx,ry) with heading dh, so direction (cos dh, sin dh),
+  // but we need the supporting line of the end segment.
+  const d0x = 1, d0y = 0;
+  const d1x = Math.cos(dh), d1y = Math.sin(dh);
+  // For a sharp corner (rt≈0) the junction is the intersection of the two lines.
+  if (isZero(rt) || Math.abs(rt) < 1e-12) {
+    const n = intersectLineLine(0, 0, d0x, d0y, rx, ry, d1x, d1y, buf);
+    if (!n) return null;
+    const jx = buf[0], jy = buf[1];
+    const s0 = jx;               // param along start ray (may be negative)
+    const s1 = Math.hypot(rx - jx, ry - jy);
+    // heading change at the corner
+    const turn = wrap(dh);
+    const block = new Seq([
+      new Arc(s0, 0),
+      new Arc(0, turn),
+      new Arc(s1, 0),
+    ]);
+    return block;
+  }
+  // finite fillet between two lines — still approximate
+  return null;
 }
 
 function buildFromMiddle(mx, my, rt, rx, ry, dh, r0, r1, c0x, c0y, c1x, c1y) {
