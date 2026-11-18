@@ -24,8 +24,6 @@ import {
   isBlock,
 } from "./blocks.js";
 import { asPose, ata, ataArcs, biarc, line } from "./connector.js";
-import { ataSigned, ataBest, ataArcsBuf } from "./ata.js";
-import { intersectCircleCircle, intersectCircleLine, intersectLineLine, intersect } from "./intersect.js";
 import { downloadLines, gcodeLines, gcodeStats, printerDefaults, tubeMesh } from "./gcode.js";
 
 export const STORAGE_KEY = "arc-drawing-repl-v2";
@@ -90,6 +88,19 @@ if (!part) {
 }
 `;
 
+export const GEOM_SCRIPT = `// Load analytic connectors and intersections into the store.
+// After this runs: const ataSigned = await load("Geom/ataSigned");
+const ata = await import("./es6/ata.js");
+const ix = await import("./es6/intersect.js");
+store("Geom/ataSigned", ata.ataSigned);
+store("Geom/ataBest", ata.ataBest);
+store("Geom/intersectCC", ix.intersectCircleCircle);
+store("Geom/intersectCL", ix.intersectCircleLine);
+store("Geom/intersectLL", ix.intersectLineLine);
+store("Geom/intersect", ix.intersect);
+print("geom", "ataSigned", "ataBest", "intersectCC", "intersectCL", "intersectLL", "intersect");
+`;
+
 export const SLICE_SCRIPT = `// Rounded square, a slice of it, and a parallel offset.
 const side = seq(seg(20, 0), seg(Math.PI / 2, Math.PI / 2));
 const roundSq = repeat(side, 4);
@@ -141,6 +152,7 @@ export const API_HELP = [
   "line(from, to, extra?)     turn-line-turn",
   "biarc(from, to, p=1, extra?)  G1 biarc",
   "ata(from, to, r0=0, r1=0, rt?, extra?)  arc-tangent-arc",
+  "  analytic ataSigned / intersect* : run Geom script, then load('Geom/ataSigned')",
   "  r0/r1 undefined or ±Infinity: that side is straight, rt is the fillet",
   "  from/to = [x, y, θ] or interface(); extra = {stroke, width, fill, dash}",
   "clear()              clear the 2D page. store stays",
@@ -377,16 +389,6 @@ export class DrawingRepl {
       ataArcs(from, to, r0, r1, rt, buf) {
         return ataArcs(from, to, r0, r1, rt, buf);
       },
-      ataSigned(from, to, r0, rt, r1) {
-        return ataSigned(from, to, r0, rt, r1);
-      },
-      ataBest(from, to, radii) {
-        return ataBest(from, to, radii);
-      },
-      intersectCC: intersectCircleCircle,
-      intersectCL: intersectCircleLine,
-      intersectLL: intersectLineLine,
-      intersect,
       deg: Math.PI / 180,
       asPose(p) {
         return asPose(p);

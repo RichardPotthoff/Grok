@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-17.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v65-20261117`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v66-20261118`. Hard-refresh after a deploy.
 
 ## Next conversation — analytic intersect + ATA rebuild
 
@@ -24,7 +24,7 @@ Start here. New primitives in `es6/intersect.js` and `es6/ata.js`.
 **Open / rough edges (expected on first cut):**
 
 - `ataSigned` now allocates a buffer when none is supplied (fixes the `buf[i*4]` crash).
-- `rt=0` paths (line-line and circle-line) now emit the signed parameters returned by the intersection, with no extra `hypot` or sign fix-ups.
+- Analytic connectors are no longer on the permanent REPL API. Run the Geom sample (`GEOM_SCRIPT` in drawing-repl.js) once; then `await load("Geom/ataSigned")`, `load("Geom/intersectCC")`, etc.
 - Both-radii-infinite + `rt=0` uses the signed parameters from the line-line intersection (negative length when the end point lies behind the directed heading).
 - Straight-middle (`rt=±Infinity`) and finite-rt fillet against a line remain incomplete.
 - Sign-to-internal/external distance (`|rt ± r|`) needs a clean rule per combination.
