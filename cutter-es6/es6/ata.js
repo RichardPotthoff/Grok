@@ -84,17 +84,14 @@ function lineLine(rx, ry, dh, rt, buf) {
   if (isZero(rt) || Math.abs(rt) < 1e-12) {
     const n = intersectLineLine(0, 0, d0x, d0y, rx, ry, d1x, d1y, buf);
     if (!n) return null;
-    const jx = buf[0], jy = buf[1];
-    const s0 = jx;               // param along start ray (may be negative)
-    const s1 = Math.hypot(rx - jx, ry - jy);
-    // heading change at the corner
+    const s0 = buf[2];               // signed parameter on start line
+    const s1 = buf[3];               // signed parameter on end line (negative = behind)
     const turn = wrap(dh);
-    const block = new Seq([
+    return new Seq([
       new Arc(s0, 0),
       new Arc(0, turn),
       new Arc(s1, 0),
     ]);
-    return block;
   }
   // finite fillet between two lines — still approximate
   return null;

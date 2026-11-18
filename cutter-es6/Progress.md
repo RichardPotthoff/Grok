@@ -8,7 +8,7 @@ Handoff for the next chat. Last updated 2026-11-17.
 
 Pages: https://richardpotthoff.github.io/Grok/cutter-es6/drawing_anyui.html
 
-Service worker: `cutter-offline-v61-20261117`. Hard-refresh after a deploy.
+Service worker: `cutter-offline-v63-20261117`. Hard-refresh after a deploy.
 
 ## Next conversation — analytic intersect + ATA rebuild
 
@@ -25,6 +25,7 @@ Start here. New primitives in `es6/intersect.js` and `es6/ata.js`.
 
 - `ataSigned` now allocates a buffer when none is supplied (fixes the `buf[i*4]` crash).
 - Mixed finite+infinite + `rt≈0` is now an exact circle–line intersection (offsets vanish when rt=0). Turn is the precise center angle from the arc’s start point to the hit point, signed to match the radius. Middle length is 0.
+- Both-radii-infinite + `rt=0` uses the signed parameters from the line-line intersection (negative length when the end point lies behind the directed heading).
 - Straight-middle (`rt=±Infinity`) and finite-rt fillet against a line remain incomplete.
 - Sign-to-internal/external distance (`|rt ± r|`) needs a clean rule per combination.
 - Caller still decides whether a returned `1e-16` length means zero.

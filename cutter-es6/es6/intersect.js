@@ -101,7 +101,7 @@ export function intersectLineLine(p0x, p0y, d0x, d0y, p1x, p1y, d1x, d1y, buf) {
   const vx = p1x - p0x;
   const vy = p1y - p0y;
   const t0 = (vx * d1y - vy * d1x) / cross;
-  const t1 = (vx * d0y - vy * d0x) / cross;
+  const t1 = (d0x * vy - d0y * vx) / cross;
   if (!buf) buf = new Array(8);
   buf[0] = p0x + t0 * d0x;
   buf[1] = p0y + t0 * d0y;
