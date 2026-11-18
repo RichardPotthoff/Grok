@@ -73,88 +73,62 @@ export function ataSigned(from, to, r0, rt, r1, buf) {
   return best ? best.block : null;
 }
 
-/** Two directed lines, optional fillet radius rt. rt=0 → sharp corner. */
+/** Two directed lines, rt=0 → sharp corner.
+ *  Lengths are the signed parameters returned by the intersection. */
 function lineLine(rx, ry, dh, rt, buf) {
-  // Start ray: origin, direction (1,0) in relative frame
-  // End ray: arrives at (rx,ry) with heading dh, so direction (cos dh, sin dh),
-  // but we need the supporting line of the end segment.
+  if (!(isZero(rt) || Math.abs(rt) < 1e-15)) return null;
   const d0x = 1, d0y = 0;
   const d1x = Math.cos(dh), d1y = Math.sin(dh);
-  // For a sharp corner (rt≈0) the junction is the intersection of the two lines.
-  if (isZero(rt) || Math.abs(rt) < 1e-12) {
-    const n = intersectLineLine(0, 0, d0x, d0y, rx, ry, d1x, d1y, buf);
-    if (!n) return null;
-    const s0 = buf[2];               // signed parameter on start line
-    const s1 = buf[3];               // signed parameter on end line (negative = behind)
-    const turn = wrap(dh);
-    return new Seq([
-      new Arc(s0, 0),
-      new Arc(0, turn),
-      new Arc(s1, 0),
-    ]);
-  }
-  // finite fillet between two lines — still approximate
-  return null;
+  const n = intersectLineLine(0, 0, d0x, d0y, rx, ry, d1x, d1y, buf);
+  if (!n) return null;
+  // buf[2] = signed distance along start line to junction
+  // buf[3] = signed distance from junction to end pose along end heading
+  return new Seq([
+    new Arc(buf[2], 0),
+    new Arc(0, wrap(dh)),
+    new Arc(buf[3], 0),
+  ]);
 }
 
-/** Circle vs line (one of r0/r1 infinite).
- *  rt is the fillet radius. rt=0 → offsets vanish → direct intersection
- *  of the original circle with the line. */
+/** Circle vs line, rt=0 → direct intersection.
+ *  Arc length is the signed center angle from the start point;
+ *  line length is the signed parameter from the intersection. */
 function circleLine(rx, ry, dh, r0, rt, r1, buf) {
+  if (!(isZero(rt) || Math.abs(rt) < 1e-15)) return null;
   const startIsLine = isInf(r0);
-  const R = startIsLine ? r1 : r0;          // signed radius of the curved side
+  const R = startIsLine ? r1 : r0;
   const absR = Math.abs(R);
-  // circle center
   const cx = startIsLine ? rx - R * Math.sin(dh) : 0;
   const cy = startIsLine ? ry + R * Math.cos(dh) : R;
-  // line
   const lpx = startIsLine ? 0 : rx;
   const lpy = startIsLine ? 0 : ry;
   const ldx = startIsLine ? 1 : Math.cos(dh);
   const ldy = startIsLine ? 0 : Math.sin(dh);
 
-  // offset distance for the fillet center: |rt ± R| (sign permutation already
-  // chose which). For rt=0 this is just absR, i.e. the original circle.
-  const off = Math.abs(rt - R);             // works for both sum & difference via signs
-  // For a pure intersection (rt=0) we intersect the original circle with the line.
-  // For a finite fillet we would intersect the offset circle with the offset line;
-  // that path is still open. Here we handle the rt≈0 case exactly.
-  if (!(isZero(rt) || Math.abs(rt) < 1e-15)) return null;
-
   const n = intersectCircleLine(cx, cy, absR, lpx, lpy, ldx, ldy, buf);
   if (!n) return null;
 
+  // Reference angle of the arc’s start point, measured at the center.
+  const startAng = Math.atan2(-cy, -cx);
   let best = null;
   for (let i = 0; i < n; i++) {
-    const px = buf[i * 4];
-    const py = buf[i * 4 + 1];
-    // exact turn: angle at center from the start point of this arc to P
-    const startAng = Math.atan2(0 - cy, 0 - cx);          // start pose relative to center
+    const px = buf[i * 4], py = buf[i * 4 + 1];
+    const tLine = buf[i * 4 + 3];                 // signed, 0 at the line’s reference point
     const hitAng = Math.atan2(py - cy, px - cx);
     let turn = wrap(hitAng - startAng);
-    // keep the sense that matches the sign of R (positive R → CCW / positive turn)
     if (R > 0 && turn < 0) turn += 2 * Math.PI;
     if (R < 0 && turn > 0) turn -= 2 * Math.PI;
-    const sArc = R * turn;                                 // may be negative
-    const sLine = Math.hypot((startIsLine ? rx : px) - (startIsLine ? px : rx),
-                             (startIsLine ? ry : py) - (startIsLine ? py : ry));
+    const sArc = R * turn;
+    // line reference is the end pose when the line is the end side,
+    // so length from junction to end pose is -tLine
+    const sLine = startIsLine ? tLine : -tLine;
     const curv = Math.abs(turn);
-    if (!best || curv < best.curv) best = { px, py, turn, sArc, sLine, curv };
+    if (!best || curv < best.curv) best = { turn, sArc, sLine, curv };
   }
   if (!best) return null;
-
-  if (startIsLine) {
-    return new Seq([
-      new Arc(best.sLine, 0),
-      new Arc(0, 0),
-      new Arc(best.sArc, best.turn),
-    ]);
-  }
-  return new Seq([
-    new Arc(best.sArc, best.turn),
-    new Arc(0, 0),
-    new Arc(best.sLine, 0),
-  ]);
+  return startIsLine
+    ? new Seq([new Arc(best.sLine, 0), new Arc(0, 0), new Arc(best.sArc, best.turn)])
+    : new Seq([new Arc(best.sArc, best.turn), new Arc(0, 0), new Arc(best.sLine, 0)]);
 }
 
 function buildFromMiddle(mx, my, rt, rx, ry, dh, r0, r1, c0x, c0y, c1x, c1y) {
